@@ -1,0 +1,20 @@
+export const ERROR_CODES = {
+  VALIDATION: "VALIDATION",
+  NOT_FOUND: "NOT_FOUND",
+  UNSUPPORTED_MEDIA: "UNSUPPORTED_MEDIA",
+  PAYLOAD_TOO_LARGE: "PAYLOAD_TOO_LARGE",
+  PHOTO_LIMIT: "PHOTO_LIMIT",
+  STORAGE_FAILURE: "STORAGE_FAILURE",
+  PROVIDER_UNAVAILABLE: "PROVIDER_UNAVAILABLE",
+  MALFORMED_AI_OUTPUT: "MALFORMED_AI_OUTPUT",
+  NO_RELEVANT_TOPICS: "NO_RELEVANT_TOPICS",
+} as const;
+
+export type ErrorCode = (typeof ERROR_CODES)[keyof typeof ERROR_CODES];
+
+export type ApiErrorBody = {
+  error: {
+    code: string;
+    message: string;
+  };
+};

@@ -1,0 +1,46 @@
+# Provider Isolation
+
+## Purpose
+
+Keep vendor SDKs, API shapes, and filesystem details out of domain logic so tests and replacements stay cheap.
+
+## When to Use
+
+When adding OpenAI, news, storage, or any other volatile external dependency.
+
+## Inputs
+
+- the capability the domain needs
+- the concrete vendor for the MVP
+- the internal model the rest of the app should see
+
+## Procedure
+
+1. Name the capability, not the vendor (`NewsProvider`, not `NewsApiService` in domain code).
+2. Define a small interface around actual operations.
+3. Put vendor types only inside the adapter.
+4. Normalize to an application model before returning.
+5. Map vendor failures to typed application errors.
+6. Fake the interface in automated tests. Do not call the vendor in CI.
+7. Do not wrap stable internal code in interfaces for symmetry.
+
+## Quality Criteria
+
+- Use cases import the interface, never the SDK.
+- A fixture can exercise success, timeout, malformed payload, and auth failure.
+- Replacing the vendor does not change domain modules.
+
+## Common Failure Modes
+
+- One `OpenAIService` for text and images
+- Passing `ChatCompletion` or NewsAPI articles through controllers
+- Storing temporary vendor URLs as the product asset
+- Creating interfaces for Postgres or every repository method "just in case"
+
+## Output
+
+Interface, adapter, internal model, error mapping, and a test fake.
+
+## Learnings
+
+Text and image generation share a vendor in the MVP and still must be two capabilities. Storage identifiers must be server-owned even when the adapter is local disk.

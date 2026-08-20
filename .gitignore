@@ -1,0 +1,15 @@
+node_modules
+dist
+build
+.turbo
+.env
+.env.local
+*.log
+.DS_Store
+coverage
+apps/api/data
+apps/api/.storage
+storage
+.vscode
+.idea
+*.tsbuildinfo

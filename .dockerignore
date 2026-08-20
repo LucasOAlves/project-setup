@@ -1,0 +1,8 @@
+node_modules
+.git
+.env
+*.log
+.turbo
+dist
+coverage
+apps/api/data

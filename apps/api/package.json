@@ -1,0 +1,29 @@
+{
+  "name": "@studio/api",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "tsx src/index.ts",
+    "test": "tsx --test src/modules/uploads/local-storage.test.ts src/modules/profile/profile-service.test.ts src/modules/ai/parse-json.test.ts src/modules/ai/openai-error.test.ts src/modules/persona/persona-service.test.ts src/modules/news/newsapi-adapter.test.ts src/modules/news/search-topics.test.ts src/modules/news/article-filter.test.ts src/modules/opportunities/relevance.test.ts src/modules/opportunities/ground-opportunities.test.ts src/modules/opportunities/opportunity-service.test.ts src/modules/posts/ground-post.test.ts src/modules/posts/post-service.test.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "node -e \"process.exit(0)\""
+  },
+  "dependencies": {
+    "@fastify/cors": "^11.0.1",
+    "@fastify/multipart": "^9.0.3",
+    "@studio/shared": "*",
+    "dotenv": "^16.5.0",
+    "drizzle-orm": "^0.44.2",
+    "fastify": "^5.3.3",
+    "openai": "^5.23.2",
+    "postgres": "^3.4.7",
+    "zod": "^3.24.4"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.21",
+    "tsx": "^4.19.4",
+    "typescript": "^5.8.3"
+  }
+}
