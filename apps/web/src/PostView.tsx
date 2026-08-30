@@ -373,6 +373,33 @@ export function PostView({
             </div>
           </div>
 
+          {post.quality.improvements.length > 0 || post.quality.strengths.length > 0 ? (
+            <div className="band">
+              <p className="eyebrow">To raise the score</p>
+              {post.quality.improvements.length > 0 ? (
+                <ul className="promise-list">
+                  {post.quality.improvements.map((item) => (
+                    <li key={item}>{item}</li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="empty">No specific improvements flagged — comment on a paragraph if you want to push it further.</p>
+              )}
+              {post.quality.strengths.length > 0 ? (
+                <>
+                  <p className="eyebrow" style={{ marginTop: 12 }}>
+                    Already working
+                  </p>
+                  <ul className="promise-list">
+                    {post.quality.strengths.map((item) => (
+                      <li key={item}>{item}</li>
+                    ))}
+                  </ul>
+                </>
+              ) : null}
+            </div>
+          ) : null}
+
           <div className="band">
             <p className="eyebrow">Writing review</p>
             <p>{post.writingReview.summary}</p>

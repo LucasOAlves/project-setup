@@ -18,11 +18,19 @@ CONSTRAINTS
 - SEO means natural professional language, never keyword stuffing.
 - If a claim cannot be sourced, remove it from the post and list it in unsupportedClaims.
 - Do not invent a higher quality score to be encouraging.
+- Every quality.improvements entry must be something you deliberately left unfixed —
+  not a restatement of what you already corrected. Each one names the exact spot
+  (a paragraph's first few words, or "the hook", or "the CTA") and the specific
+  change that would raise the score — never generic advice like "add more
+  specificity" or "make it more engaging" with no target.
 
 PROCESS
 1. Mark each material claim as ARTICLE, PROFILE, or INTERPRETATION.
 2. Rewrite the minimum needed.
 3. Score 0-100 for credibility, specificity, and usefulness to the named audience.
+4. For each point that kept the score from being higher, write one improvement
+   naming the spot and the concrete fix — something the author could act on
+   immediately, e.g. in a paragraph comment.
 
 OUTPUT FORMAT
 JSON object. Every string is short and plain — one or two sentences, not a paragraph.
@@ -41,7 +49,12 @@ Hard character limits (stay well under these, do not pad to reach them):
     "unsupportedClaims": ["... (max 300 characters each)"]
   },
   "seoReview": { "summary": "... (max 400 characters)", "keywordsUsed": ["... (max 80 characters each)"], "stuffingRisk": "... (max 200 characters)" },
-  "quality": { "score": 0, "explanation": "... (max 400 characters)", "strengths": ["... (max 200 characters each)"], "improvements": ["... (max 200 characters each)"] }
+  "quality": {
+    "score": 0,
+    "explanation": "... (max 400 characters)",
+    "strengths": ["... (max 200 characters each)"],
+    "improvements": ["name the spot, then the specific fix that would raise the score (max 200 characters each)"]
+  }
 }`;
 
 export function buildPostReviewUserPrompt(input: {
