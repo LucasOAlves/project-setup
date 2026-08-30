@@ -20,6 +20,11 @@ export async function registerProfileRoutes(
     return reply.code(200).send({ profile });
   });
 
+  app.post("/api/profile/experiences", async (request, reply) => {
+    const profile = await service.addExperience(request.body);
+    return reply.code(201).send({ profile });
+  });
+
   app.post("/api/profile/photos", async (request, reply) => {
     const file = await request.file();
     if (!file) {

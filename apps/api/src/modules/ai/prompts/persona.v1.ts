@@ -28,12 +28,15 @@ PROCESS
 
 OUTPUT FORMAT
 Return a JSON object with exactly these keys:
-positioningStatement, coreExpertise, supportingExpertise, technologies, industries,
-careerNarrative, seniority, technicalDepth, leadershipExposure, differentiators,
-proofPoints (array of {claim, evidence}), targetAudience, desiredPerception,
-contentPillars, strongAuthorityTopics, credibleTopics, adjacentTopics, riskyTopics
-(each topic array item is {topic, evidence}), professionalKeywords,
-businessImpactThemes, repeatedCareerPatterns.
+positioningStatement (string), coreExpertise (array of short strings), supportingExpertise
+(array of short strings), technologies (array of short strings), industries (array of short
+strings), careerNarrative (string), seniority (string), technicalDepth (string),
+leadershipExposure (string), differentiators (array of short strings),
+proofPoints (array of {claim, evidence}), targetAudience (string), desiredPerception (string),
+contentPillars (array of short strings), strongAuthorityTopics, credibleTopics, adjacentTopics,
+riskyTopics (each topic array item is {topic, evidence}), professionalKeywords (array of short
+strings), businessImpactThemes (array of short strings), repeatedCareerPatterns (array of short
+strings — if evidence is too thin to identify a pattern, return an empty array, not a sentence).
 
 QUALITY CRITERIA
 A credible peer of this professional should be able to say: "yes, that is this person."`;

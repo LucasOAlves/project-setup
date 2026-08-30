@@ -17,7 +17,7 @@ export class ResearchService {
   ) {}
 
   async getLatest(): Promise<ResearchRunPublic | null> {
-    const record = await this.research.getLatest();
+    const record = await this.research.getLatest("discover");
     if (!record) {
       return null;
     }
@@ -51,6 +51,7 @@ export class ResearchService {
       personaId: persona.id,
       queryTopics,
       articles,
+      source: "discover",
     });
     return this.toPublic(record);
   }

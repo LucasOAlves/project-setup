@@ -1,11 +1,13 @@
 import { useEffect, useState } from "react";
-import type { PersonaPublic } from "@studio/shared";
+import { TEXT_PROVIDERS, TEXT_PROVIDER_LABELS, type PersonaPublic, type TextProviderName } from "@studio/shared";
 import { fetchPersona, generatePersona, type ApiError } from "./api";
+import { ProviderSelect } from "./ProviderSelect";
 
 export function PersonaView() {
   const [persona, setPersona] = useState<PersonaPublic | null>(null);
   const [status, setStatus] = useState<"loading" | "idle" | "generating">("loading");
   const [error, setError] = useState<string | null>(null);
+  const [provider, setProvider] = useState<TextProviderName | "">("");
 
   useEffect(() => {
     let cancelled = false;
@@ -31,7 +33,7 @@ export function PersonaView() {
     setError(null);
     setStatus("generating");
     try {
-      setPersona(await generatePersona());
+      setPersona(await generatePersona(provider || undefined));
     } catch (err) {
       setError((err as ApiError).message);
     } finally {
@@ -68,6 +70,15 @@ export function PersonaView() {
         <p className="empty">No persona yet. Generate one from the saved profile.</p>
       ) : null}
 
+      <div className="grid-2">
+        <ProviderSelect
+          label="Text provider"
+          value={provider}
+          onChange={setProvider}
+          options={TEXT_PROVIDERS}
+          labels={TEXT_PROVIDER_LABELS}
+        />
+      </div>
       <div className="actions">
         <button
           className="btn primary"

@@ -28,9 +28,13 @@ services:
       DATABASE_URL: postgres://studio:studio@postgres:5432/studio
       STORAGE_DIR: /data/storage
       MAX_PHOTO_BYTES: "8388608"
+      TEXT_PROVIDER: ${TEXT_PROVIDER:-openai}
+      IMAGE_PROVIDER: ${IMAGE_PROVIDER:-openai}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_TEXT_MODEL: ${OPENAI_TEXT_MODEL:-gpt-4.1}
-      OPENAI_IMAGE_MODEL: ${OPENAI_IMAGE_MODEL:-gpt-image-1.5}
+      OPENAI_IMAGE_MODEL: ${OPENAI_IMAGE_MODEL:-gpt-image-1}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      ANTHROPIC_TEXT_MODEL: ${ANTHROPIC_TEXT_MODEL:-claude-opus-5}
       NEWS_API_KEY: ${NEWS_API_KEY:-}
       NEWS_LOOKBACK_DAYS: ${NEWS_LOOKBACK_DAYS:-21}
     volumes:

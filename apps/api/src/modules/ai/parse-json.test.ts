@@ -10,3 +10,10 @@ test("parses raw and fenced JSON", () => {
 test("rejects invalid JSON", () => {
   assert.throws(() => parseJsonObject("not json"), /valid JSON/);
 });
+
+test("tolerates a raw unescaped newline inside a string value", () => {
+  const withRawNewline = '{"imagePrompt":"first line\nsecond line"}';
+  assert.deepEqual(parseJsonObject(withRawNewline), {
+    imagePrompt: "first line second line",
+  });
+});

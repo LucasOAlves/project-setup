@@ -1,11 +1,24 @@
 import type {
   AngleType,
+  ContentPlanStatus,
+  ContentPlanTopicPublic,
+  CustomTopicInput,
+  CustomTopicPublic,
+  ExperienceInput,
+  ImageProviderName,
+  ImagePublic,
   OpportunitySetPublic,
   PersonaPublic,
+  PostHistoryPublic,
+  PostHistoryQuery,
   PostPublic,
+  PostSectionComment,
+  PostTrackingInput,
   ProfileInput,
   ProfilePublic,
   ResearchRunPublic,
+  SectionCommentReview,
+  TextProviderName,
   WritingTone,
 } from "@studio/shared";
 import { profileInputSchema } from "@studio/shared";
@@ -84,8 +97,12 @@ export async function fetchPersona(): Promise<PersonaPublic | null> {
   return body.persona;
 }
 
-export async function generatePersona(): Promise<PersonaPublic> {
-  const response = await fetch("/api/persona/generate", { method: "POST" });
+export async function generatePersona(provider?: TextProviderName): Promise<PersonaPublic> {
+  const response = await fetch("/api/persona/generate", {
+    method: "POST",
+    headers: provider ? { "Content-Type": "application/json" } : undefined,
+    body: provider ? JSON.stringify({ provider }) : undefined,
+  });
   if (!response.ok) {
     throw await parseError(response);
   }
@@ -120,8 +137,23 @@ export async function fetchOpportunities(): Promise<OpportunitySetPublic | null>
   return body.opportunities;
 }
 
-export async function generateOpportunities(): Promise<OpportunitySetPublic> {
-  const response = await fetch("/api/opportunities/generate", { method: "POST" });
+export async function fetchSelectedOpportunities(): Promise<OpportunitySetPublic | null> {
+  const response = await fetch("/api/opportunities/selected");
+  if (!response.ok) {
+    throw await parseError(response);
+  }
+  const body = (await response.json()) as { opportunities: OpportunitySetPublic | null };
+  return body.opportunities;
+}
+
+export async function generateOpportunities(
+  provider?: TextProviderName,
+): Promise<OpportunitySetPublic> {
+  const response = await fetch("/api/opportunities/generate", {
+    method: "POST",
+    headers: provider ? { "Content-Type": "application/json" } : undefined,
+    body: provider ? JSON.stringify({ provider }) : undefined,
+  });
   if (!response.ok) {
     throw await parseError(response);
   }
@@ -162,26 +194,232 @@ async function postAction(path: string, payload?: unknown): Promise<PostPublic> 
   return body.post;
 }
 
-export function generatePost(): Promise<PostPublic> {
-  return postAction("/api/posts/generate");
+export function generatePost(
+  opportunityId?: string,
+  provider?: TextProviderName,
+): Promise<PostPublic> {
+  return postAction("/api/posts/generate", { opportunityId, provider });
 }
 
-export function generateAlternativeHook(): Promise<PostPublic> {
-  return postAction("/api/posts/hook");
+export function generateAlternativeHook(
+  postId?: string,
+  provider?: TextProviderName,
+): Promise<PostPublic> {
+  return postAction("/api/posts/hook", { postId, provider });
 }
 
-export function changePostTone(tone: WritingTone): Promise<PostPublic> {
-  return postAction("/api/posts/tone", { tone });
+export function changePostTone(
+  tone: WritingTone,
+  postId?: string,
+  provider?: TextProviderName,
+): Promise<PostPublic> {
+  return postAction("/api/posts/tone", { tone, postId, provider });
 }
 
-export function changePostAngle(angle: AngleType): Promise<PostPublic> {
-  return postAction("/api/posts/angle", { angle });
+export function changePostAngle(
+  angle: AngleType,
+  postId?: string,
+  provider?: TextProviderName,
+): Promise<PostPublic> {
+  return postAction("/api/posts/angle", { angle, postId, provider });
 }
 
-export function rewritePostSection(section: string): Promise<PostPublic> {
-  return postAction("/api/posts/rewrite", { section });
+export function applySectionComments(
+  sectionComments: PostSectionComment[],
+  postId?: string,
+  provider?: TextProviderName,
+): Promise<PostPublic> {
+  return postAction("/api/posts/rewrite", { sectionComments, postId, provider });
+}
+
+export async function reviewSectionComments(
+  sectionComments: PostSectionComment[],
+  provider?: TextProviderName,
+): Promise<SectionCommentReview[]> {
+  const response = await fetch("/api/posts/section-comments/review", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ sectionComments, provider }),
+  });
+  if (!response.ok) {
+    throw await parseError(response);
+  }
+  const body = (await response.json()) as { reviews: SectionCommentReview[] };
+  return body.reviews;
+}
+
+export async function addExperience(experience: ExperienceInput): Promise<ProfilePublic> {
+  const response = await fetch("/api/profile/experiences", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(experience),
+  });
+  if (!response.ok) {
+    throw await parseError(response);
+  }
+  const body = (await response.json()) as { profile: ProfilePublic };
+  return body.profile;
+}
+
+export async function fetchPostHistory(
+  query: Partial<PostHistoryQuery>,
+): Promise<PostHistoryPublic> {
+  const params = new URLSearchParams();
+  if (query.page) params.set("page", String(query.page));
+  if (query.pageSize) params.set("pageSize", String(query.pageSize));
+  if (query.q) params.set("q", query.q);
+  if (query.sortBy) params.set("sortBy", query.sortBy);
+  if (query.sortDir) params.set("sortDir", query.sortDir);
+  if (query.opportunityId) params.set("opportunityId", query.opportunityId);
+
+  const response = await fetch(`/api/posts/history?${params.toString()}`);
+  if (!response.ok) {
+    throw await parseError(response);
+  }
+  return (await response.json()) as PostHistoryPublic;
+}
+
+export async function fetchPostById(id: string): Promise<PostPublic | null> {
+  const response = await fetch(`/api/posts/${id}`);
+  if (!response.ok) {
+    throw await parseError(response);
+  }
+  const body = (await response.json()) as { post: PostPublic | null };
+  return body.post;
+}
+
+export async function updatePostTracking(
+  id: string,
+  patch: PostTrackingInput,
+): Promise<PostPublic> {
+  const response = await fetch(`/api/posts/${id}/tracking`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(patch),
+  });
+  if (!response.ok) {
+    throw await parseError(response);
+  }
+  const body = (await response.json()) as { post: PostPublic };
+  return body.post;
 }
 
 export function emptyProfile(): ProfileInput {
   return profileInputSchema.parse({});
+}
+
+export async function fetchPostImage(postId: string): Promise<ImagePublic | null> {
+  const response = await fetch(`/api/posts/${postId}/image`);
+  if (!response.ok) {
+    throw await parseError(response);
+  }
+  const body = (await response.json()) as { image: ImagePublic | null };
+  return body.image;
+}
+
+export async function generateImage(
+  postId?: string,
+  textProvider?: TextProviderName,
+  imageProvider?: ImageProviderName,
+): Promise<ImagePublic> {
+  const response = await fetch("/api/images/generate", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ postId, textProvider, imageProvider }),
+  });
+  if (!response.ok) {
+    throw await parseError(response);
+  }
+  const body = (await response.json()) as { image: ImagePublic };
+  return body.image;
+}
+
+export async function fetchContentPlan(): Promise<ContentPlanTopicPublic[]> {
+  const response = await fetch("/api/content-plan");
+  if (!response.ok) {
+    throw await parseError(response);
+  }
+  const body = (await response.json()) as { topics: ContentPlanTopicPublic[] };
+  return body.topics;
+}
+
+export async function selectContentPlanTopic(topicId: string): Promise<OpportunitySetPublic> {
+  const response = await fetch(`/api/content-plan/${topicId}/select`, { method: "POST" });
+  if (!response.ok) {
+    throw await parseError(response);
+  }
+  const body = (await response.json()) as { opportunities: OpportunitySetPublic };
+  return body.opportunities;
+}
+
+export async function updateContentPlanTopicStatus(
+  topicId: string,
+  status: ContentPlanStatus,
+): Promise<ContentPlanTopicPublic[]> {
+  const response = await fetch(`/api/content-plan/${topicId}/status`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ status }),
+  });
+  if (!response.ok) {
+    throw await parseError(response);
+  }
+  const body = (await response.json()) as { topics: ContentPlanTopicPublic[] };
+  return body.topics;
+}
+
+export async function fetchCustomTopics(): Promise<CustomTopicPublic[]> {
+  const response = await fetch("/api/custom-topics");
+  if (!response.ok) {
+    throw await parseError(response);
+  }
+  const body = (await response.json()) as { topics: CustomTopicPublic[] };
+  return body.topics;
+}
+
+export async function createCustomTopic(input: CustomTopicInput): Promise<CustomTopicPublic> {
+  const response = await fetch("/api/custom-topics", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!response.ok) {
+    throw await parseError(response);
+  }
+  const body = (await response.json()) as { topic: CustomTopicPublic };
+  return body.topic;
+}
+
+export async function deleteCustomTopic(id: string): Promise<CustomTopicPublic[]> {
+  const response = await fetch(`/api/custom-topics/${id}`, { method: "DELETE" });
+  if (!response.ok) {
+    throw await parseError(response);
+  }
+  const body = (await response.json()) as { topics: CustomTopicPublic[] };
+  return body.topics;
+}
+
+export async function selectCustomTopic(id: string): Promise<OpportunitySetPublic> {
+  const response = await fetch(`/api/custom-topics/${id}/select`, { method: "POST" });
+  if (!response.ok) {
+    throw await parseError(response);
+  }
+  const body = (await response.json()) as { opportunities: OpportunitySetPublic };
+  return body.opportunities;
+}
+
+export async function updateCustomTopicStatus(
+  id: string,
+  status: ContentPlanStatus,
+): Promise<CustomTopicPublic[]> {
+  const response = await fetch(`/api/custom-topics/${id}/status`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ status }),
+  });
+  if (!response.ok) {
+    throw await parseError(response);
+  }
+  const body = (await response.json()) as { topics: CustomTopicPublic[] };
+  return body.topics;
 }

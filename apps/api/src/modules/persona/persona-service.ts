@@ -4,6 +4,7 @@ import {
   personaPayloadSchema,
   type PersonaPublic,
   type ProfilePublic,
+  type TextProviderName,
 } from "@studio/shared";
 import { malformedAiOutput, notFound } from "../../app-error.js";
 import { parseJsonObject } from "../ai/parse-json.js";
@@ -11,6 +12,7 @@ import {
   PERSONA_SYSTEM_PROMPT,
   buildPersonaUserPrompt,
 } from "../ai/prompts/persona.v1.js";
+import { resolveTextProvider } from "../ai/resolve-provider.js";
 import type { TextGenerationProvider } from "../ai/text-generation-provider.js";
 import type { ProfileService } from "../profile/profile-service.js";
 import { groundPersona } from "./ground-persona.js";
@@ -28,7 +30,8 @@ export class PersonaService {
   constructor(
     private readonly profiles: ProfileService,
     private readonly personas: PersonaRepository,
-    private readonly text: TextGenerationProvider,
+    private readonly textProviders: Record<TextProviderName, TextGenerationProvider>,
+    private readonly defaultTextProvider: TextProviderName,
   ) {}
 
   async getPersona(): Promise<PersonaPublic | null> {
@@ -40,14 +43,15 @@ export class PersonaService {
     return this.toPublic(row, profile);
   }
 
-  async generatePersona(): Promise<PersonaPublic> {
+  async generatePersona(provider?: TextProviderName): Promise<PersonaPublic> {
     const profile = await this.profiles.getProfile();
     if (!profile) {
       throw notFound("Save a professional profile before generating a persona.");
     }
 
     const prompt = buildPersonaPrompt(profile);
-    const generated = await this.text.generateText(prompt);
+    const text = resolveTextProvider(this.textProviders, this.defaultTextProvider, provider);
+    const generated = await text.generateText(prompt);
     const parsed = personaPayloadSchema.safeParse(parseJsonObject(generated.text));
     if (!parsed.success) {
       throw malformedAiOutput(

@@ -8,6 +8,7 @@ import {
 } from "drizzle-orm/pg-core";
 import type {
   FactReview,
+  ImageBriefPayload,
   OpportunityPayload,
   PersonaPayload,
   QualityScore,
@@ -99,6 +100,7 @@ export const researchRuns = pgTable("research_runs", {
     .notNull()
     .references(() => professionalPersonas.id, { onDelete: "cascade" }),
   queryTopics: jsonb("query_topics").$type<string[]>().notNull(),
+  source: text("source").notNull().default("discover"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -131,6 +133,8 @@ export const opportunitySets = pgTable("opportunity_sets", {
   promptVersion: text("prompt_version").notNull(),
   model: text("model").notNull(),
   selectedOpportunityId: uuid("selected_opportunity_id"),
+  selectedAt: timestamp("selected_at", { withTimezone: true }),
+  source: text("source").notNull().default("discover"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -145,6 +149,20 @@ export const contentOpportunities = pgTable("content_opportunities", {
   payload: jsonb("payload").$type<OpportunityPayload>().notNull(),
   matchScore: integer("match_score").notNull(),
   sortOrder: integer("sort_order").notNull().default(0),
+});
+
+export const contentPlanTopics = pgTable("content_plan_topics", {
+  id: uuid("id").primaryKey(),
+  topicId: text("topic_id").notNull().unique(),
+  status: text("status").notNull().default("PLANNED"),
+  contentOpportunityId: uuid("content_opportunity_id").references(
+    () => contentOpportunities.id,
+    { onDelete: "set null" },
+  ),
+  generatedPostId: uuid("generated_post_id").references(() => generatedPosts.id, {
+    onDelete: "set null",
+  }),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
 export const generatedPosts = pgTable("generated_posts", {
@@ -166,5 +184,42 @@ export const generatedPosts = pgTable("generated_posts", {
   factReview: jsonb("fact_review").$type<FactReview>().notNull(),
   seoReview: jsonb("seo_review").$type<SeoReview>().notNull(),
   quality: jsonb("quality").$type<QualityScore>().notNull(),
+  status: text("status").notNull().default("DRAFT"),
+  publishedAt: timestamp("published_at", { withTimezone: true }),
+  outcome: text("outcome"),
+  outcomeNotes: text("outcome_notes"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const generatedImages = pgTable("generated_images", {
+  id: uuid("id").primaryKey(),
+  postId: uuid("post_id")
+    .notNull()
+    .references(() => generatedPosts.id, { onDelete: "cascade" }),
+  briefPayload: jsonb("brief_payload").$type<ImageBriefPayload>().notNull(),
+  prompt: text("prompt").notNull(),
+  storageKey: text("storage_key").notNull(),
+  mimeType: text("mime_type").notNull(),
+  sizeBytes: integer("size_bytes").notNull(),
+  model: text("model").notNull(),
+  promptVersion: text("prompt_version").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const customTopics = pgTable("custom_topics", {
+  id: uuid("id").primaryKey(),
+  title: text("title").notNull(),
+  hook: text("hook").notNull(),
+  objective: text("objective").notNull().default(""),
+  keyPoints: jsonb("key_points").$type<string[]>().notNull().default([]),
+  cta: text("cta").notNull().default(""),
+  angle: text("angle").notNull().default("EDUCATIONAL"),
+  pillar: text("pillar").notNull().default(""),
+  sourceUrl: text("source_url"),
+  status: text("status").notNull().default("PLANNED"),
+  contentOpportunityId: uuid("content_opportunity_id").references(
+    () => contentOpportunities.id,
+    { onDelete: "set null" },
+  ),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });

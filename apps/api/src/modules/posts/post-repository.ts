@@ -1,8 +1,11 @@
 import { randomUUID } from "node:crypto";
-import { desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, ilike, or, sql, type SQL } from "drizzle-orm";
 import type {
   AngleType,
   FactReview,
+  PostHistorySortField,
+  PostOutcome,
+  PostStatus,
   QualityScore,
   SeoReview,
   StoryStrategy,
@@ -58,6 +61,85 @@ export class PostRepository {
         seoReview: input.seoReview,
         quality: input.quality,
       })
+      .returning();
+    return post ?? null;
+  }
+
+  async getById(id: string) {
+    const [post] = await this.db
+      .select()
+      .from(generatedPosts)
+      .where(
+        and(eq(generatedPosts.id, id), eq(generatedPosts.profileId, WORKSPACE_PROFILE_ID)),
+      )
+      .limit(1);
+    return post ?? null;
+  }
+
+  async listAll(params: {
+    page: number;
+    pageSize: number;
+    search?: string;
+    sortBy: PostHistorySortField;
+    sortDir: "asc" | "desc";
+    opportunityId?: string;
+  }) {
+    const conditions = [eq(generatedPosts.profileId, WORKSPACE_PROFILE_ID)];
+    if (params.search) {
+      const term = `%${params.search}%`;
+      conditions.push(
+        or(ilike(generatedPosts.hook, term), ilike(generatedPosts.body, term)) as SQL,
+      );
+    }
+    if (params.opportunityId) {
+      conditions.push(eq(generatedPosts.opportunityId, params.opportunityId));
+    }
+    const where = and(...conditions);
+
+    const orderColumn =
+      params.sortBy === "score"
+        ? sql`(${generatedPosts.quality}->>'score')::int`
+        : params.sortBy === "status"
+          ? generatedPosts.status
+          : generatedPosts.createdAt;
+    const orderExpr = params.sortDir === "asc" ? asc(orderColumn) : desc(orderColumn);
+
+    const rows = await this.db
+      .select()
+      .from(generatedPosts)
+      .where(where)
+      .orderBy(orderExpr)
+      .limit(params.pageSize)
+      .offset((params.page - 1) * params.pageSize);
+
+    const [countRow] = await this.db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(generatedPosts)
+      .where(where);
+
+    return { rows, total: countRow?.count ?? 0 };
+  }
+
+  async updateTracking(
+    id: string,
+    patch: {
+      status?: PostStatus;
+      outcome?: PostOutcome | null;
+      outcomeNotes?: string | null;
+      publishedAt?: Date | null;
+    },
+  ) {
+    const [post] = await this.db
+      .update(generatedPosts)
+      .set({
+        ...(patch.status !== undefined ? { status: patch.status } : {}),
+        ...(patch.outcome !== undefined ? { outcome: patch.outcome } : {}),
+        ...(patch.outcomeNotes !== undefined ? { outcomeNotes: patch.outcomeNotes } : {}),
+        ...(patch.publishedAt !== undefined ? { publishedAt: patch.publishedAt } : {}),
+      })
+      .where(
+        and(eq(generatedPosts.id, id), eq(generatedPosts.profileId, WORKSPACE_PROFILE_ID)),
+      )
       .returning();
     return post ?? null;
   }

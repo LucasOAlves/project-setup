@@ -5,6 +5,7 @@ import {
   type OpportunitySetPublic,
   type PersonaPublic,
   type ProfilePublic,
+  type TextProviderName,
 } from "@studio/shared";
 import { malformedAiOutput, notFound, validationError } from "../../app-error.js";
 import { parseJsonObject } from "../ai/parse-json.js";
@@ -12,12 +13,13 @@ import {
   OPPORTUNITY_SYSTEM_PROMPT,
   buildOpportunityUserPrompt,
 } from "../ai/prompts/opportunity.v1.js";
+import { resolveTextProvider } from "../ai/resolve-provider.js";
 import type { TextGenerationProvider } from "../ai/text-generation-provider.js";
 import type { PersonaService } from "../persona/persona-service.js";
 import type { ProfileService } from "../profile/profile-service.js";
 import type { ResearchRepository } from "../news/research-repository.js";
 import { groundEvaluations } from "./ground-opportunities.js";
-import type { OpportunityRepository } from "./opportunity-repository.js";
+import type { OpportunityRepository, OpportunitySource } from "./opportunity-repository.js";
 import { scoreCandidate, type ScoredCandidate } from "./relevance.js";
 
 export function buildOpportunityPrompt(input: {
@@ -42,21 +44,22 @@ export class OpportunityService {
     private readonly personas: PersonaService,
     private readonly research: ResearchRepository,
     private readonly opportunities: OpportunityRepository,
-    private readonly text: TextGenerationProvider,
+    private readonly textProviders: Record<TextProviderName, TextGenerationProvider>,
+    private readonly defaultTextProvider: TextProviderName,
   ) {}
 
   async getLatest(): Promise<OpportunitySetPublic | null> {
-    const record = await this.opportunities.getLatest();
+    const record = await this.opportunities.getLatest("discover");
     if (!record) {
       return null;
     }
     return this.toPublic(record);
   }
 
-  async generate(): Promise<OpportunitySetPublic> {
+  async generate(provider?: TextProviderName): Promise<OpportunitySetPublic> {
     const profile = await this.profiles.getProfile();
     const persona = await this.personas.getPersona();
-    const research = await this.research.getLatest();
+    const research = await this.research.getLatest("discover");
     if (!profile || !persona) {
       throw notFound("Generate a persona before creating opportunities.");
     }
@@ -86,6 +89,7 @@ export class OpportunityService {
         personaId: persona.id,
         promptVersion: OPPORTUNITY_PROMPT_VERSION,
         model: "deterministic",
+        source: "discover",
         opportunities: [],
       });
       if (!record) {
@@ -94,7 +98,8 @@ export class OpportunityService {
       return this.toPublic(record);
     }
 
-    const generated = await this.text.generateText(
+    const text = resolveTextProvider(this.textProviders, this.defaultTextProvider, provider);
+    const generated = await text.generateText(
       buildOpportunityPrompt({ profile, persona, candidates }),
     );
     const parsed = modelOpportunitySetSchema.safeParse(parseJsonObject(generated.text));
@@ -115,6 +120,7 @@ export class OpportunityService {
       personaId: persona.id,
       promptVersion: OPPORTUNITY_PROMPT_VERSION,
       model: generated.model,
+      source: "discover",
       opportunities: grounded,
     });
     if (!record) {
@@ -123,8 +129,11 @@ export class OpportunityService {
     return this.toPublic(record);
   }
 
-  async select(opportunityId: string): Promise<OpportunitySetPublic> {
-    const latest = await this.opportunities.getLatest();
+  async select(
+    opportunityId: string,
+    source: OpportunitySource = "discover",
+  ): Promise<OpportunitySetPublic> {
+    const latest = await this.opportunities.getLatest(source);
     if (!latest) {
       throw notFound("Generate opportunities before selecting an angle.");
     }
@@ -135,12 +144,20 @@ export class OpportunityService {
     return this.toPublic(record);
   }
 
-  async getSelected(): Promise<OpportunityPublic | null> {
-    const latest = await this.getLatest();
-    if (!latest?.selectedOpportunityId) {
+  async getCurrentSelection(): Promise<OpportunitySetPublic | null> {
+    const record = await this.opportunities.getMostRecentlySelected();
+    if (!record) {
       return null;
     }
-    return latest.opportunities.find((item) => item.selected) ?? null;
+    return this.toPublic(record);
+  }
+
+  async getSelected(): Promise<OpportunityPublic | null> {
+    const current = await this.getCurrentSelection();
+    if (!current?.selectedOpportunityId) {
+      return null;
+    }
+    return current.opportunities.find((item) => item.selected) ?? null;
   }
 
   async getById(opportunityId: string): Promise<OpportunityPublic | null> {

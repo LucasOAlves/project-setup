@@ -1,4 +1,9 @@
 import { z } from "zod";
+import { textProviderSchema } from "./provider.js";
+
+export const personaGenerateInputSchema = z.object({
+  provider: textProviderSchema.optional(),
+});
 
 const shortList = (maxItems: number, maxLength: number) =>
   z.array(z.string().trim().min(1).max(maxLength)).max(maxItems);

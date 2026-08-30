@@ -1,18 +1,25 @@
 import { randomUUID } from "node:crypto";
-import { desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray, isNotNull, sql } from "drizzle-orm";
 import type { OpportunityPayload } from "@studio/shared";
 import type { Database } from "../../db/client.js";
 import { contentOpportunities, newsArticles, opportunitySets } from "../../db/schema.js";
 import { WORKSPACE_PROFILE_ID } from "../profile/profile-repository.js";
 
+export type OpportunitySource = "discover" | "content_plan" | "custom";
+
 export class OpportunityRepository {
   constructor(private readonly db: Database) {}
 
-  async getLatest() {
+  async getLatest(source: OpportunitySource = "discover") {
     const [set] = await this.db
       .select()
       .from(opportunitySets)
-      .where(eq(opportunitySets.profileId, WORKSPACE_PROFILE_ID))
+      .where(
+        and(
+          eq(opportunitySets.profileId, WORKSPACE_PROFILE_ID),
+          eq(opportunitySets.source, source),
+        ),
+      )
       .orderBy(desc(opportunitySets.createdAt))
       .limit(1);
     if (!set) {
@@ -26,6 +33,7 @@ export class OpportunityRepository {
     personaId: string;
     promptVersion: string;
     model: string;
+    source?: OpportunitySource;
     opportunities: Array<{
       articleId: string;
       matchScore: number;
@@ -41,6 +49,7 @@ export class OpportunityRepository {
         personaId: input.personaId,
         promptVersion: input.promptVersion,
         model: input.model,
+        source: input.source ?? "discover",
       });
 
       if (input.opportunities.length > 0) {
@@ -71,9 +80,27 @@ export class OpportunityRepository {
 
     await this.db
       .update(opportunitySets)
-      .set({ selectedOpportunityId: opportunityId })
+      .set({ selectedOpportunityId: opportunityId, selectedAt: new Date() })
       .where(eq(opportunitySets.id, setId));
     return this.loadSet(setId);
+  }
+
+  async getMostRecentlySelected() {
+    const [set] = await this.db
+      .select()
+      .from(opportunitySets)
+      .where(
+        and(
+          eq(opportunitySets.profileId, WORKSPACE_PROFILE_ID),
+          isNotNull(opportunitySets.selectedOpportunityId),
+        ),
+      )
+      .orderBy(sql`${opportunitySets.selectedAt} DESC NULLS LAST`)
+      .limit(1);
+    if (!set) {
+      return null;
+    }
+    return this.loadSet(set.id);
   }
 
   private async loadSet(setId: string) {

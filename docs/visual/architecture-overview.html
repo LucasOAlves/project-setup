@@ -1,0 +1,1263 @@
+<title>Content Studio Architecture</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,650&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+<style>
+  :root {
+    --bg: #f3efe6;
+    --surface: #fffdf8;
+    --surface-2: #ece4d3;
+    --ink: #1c1915;
+    --ink-soft: #5c564c;
+    --ink-faint: #8a8171;
+    --line: #ddd4c4;
+    --accent: #b85a32;
+    --accent-deep: #8f3f20;
+    --accent-soft: rgba(184, 90, 50, 0.12);
+    --accent2: #2f4f45;
+    --accent2-soft: rgba(47, 79, 69, 0.12);
+    --danger: #8f2d2d;
+    --danger-soft: rgba(143, 45, 45, 0.1);
+    --code-bg: #ece4d3;
+    --shadow: 0 18px 50px rgba(48, 36, 22, 0.10);
+    --font-display: "Fraunces", Georgia, serif;
+    --font-body: "IBM Plex Sans", system-ui, sans-serif;
+    --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #17140f;
+      --surface: #211c15;
+      --surface-2: #2a2318;
+      --ink: #f1ece0;
+      --ink-soft: #bcb1a0;
+      --ink-faint: #8c8271;
+      --line: #3a3325;
+      --accent: #e08a5c;
+      --accent-deep: #f2ac83;
+      --accent-soft: rgba(224, 138, 92, 0.16);
+      --accent2: #7fb0a0;
+      --accent2-soft: rgba(127, 176, 160, 0.16);
+      --danger: #e59a9a;
+      --danger-soft: rgba(229, 154, 154, 0.14);
+      --code-bg: #241e15;
+      --shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --bg: #17140f;
+    --surface: #211c15;
+    --surface-2: #2a2318;
+    --ink: #f1ece0;
+    --ink-soft: #bcb1a0;
+    --ink-faint: #8c8271;
+    --line: #3a3325;
+    --accent: #e08a5c;
+    --accent-deep: #f2ac83;
+    --accent-soft: rgba(224, 138, 92, 0.16);
+    --accent2: #7fb0a0;
+    --accent2-soft: rgba(127, 176, 160, 0.16);
+    --danger: #e59a9a;
+    --danger-soft: rgba(229, 154, 154, 0.14);
+    --code-bg: #241e15;
+    --shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--font-body);
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  h1, h2, h3, h4 {
+    font-family: var(--font-display);
+    font-weight: 650;
+    letter-spacing: -0.02em;
+    text-wrap: balance;
+    color: var(--ink);
+    margin: 0 0 0.5em;
+  }
+
+  a { color: var(--accent-deep); }
+  a:hover { color: var(--accent); }
+
+  code, .mono {
+    font-family: var(--font-mono);
+    font-size: 0.88em;
+  }
+
+  code {
+    background: var(--code-bg);
+    padding: 0.1em 0.4em;
+    border-radius: 4px;
+  }
+
+  .layout {
+    max-width: 900px;
+    margin: 0 auto;
+  }
+
+  .topbar {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+    padding: 1.75rem clamp(1.25rem, 4vw, 2rem) 0;
+  }
+
+  .topbar .brand {
+    font-family: var(--font-display);
+    font-size: 1.2rem;
+    font-weight: 650;
+  }
+  .topbar .brand span { color: var(--accent); }
+
+  .topbar .kicker {
+    font-size: 0.72rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+  }
+
+  .toc {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    padding: 1.5rem clamp(1.25rem, 4vw, 2rem) 0;
+    margin-bottom: 0.5rem;
+  }
+
+  .toc a {
+    font-size: 0.82rem;
+    color: var(--ink-soft);
+    text-decoration: none;
+    padding: 0.4rem 0.85rem;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    white-space: nowrap;
+  }
+
+  .toc a:hover { color: var(--ink); border-color: var(--ink-faint); }
+
+  .toc .num {
+    font-family: var(--font-mono);
+    color: var(--ink-faint);
+    margin-right: 0.4em;
+  }
+
+  main { padding: 1rem clamp(1.25rem, 4vw, 2rem) 6rem; min-width: 0; }
+
+  .hero {
+    max-width: 62ch;
+    margin-bottom: 3.5rem;
+  }
+
+  .hero .kicker {
+    font-size: 0.78rem;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--accent-deep);
+    margin-bottom: 0.9rem;
+    font-weight: 600;
+  }
+
+  .hero h1 { font-size: clamp(2rem, 4vw, 2.7rem); margin-bottom: 0.7rem; }
+  .hero p { color: var(--ink-soft); font-size: 1.05rem; max-width: 58ch; }
+
+  .hero .meta {
+    display: flex;
+    gap: 1.5rem;
+    margin-top: 1.5rem;
+    font-size: 0.82rem;
+    color: var(--ink-faint);
+    flex-wrap: wrap;
+  }
+  .hero .meta strong { color: var(--ink-soft); font-weight: 500; }
+
+  section.doc {
+    max-width: 78ch;
+    margin: 0 0 4.5rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--line);
+    scroll-margin-top: 2rem;
+  }
+  section.doc:first-of-type { border-top: none; padding-top: 0; }
+
+  section.doc .eyebrow {
+    font-size: 0.74rem;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    margin-bottom: 0.5rem;
+    display: flex;
+    align-items: baseline;
+    gap: 0.6rem;
+  }
+  section.doc .eyebrow .idx { color: var(--accent); font-family: var(--font-mono); }
+
+  section.doc h2 { font-size: 1.6rem; margin-bottom: 0.9rem; }
+  section.doc > p.lede { color: var(--ink-soft); max-width: 68ch; margin-bottom: 1.5rem; }
+
+  .further-reading {
+    margin-top: 2rem;
+    padding-top: 1.1rem;
+    border-top: 1px dashed var(--line);
+  }
+  .further-reading .label {
+    font-size: 0.72rem;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    margin-bottom: 0.6rem;
+  }
+  .further-reading ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 1.2rem;
+  }
+  .further-reading li { font-size: 0.86rem; }
+  .further-reading a {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35em;
+  }
+  .further-reading a.ext::after {
+    content: "↗";
+    font-size: 0.8em;
+    color: var(--ink-faint);
+  }
+
+  .adr-full {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--accent);
+    border-radius: 10px;
+    padding: 1.4rem 1.6rem;
+    margin-bottom: 1.5rem;
+    scroll-margin-top: 1.5rem;
+  }
+  .adr-full .id {
+    font-family: var(--font-mono);
+    font-size: 0.76rem;
+    color: var(--accent-deep);
+    font-weight: 600;
+  }
+  .adr-full h3 { font-size: 1.2rem; margin: 0.3rem 0 0.2rem; }
+  .adr-full .status {
+    display: inline-block;
+    font-size: 0.68rem;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--accent2);
+    background: var(--accent2-soft);
+    padding: 0.1em 0.6em;
+    border-radius: 999px;
+    margin-bottom: 0.9rem;
+  }
+  .adr-full h4 {
+    font-size: 0.8rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    margin: 1.1rem 0 0.4rem;
+  }
+  .adr-full p, .adr-full li { font-size: 0.9rem; color: var(--ink-soft); }
+  .adr-full ol, .adr-full ul { margin: 0.3rem 0; padding-left: 1.3rem; }
+  .adr-full .back-to-index {
+    display: inline-block;
+    margin-top: 1rem;
+    font-size: 0.78rem;
+  }
+
+  .diagram-frame {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 1.5rem;
+    margin: 1.5rem 0;
+    overflow-x: auto;
+    box-shadow: var(--shadow);
+  }
+  .diagram-frame .cap {
+    font-size: 0.76rem;
+    color: var(--ink-faint);
+    margin-top: 0.9rem;
+    padding-top: 0.7rem;
+    border-top: 1px dashed var(--line);
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+    margin: 1.25rem 0;
+  }
+  caption { text-align: left; }
+  th, td {
+    text-align: left;
+    padding: 0.6rem 0.8rem;
+    border-bottom: 1px solid var(--line);
+    vertical-align: top;
+  }
+  th {
+    font-size: 0.72rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    font-weight: 600;
+  }
+  tbody tr:hover { background: var(--surface); }
+  .table-wrap { overflow-x: auto; }
+
+  .tag {
+    display: inline-block;
+    font-size: 0.68rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    padding: 0.15em 0.55em;
+    border-radius: 999px;
+    font-weight: 600;
+  }
+  .tag.ai { background: var(--accent-soft); color: var(--accent-deep); }
+  .tag.det { background: var(--accent2-soft); color: var(--accent2); }
+
+  .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 1rem; margin: 1.5rem 0; }
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 1.1rem 1.2rem;
+  }
+  .card h4 { font-size: 0.98rem; margin-bottom: 0.35rem; }
+  .card p { font-size: 0.86rem; color: var(--ink-soft); margin: 0; }
+  .card .file { display: block; margin-top: 0.6rem; font-size: 0.74rem; color: var(--ink-faint); }
+
+  .adr-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1rem; margin: 1.5rem 0; }
+  .adr-card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--accent);
+    border-radius: 8px;
+    padding: 1.1rem 1.25rem;
+  }
+  .adr-card .id { font-family: var(--font-mono); font-size: 0.72rem; color: var(--accent-deep); font-weight: 600; }
+  .adr-card h4 { font-size: 1rem; margin: 0.3rem 0 0.5rem; }
+  .adr-card p { font-size: 0.85rem; color: var(--ink-soft); margin: 0 0 0.6rem; }
+  .adr-card a { font-size: 0.78rem; }
+
+  .stack-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 0.85rem; margin: 1.5rem 0; }
+  .stack-item {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 0.85rem 1rem;
+  }
+  .stack-item .role { font-size: 0.68rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-faint); }
+  .stack-item .name { font-family: var(--font-mono); font-size: 0.95rem; margin: 0.2rem 0; color: var(--ink); }
+  .stack-item .ver { font-size: 0.78rem; color: var(--accent-deep); }
+
+  .callout {
+    background: var(--accent2-soft);
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--accent2);
+    border-radius: 8px;
+    padding: 1rem 1.2rem;
+    margin: 1.5rem 0;
+    font-size: 0.9rem;
+  }
+  .callout strong { color: var(--accent2); }
+
+  .callout.warn {
+    background: var(--danger-soft);
+    border-left-color: var(--danger);
+  }
+  .callout.warn strong { color: var(--danger); }
+
+  ul.compact { padding-left: 1.2rem; margin: 0.75rem 0; }
+  ul.compact li { margin-bottom: 0.35rem; font-size: 0.92rem; }
+
+  pre.mermaid { background: transparent; margin: 0; }
+
+  footer {
+    max-width: 78ch;
+    padding-top: 2rem;
+    border-top: 1px solid var(--line);
+    font-size: 0.82rem;
+    color: var(--ink-faint);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { scroll-behavior: auto !important; }
+  }
+</style>
+
+<div class="layout">
+  <header class="topbar">
+    <div class="brand">Content <span>Studio</span></div>
+    <div class="kicker">Architecture reference</div>
+  </header>
+
+  <nav class="toc" aria-label="Sections">
+    <a href="#overview"><span class="num">01</span>System overview</a>
+    <a href="#modules"><span class="num">02</span>Backend modules</a>
+    <a href="#providers"><span class="num">03</span>Provider isolation</a>
+    <a href="#paths"><span class="num">04</span>Three topic paths</a>
+    <a href="#pipeline"><span class="num">05</span>AI pipeline</a>
+    <a href="#models"><span class="num">06</span>AI models in use</a>
+    <a href="#data"><span class="num">07</span>Data model</a>
+    <a href="#frontend"><span class="num">08</span>Frontend architecture</a>
+    <a href="#decisions"><span class="num">09</span>Technical decisions</a>
+    <a href="#stack"><span class="num">10</span>Tech stack</a>
+    <a href="#appendix"><span class="num">11</span>Full ADR text</a>
+  </nav>
+
+  <main>
+    <div class="hero">
+      <div class="kicker">Technical reference</div>
+      <h1>How LinkedIn Content Studio is built</h1>
+      <p>
+        A modular-monolith Turborepo that turns a professional's real background
+        into grounded LinkedIn posts — three ways to reach a topic, a swappable
+        AI/news/storage provider layer, and a deterministic-first pipeline that
+        only spends model calls where judgment actually adds value.
+      </p>
+      <div class="meta">
+        <span><strong>apps/web</strong> React 19 + Vite</span>
+        <span><strong>apps/api</strong> Fastify 5 + Drizzle + Postgres</span>
+        <span><strong>packages/shared</strong> Zod contracts</span>
+      </div>
+    </div>
+
+    <section class="doc" id="overview">
+      <p class="eyebrow"><span class="idx">01</span>System overview</p>
+      <h2>A modular monolith, not microservices</h2>
+      <p class="lede">
+        Four workspaces in one Turborepo. AI, persistence, and news adapters live
+        <em>inside</em> <code>apps/api</code> — they are not their own packages.
+        Only <code>web</code> and <code>api</code> share types, through
+        <code>packages/shared</code>.
+      </p>
+      <div class="diagram-frame">
+        <pre class="mermaid">
+graph LR
+  subgraph Client["apps/web — React 19 + Vite"]
+    UI[Step-based SPA]
+  end
+  subgraph Server["apps/api — Fastify 5"]
+    Routes[Routes] --> Services[Domain services]
+    Services --> Repos[Repositories — Drizzle]
+    Services --> Providers[AI / News / Storage providers]
+  end
+  Shared["packages/shared — Zod contracts &amp; types"]
+  DB[(PostgreSQL)]
+  OpenAI[["OpenAI API"]]
+  Anthropic[["Anthropic API"]]
+  NewsAPI[["NewsAPI.org"]]
+  Pollinations[["Pollinations.ai"]]
+
+  UI -- "fetch, JSON" --> Routes
+  UI -. types .-> Shared
+  Routes -. types .-> Shared
+  Repos --> DB
+  Providers --> OpenAI
+  Providers --> Anthropic
+  Providers --> NewsAPI
+  Providers --> Pollinations
+        </pre>
+        <div class="cap">
+          <code>packages/config</code> (shared TS config) omitted above — it has
+          no runtime edges, only build-time ones.
+        </div>
+      </div>
+
+      <h3 style="font-size:1.05rem;margin-top:2rem;">Request flow</h3>
+      <div class="diagram-frame">
+        <pre class="mermaid">
+graph LR
+  A[HTTP request] --> B[Schema validation]
+  B --> C[Controller]
+  C --> D[Use case]
+  D --> E[Repository or provider]
+  E --> F[Validated response]
+        </pre>
+      </div>
+      <p style="font-size:0.9rem;color:var(--ink-soft);">
+        Controllers stay thin. Domain rules never live in routes or React
+        components.
+      </p>
+
+      <h3 style="font-size:1.05rem;margin-top:2rem;">Two ways to run it locally</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Path</th><th>What runs</th><th>When used this project</th></tr></thead>
+          <tbody>
+            <tr><td>Docker Compose</td><td><code>web</code>, <code>api</code>, <code>postgres</code> as containers, service DNS between them</td><td>Original design (ADR-001 assumes this)</td></tr>
+            <tr><td>Native Postgres</td><td><code>npm run dev</code> (Turborepo runs <code>vite</code> + <code>tsx watch</code>), Postgres as a Windows service</td><td>Used for most of this project's actual local development, after Docker Desktop's WSL layer broke on the dev machine</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="further-reading">
+        <div class="label">Further reading</div>
+        <ul>
+          <li><a class="ext" href="https://turbo.build/repo/docs" target="_blank" rel="noopener">Turborepo docs</a></li>
+          <li><a class="ext" href="https://fastify.dev/docs/latest/" target="_blank" rel="noopener">Fastify docs</a></li>
+          <li><a href="#adr-001">ADR-001 — why a monolith, not microservices</a></li>
+        </ul>
+      </div>
+    </section>
+
+    <section class="doc" id="modules">
+      <p class="eyebrow"><span class="idx">02</span>Backend modules</p>
+      <h2>One module per responsibility</h2>
+      <p class="lede">
+        Every folder under <code>apps/api/src/modules/</code> owns one thing.
+        Modules call each other's use cases but must not import a vendor SDK type
+        or a filesystem path from outside their own boundary.
+      </p>
+      <div class="diagram-frame">
+        <pre class="mermaid">
+graph TD
+  profile[profile] --> persona[persona]
+  persona --> news[news]
+  persona --> content_plan[content-plan]
+  persona --> custom_topics[custom-topics]
+  news --> relevance[relevance]
+  relevance --> opportunities[opportunities]
+  content_plan --> opportunities
+  custom_topics --> opportunities
+  opportunities --> posts[posts]
+  posts --> images[images]
+  profile --> uploads[uploads]
+  posts -. uses .-> ai["ai — prompts, providers,<br/>structured-output validation"]
+  persona -. uses .-> ai
+  opportunities -. uses .-> ai
+  images -. uses .-> ai
+        </pre>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Module</th><th>Owns</th></tr></thead>
+          <tbody>
+            <tr><td><code>profile</code></td><td>Profile, experiences, writing samples, photo metadata</td></tr>
+            <tr><td><code>persona</code></td><td>Persona generation, authority-model persistence</td></tr>
+            <tr><td><code>news</code></td><td>NewsProvider calls, article normalization, persistence</td></tr>
+            <tr><td><code>relevance</code></td><td>Deterministic filters + semantic relevance scoring</td></tr>
+            <tr><td><code>opportunities</code></td><td>Content opportunities, source-scoped selection (ADR-009), rejection</td></tr>
+            <tr><td><code>content-plan</code></td><td>The 24-topic editorial calendar as deterministic synthetic opportunities (ADR-006)</td></tr>
+            <tr><td><code>custom-topics</code></td><td>User-authored topics, same synthetic-opportunity pattern as content-plan</td></tr>
+            <tr><td><code>posts</code></td><td>Story strategy, draft, reviews, scores, regeneration, publish tracking</td></tr>
+            <tr><td><code>images</code></td><td>Creative brief, prompt, generation, association with a post</td></tr>
+            <tr><td><code>uploads</code></td><td>Photo validation and storage identifiers</td></tr>
+            <tr><td><code>ai</code></td><td>Prompt templates, structured-output validation, provider clients</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="further-reading">
+        <div class="label">Further reading</div>
+        <ul>
+          <li><a class="ext" href="https://adr.github.io/" target="_blank" rel="noopener">Architecture Decision Records (adr.github.io)</a></li>
+          <li><a class="ext" href="https://martinfowler.com/bliki/BoundedContext.html" target="_blank" rel="noopener">Bounded Context — Martin Fowler</a></li>
+        </ul>
+      </div>
+    </section>
+
+    <section class="doc" id="providers">
+      <p class="eyebrow"><span class="idx">03</span>Provider isolation</p>
+      <h2>Every volatile capability is an interface</h2>
+      <p class="lede">
+        <a href="#adr-002">ADR-002</a> set this
+        rule before any vendor was chosen: domain code depends on an interface,
+        never an SDK. It paid off twice this session — once when the OpenAI
+        account ran dry (<a href="#adr-007">ADR-007</a>),
+        once when the same thing blocked images
+        (<a href="#adr-008">ADR-008</a>).
+        Neither fix touched a prompt, a schema, or a route.
+      </p>
+      <div class="diagram-frame">
+        <pre class="mermaid">
+graph LR
+  TGP["TextGenerationProvider<br/>(TEXT_PROVIDER env)"] --> OAT["OpenAITextGenerationProvider<br/>default · gpt-4.1"]
+  TGP --> ANT["AnthropicTextGenerationProvider<br/>claude-opus-5 · ADR-007"]
+  IGP["ImageGenerationProvider<br/>(IMAGE_PROVIDER env)"] --> OAI["OpenAIImageGenerationProvider<br/>default · gpt-image-1"]
+  IGP --> POL["PollinationsImageGenerationProvider<br/>no key · flux · ADR-008"]
+  NP["NewsProvider"] --> NAP["NewsApiNewsProvider<br/>NewsAPI.org · ADR-004"]
+  SP["StorageProvider"] --> LSP["LocalStorageProvider<br/>server-generated ids"]
+        </pre>
+        <div class="cap">
+          No <code>OpenAIService</code> god object — text and image generation are
+          separate capabilities even when both happen to use OpenAI.
+        </div>
+      </div>
+      <div class="callout">
+        <strong>Why this mattered in practice:</strong> switching text providers
+        was a one-line env change plus one new adapter file. The real cost showed
+        up one layer up — Claude's models reject the <code>temperature</code>
+        param on current versions, and are more verbose than GPT-4.1, which
+        broke schema max-lengths in two prompts until they got explicit
+        character-count hints. The interface boundary held; the prompt layer
+        absorbed the vendor difference, exactly where ADR-002 intended it to.
+      </div>
+      <div class="further-reading">
+        <div class="label">Further reading</div>
+        <ul>
+          <li><a class="ext" href="https://refactoring.guru/design-patterns/adapter" target="_blank" rel="noopener">Adapter pattern — refactoring.guru</a></li>
+          <li><a class="ext" href="https://docs.anthropic.com/en/api/messages" target="_blank" rel="noopener">Anthropic Messages API</a></li>
+          <li><a class="ext" href="https://platform.openai.com/docs/api-reference" target="_blank" rel="noopener">OpenAI API reference</a></li>
+          <li><a href="#adr-002">ADR-002</a> · <a href="#adr-007">ADR-007</a> · <a href="#adr-008">ADR-008</a></li>
+        </ul>
+      </div>
+    </section>
+
+    <section class="doc" id="paths">
+      <p class="eyebrow"><span class="idx">04</span>Three topic paths</p>
+      <h2>One pipeline, three ways in</h2>
+      <p class="lede">
+        Discover News is the only path where the model evaluates and scores
+        candidates. Content Plan and Custom Topics are pre-vetted input — the
+        user already did the vetting, so both build the opportunity
+        deterministically and skip the AI evaluation step entirely.
+      </p>
+      <div class="diagram-frame">
+        <pre class="mermaid">
+graph TD
+  Persona --> Discover["Discover News<br/>(AI) real-time search + relevance scoring"]
+  Persona --> Plan["Content Plan<br/>(deterministic) 24 pre-approved topics"]
+  Persona --> Custom["Custom Topics<br/>(deterministic) user-authored idea"]
+  Discover -->|"source: discover"| Select[OpportunityService.select]
+  Plan -->|"source: content_plan"| Select
+  Custom -->|"source: custom"| Select
+  Select --> Write["Write post — same pipeline for all three"]
+        </pre>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Path</th><th>Input</th><th>AI evaluation?</th><th>Angle</th></tr></thead>
+          <tbody>
+            <tr><td>Discover News</td><td>Live NewsAPI results, filtered + ranked</td><td>Yes — model scores &amp; writes why-this-fits</td><td>Model-suggested</td></tr>
+            <tr><td>Content Plan</td><td>24-topic calendar from the publishing plan PDF</td><td>No — brief is already vetted</td><td>Mapped from the brief's format</td></tr>
+            <tr><td>Custom Topics</td><td>Title, hook, key points typed by the user</td><td>No — user already vetted their own idea</td><td>Picked directly by the user</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="callout warn">
+        <strong>The bug this design exposed:</strong> until
+        <a href="#adr-009">ADR-009</a>,
+        "Write post" resolved the selected opportunity via a lookup hardcoded to
+        <code>source: "discover"</code>. Selecting a Content Plan or Custom topic
+        updated its own row correctly — but generation silently used whichever
+        opportunity Discover had last selected instead. It shipped a plausible,
+        wrong post rather than an error, which is why it survived until live
+        testing caught it.
+      </div>
+      <div class="further-reading">
+        <div class="label">Further reading</div>
+        <ul>
+          <li><a href="#adr-006">ADR-006 — synthetic opportunities</a></li>
+          <li><a href="#adr-009">ADR-009 — source-scoped selection</a></li>
+          <li><a class="ext" href="https://www.postgresql.org/docs/current/queries-order.html" target="_blank" rel="noopener">PostgreSQL — ORDER BY &amp; NULLS LAST</a></li>
+        </ul>
+      </div>
+    </section>
+
+    <section class="doc" id="pipeline">
+      <p class="eyebrow"><span class="idx">05</span>AI pipeline</p>
+      <h2>A sequence of use cases, not one job</h2>
+      <p class="lede">
+        Every stage is its own HTTP call. The frontend walks the user through
+        the stages one at a time; the API persists durable results after each
+        success, so a failed image step never regenerates the post
+        (<a href="#adr-005">ADR-005</a>).
+      </p>
+      <div class="diagram-frame">
+        <pre class="mermaid">
+sequenceDiagram
+  participant U as User
+  participant API as apps/api
+  participant AI as TextGenerationProvider
+  participant IMG as ImageGenerationProvider
+
+  U->>API: Save profile
+  U->>API: Generate persona
+  API->>AI: persona.v1 prompt
+  AI-->>API: structured persona JSON
+  U->>API: Pick a topic (Discover / Plan / Custom)
+  opt Discover only
+    API->>AI: opportunity.v1 prompt
+    AI-->>API: scored candidates
+  end
+  U->>API: Select an opportunity
+  U->>API: Write post
+  API->>AI: post-draft.v1 prompt
+  AI-->>API: story strategy + draft
+  API->>AI: post-review.v1 prompt
+  AI-->>API: writing / fact / SEO review + score
+  API-->>U: publishable draft
+  U->>API: Generate image
+  API->>AI: image-brief.v1 prompt
+  AI-->>API: creative brief + image prompt
+  API->>IMG: generate(prompt)
+  IMG-->>API: image bytes
+  API-->>U: image attached to post
+        </pre>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Stage</th><th>Kind</th><th>Why</th></tr></thead>
+          <tbody>
+            <tr><td>Recency / source-quality / keyword-overlap filters</td><td><span class="tag det">Deterministic</span></td><td>Cheap, cuts obviously-bad candidates before spending a model call</td></tr>
+            <tr><td>Relevance scoring survivors</td><td><span class="tag ai">AI</span></td><td>Semantic judgment a filter can't approximate</td></tr>
+            <tr><td>Rejection when no source URL / no profile evidence</td><td><span class="tag det">Deterministic</span></td><td>A hard rule always wins over a high model score</td></tr>
+            <tr><td>Story strategy, draft, editorial review, fact-grounding, SEO</td><td><span class="tag ai">AI</span></td><td>Generation and judgment are the product</td></tr>
+            <tr><td>Schema validation of every structured output</td><td><span class="tag det">Deterministic</span></td><td>Invalid model output is a provider failure, never stored</td></tr>
+            <tr><td>Image creative brief &amp; prompt</td><td><span class="tag ai">AI</span></td><td>Translating a post into a visual concept</td></tr>
+            <tr><td>Image bytes</td><td><span class="tag ai">AI</span></td><td>Actual pixel generation</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="further-reading">
+        <div class="label">Further reading</div>
+        <ul>
+          <li><a class="ext" href="https://docs.anthropic.com/en/docs/build-with-claude/prompt-engineering/overview" target="_blank" rel="noopener">Anthropic — prompt engineering</a></li>
+          <li><a class="ext" href="https://platform.openai.com/docs/guides/structured-outputs" target="_blank" rel="noopener">OpenAI — structured outputs</a></li>
+          <li><a href="#adr-005">ADR-005 — user-paced generation</a></li>
+        </ul>
+      </div>
+    </section>
+
+    <section class="doc" id="models">
+      <p class="eyebrow"><span class="idx">06</span>AI models in use</p>
+      <h2>Every model is one env var away from swapped</h2>
+      <p class="lede">
+        Set in <code>apps/api/src/env.ts</code>, read from <code>.env</code>.
+        Nothing downstream needs to know which vendor answered.
+      </p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Capability</th><th>Env switch</th><th>Options</th><th>Default model</th></tr></thead>
+          <tbody>
+            <tr>
+              <td>Text generation</td>
+              <td><code>TEXT_PROVIDER</code></td>
+              <td>openai · anthropic</td>
+              <td><code>OPENAI_TEXT_MODEL=gpt-4.1</code> or <code>ANTHROPIC_TEXT_MODEL=claude-opus-5</code></td>
+            </tr>
+            <tr>
+              <td>Image generation</td>
+              <td><code>IMAGE_PROVIDER</code></td>
+              <td>openai · pollinations</td>
+              <td><code>OPENAI_IMAGE_MODEL=gpt-image-1</code> or Pollinations' <code>flux</code>, no key needed</td>
+            </tr>
+            <tr>
+              <td>News search</td>
+              <td>—</td>
+              <td>NewsAPI.org only</td>
+              <td>Requires <code>NEWS_API_KEY</code> (free developer tier)</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="callout">
+        <strong>Real tradeoff, not a footnote:</strong> Pollinations has no
+        reference-photo / image-to-image support. OpenAI's <code>images.edit()</code>
+        can incorporate the user's uploaded reference photos; Pollinations
+        generates from the text prompt alone. See
+        <a href="#adr-008">ADR-008</a>.
+      </div>
+      <div class="further-reading">
+        <div class="label">Further reading</div>
+        <ul>
+          <li><a class="ext" href="https://docs.anthropic.com/en/docs/about-claude/models" target="_blank" rel="noopener">Anthropic — model overview</a></li>
+          <li><a class="ext" href="https://platform.openai.com/docs/models" target="_blank" rel="noopener">OpenAI — model overview</a></li>
+          <li><a class="ext" href="https://newsapi.org/docs" target="_blank" rel="noopener">NewsAPI.org docs</a></li>
+        </ul>
+      </div>
+    </section>
+
+    <section class="doc" id="data">
+      <p class="eyebrow"><span class="idx">07</span>Data model</p>
+      <h2>Insert-only history where regeneration matters</h2>
+      <p class="lede">
+        <code>generated_posts</code> and <code>generated_images</code> never
+        update in place — every generate/edit/retry is a new row, so
+        regeneration can never silently erase a publishable result. Status rows
+        (<code>content_plan_topics</code>, <code>custom_topics</code>) are the
+        opposite: mutable, because "Planned → Selected → Published" is one
+        topic's lifecycle, not a history to preserve.
+      </p>
+      <div class="diagram-frame">
+        <pre class="mermaid">
+erDiagram
+  profiles ||--o{ experiences : has
+  profiles ||--o{ photos : has
+  profiles ||--o{ writing_samples : has
+  profiles ||--|| professional_personas : has
+  professional_personas ||--o{ research_runs : produces
+  research_runs ||--o{ news_articles : contains
+  research_runs ||--o{ opportunity_sets : produces
+  opportunity_sets ||--o{ content_opportunities : contains
+  content_opportunities ||--o{ generated_posts : "written from"
+  generated_posts ||--o{ generated_images : "illustrated by"
+  professional_personas ||--o{ content_plan_topics : "selects into"
+  professional_personas ||--o{ custom_topics : "selects into"
+
+  opportunity_sets {
+    text source "discover | content_plan | custom"
+    uuid selected_opportunity_id
+    timestamptz selected_at "ADR-009"
+  }
+  research_runs {
+    text source "discover | content_plan | custom"
+  }
+  generated_posts {
+    text status "DRAFT | PUBLISHED"
+    timestamptz published_at
+    text outcome
+  }
+        </pre>
+        <div class="cap">
+          Simplified — columns limited to the ones that carry an architectural
+          decision. Full schema: <code>apps/api/src/db/schema.ts</code>.
+        </div>
+      </div>
+      <div class="further-reading">
+        <div class="label">Further reading</div>
+        <ul>
+          <li><a class="ext" href="https://orm.drizzle.team/docs/overview" target="_blank" rel="noopener">Drizzle ORM docs</a></li>
+          <li><a class="ext" href="https://www.postgresql.org/docs/" target="_blank" rel="noopener">PostgreSQL docs</a></li>
+          <li><a class="ext" href="https://mermaid.js.org/syntax/entityRelationshipDiagram.html" target="_blank" rel="noopener">Mermaid — ER diagram syntax</a></li>
+        </ul>
+      </div>
+    </section>
+
+    <section class="doc" id="frontend">
+      <p class="eyebrow"><span class="idx">08</span>Frontend architecture</p>
+      <h2>One page, a step machine, no router</h2>
+      <p class="lede">
+        <code>App.tsx</code> holds a single <code>StepId</code> union and
+        renders one view component per step. There is no client-side router —
+        the whole product is one URL, and navigation is a state transition, not
+        a route change. This matches the single-workspace, no-auth model
+        (<a href="#adr-003">ADR-003</a>).
+      </p>
+      <div class="diagram-frame">
+        <pre class="mermaid">
+graph LR
+  Welcome --> Identity --> Experience --> Positioning --> Writing --> Photos --> Persona
+  Persona --> Plan[Content plan]
+  Persona --> Custom[My topics]
+  Persona --> Discover[Discover news]
+  Plan --> Post
+  Custom --> Post
+  Discover --> Post
+  Post --> History
+        </pre>
+        <div class="cap">
+          Each box is a React component in <code>apps/web/src/</code>
+          (<code>ContentPlanView</code>, <code>CustomTopicsView</code>,
+          <code>DiscoverView</code>, <code>PostView</code>,
+          <code>PostHistoryView</code>…). All of them call the API through one
+          shared boundary, <code>api.ts</code> — no component calls
+          <code>fetch()</code> directly.
+        </div>
+      </div>
+      <div class="cards">
+        <div class="card">
+          <h4>Single fetch boundary</h4>
+          <p>Every request goes through <code>api.ts</code>: typed functions, one <code>parseError()</code> helper, no component owns its own fetch logic.</p>
+          <span class="file">apps/web/src/api.ts</span>
+        </div>
+        <div class="card">
+          <h4>Shared contracts</h4>
+          <p>Zod schemas in <code>packages/shared</code> are the single source of truth for both the API's validation and the frontend's types — one <code>z.infer</code>, two consumers.</p>
+          <span class="file">packages/shared/src/*.ts</span>
+        </div>
+        <div class="card">
+          <h4>Explicit ID threading beats guessing</h4>
+          <p>Editing a historical post threads <code>postId</code>/<code>opportunityId</code> explicitly through generate/edit calls, rather than trusting "the latest post" server-side.</p>
+          <span class="file">PostView.tsx, post-service.ts</span>
+        </div>
+        <div class="card">
+          <h4>Vitest + RTL</h4>
+          <p>Frontend tests needed <code>globals: true</code> in Vite's test config — without it, RTL's <code>afterEach(cleanup)</code> silently never registers.</p>
+          <span class="file">apps/web/vite.config.ts</span>
+        </div>
+      </div>
+      <div class="further-reading">
+        <div class="label">Further reading</div>
+        <ul>
+          <li><a class="ext" href="https://react.dev/" target="_blank" rel="noopener">React docs</a></li>
+          <li><a class="ext" href="https://vitejs.dev/" target="_blank" rel="noopener">Vite docs</a></li>
+          <li><a class="ext" href="https://zod.dev/" target="_blank" rel="noopener">Zod docs</a></li>
+          <li><a class="ext" href="https://vitest.dev/" target="_blank" rel="noopener">Vitest docs</a></li>
+        </ul>
+      </div>
+    </section>
+
+    <section class="doc" id="decisions">
+      <p class="eyebrow"><span class="idx">09</span>Technical decisions</p>
+      <h2>Every ADR, in one screen</h2>
+      <p class="lede">
+        Full text lives in <code>docs/decisions/</code> — Status, Context,
+        Options considered, Decision, Consequences, Tradeoffs. This is the index.
+      </p>
+      <div class="adr-grid">
+        <div class="adr-card">
+          <span class="id">ADR-001</span>
+          <h4>Modular monolith in a Turborepo</h4>
+          <p>One deployable per app, shared types via packages/shared — not microservices for a single-workspace MVP.</p>
+          <a href="#adr-001">Read the ADR →</a>
+        </div>
+        <div class="adr-card">
+          <span class="id">ADR-002</span>
+          <h4>Provider isolation</h4>
+          <p>Text, image, news, and storage are interfaces. No vendor SDK type ever crosses into domain code.</p>
+          <a href="#adr-002">Read the ADR →</a>
+        </div>
+        <div class="adr-card">
+          <span class="id">ADR-003</span>
+          <h4>Unauthenticated single workspace</h4>
+          <p><code>Profile</code> is the aggregate root. No User table, no login — auth would have consumed a slice for no demo value.</p>
+          <a href="#adr-003">Read the ADR →</a>
+        </div>
+        <div class="adr-card">
+          <span class="id">ADR-004</span>
+          <h4>NewsAPI.org as NewsProvider</h4>
+          <p>Real search over curated RSS or LLM-invented news — factual integrity over convenience.</p>
+          <a href="#adr-004">Read the ADR →</a>
+        </div>
+        <div class="adr-card">
+          <span class="id">ADR-005</span>
+          <h4>User-paced generation</h4>
+          <p>No background job queue. Each AI stage is its own HTTP call the user triggers — durable state, no hidden 90-second wait.</p>
+          <a href="#adr-005">Read the ADR →</a>
+        </div>
+        <div class="adr-card">
+          <span class="id">ADR-006</span>
+          <h4>Content Plan as synthetic opportunities</h4>
+          <p>Pre-vetted topics skip AI evaluation, reuse the existing opportunity pipeline via a synthetic article. Pattern reused by Custom Topics.</p>
+          <a href="#adr-006">Read the ADR →</a>
+        </div>
+        <div class="adr-card">
+          <span class="id">ADR-007</span>
+          <h4>Anthropic as a second text provider</h4>
+          <p>Cost-driven swap behind the existing interface. Surfaced Claude-specific quirks: no <code>temperature</code>, streaming required, prompt verbosity.</p>
+          <a href="#adr-007">Read the ADR →</a>
+        </div>
+        <div class="adr-card">
+          <span class="id">ADR-008</span>
+          <h4>Pollinations as a free image provider</h4>
+          <p>No-key image generation for when no vendor account is funded — at the cost of no reference-photo support.</p>
+          <a href="#adr-008">Read the ADR →</a>
+        </div>
+        <div class="adr-card">
+          <span class="id">ADR-009</span>
+          <h4>Source-scoped selection</h4>
+          <p>Fixes a real bug: "current selection" must be resolved across all three topic paths, ordered by <code>selected_at DESC NULLS LAST</code>, not hardcoded to Discover.</p>
+          <a href="#adr-009">Read the ADR →</a>
+        </div>
+      </div>
+      <div class="further-reading">
+        <div class="label">Further reading</div>
+        <ul>
+          <li><a class="ext" href="https://adr.github.io/" target="_blank" rel="noopener">Architecture Decision Records (adr.github.io)</a></li>
+        </ul>
+      </div>
+    </section>
+
+    <section class="doc" id="stack">
+      <p class="eyebrow"><span class="idx">10</span>Tech stack</p>
+      <h2>What's actually installed, not what's trendy</h2>
+      <p class="lede">Versions confirmed from each workspace's <code>package.json</code>.</p>
+      <div class="stack-grid">
+        <div class="stack-item"><div class="role">Frontend</div><div class="name">react</div><div class="ver">^19.1.0</div></div>
+        <div class="stack-item"><div class="role">Build tool</div><div class="name">vite</div><div class="ver">^6.3.5</div></div>
+        <div class="stack-item"><div class="role">Test runner (web)</div><div class="name">vitest</div><div class="ver">^4.1.11</div></div>
+        <div class="stack-item"><div class="role">Language</div><div class="name">typescript</div><div class="ver">^5.8.3</div></div>
+        <div class="stack-item"><div class="role">API server</div><div class="name">fastify</div><div class="ver">^5.3.3</div></div>
+        <div class="stack-item"><div class="role">ORM</div><div class="name">drizzle-orm</div><div class="ver">^0.44.2</div></div>
+        <div class="stack-item"><div class="role">Postgres driver</div><div class="name">postgres</div><div class="ver">^3.4.7</div></div>
+        <div class="stack-item"><div class="role">Validation</div><div class="name">zod</div><div class="ver">^3.24.4</div></div>
+        <div class="stack-item"><div class="role">Text AI (default)</div><div class="name">openai</div><div class="ver">^5.23.2</div></div>
+        <div class="stack-item"><div class="role">Text AI (alt)</div><div class="name">@anthropic-ai/sdk</div><div class="ver">^0.122.0</div></div>
+        <div class="stack-item"><div class="role">Monorepo</div><div class="name">turbo</div><div class="ver">^2.5.4</div></div>
+        <div class="stack-item"><div class="role">Test runner (api)</div><div class="name">node:test via tsx</div><div class="ver">^4.19.4</div></div>
+      </div>
+      <div class="further-reading">
+        <div class="label">Further reading</div>
+        <ul>
+          <li><a class="ext" href="https://www.typescriptlang.org/docs/" target="_blank" rel="noopener">TypeScript docs</a></li>
+          <li><a class="ext" href="https://nodejs.org/api/test.html" target="_blank" rel="noopener">Node.js — node:test docs</a></li>
+          <li><a class="ext" href="https://turbo.build/repo/docs" target="_blank" rel="noopener">Turborepo docs</a></li>
+        </ul>
+      </div>
+    </section>
+
+    <section class="doc" id="appendix">
+      <p class="eyebrow"><span class="idx">11</span>Appendix</p>
+      <h2>Full ADR text</h2>
+      <p class="lede">
+        Every "Read the ADR" link above jumps here — this page is self-contained,
+        no external file server required. Full Status / Context / Options /
+        Decision / Consequences / Tradeoffs for all nine.
+      </p>
+
+      <article class="adr-full" id="adr-001">
+        <span class="id">ADR-001</span>
+        <h3>Modular monolith in Turborepo with Docker Compose</h3>
+        <span class="status">Accepted</span>
+        <h4>Context</h4>
+        <p>The MVP needs a React frontend, a Fastify API, PostgreSQL, and a reproducible local environment. The prompt suggested several packages. Microservices, Kubernetes, and extra infrastructure would make the demo look sophisticated and finish late.</p>
+        <h4>Options considered</h4>
+        <ol>
+          <li>Separate repositories for web and API</li>
+          <li>Microservices per domain module</li>
+          <li>Modular monolith in one Turborepo, Compose for local runtime</li>
+          <li>Frontend-only app calling OpenAI directly</li>
+        </ol>
+        <h4>Decision</h4>
+        <p>Use a Turborepo modular monolith: <code>apps/web</code>, <code>apps/api</code>, <code>packages/shared</code>, <code>packages/config</code>. Run web, api, and postgres with Docker Compose. Do not extract <code>ai</code> or <code>database</code> packages until a second consumer exists. Do not put OpenAI keys in the frontend.</p>
+        <h4>Consequences</h4>
+        <ul>
+          <li>One deployable API, clear module folders</li>
+          <li>Shared types without sharing implementations</li>
+          <li>Compose is the documented developer path</li>
+          <li>Future extraction of a provider package is possible but not prepaid</li>
+        </ul>
+        <h4>Tradeoffs</h4>
+        <p>Turborepo adds some workspace ceremony. That cost is lower than splitting services or duplicating types.</p>
+        <a class="back-to-index" href="#decisions">← Back to decisions index</a>
+      </article>
+
+      <article class="adr-full" id="adr-002">
+        <span class="id">ADR-002</span>
+        <h3>Provider isolation for OpenAI, news, and storage</h3>
+        <span class="status">Accepted</span>
+        <h4>Context</h4>
+        <p>The MVP uses OpenAI for text and images, a third-party news API, and local disk for media. These vendors will appear in tests, failures, and possibly replacements. Coupling use cases to SDKs would make domain tests require live APIs.</p>
+        <h4>Options considered</h4>
+        <ol>
+          <li>Direct SDK calls from routes and use cases</li>
+          <li>One <code>OpenAIService</code> for all AI plus ad-hoc fetch for news</li>
+          <li>Narrow interfaces: <code>TextGenerationProvider</code>, <code>ImageGenerationProvider</code>, <code>NewsProvider</code>, <code>StorageProvider</code></li>
+        </ol>
+        <h4>Decision</h4>
+        <p>Isolate volatile boundaries only. Text and image generation are separate interfaces even though both are OpenAI in the MVP. Storage is an interface with <code>LocalStorageProvider</code>. News is an interface with a NewsAPI.org adapter. Application models never accept OpenAI, NewsAPI, or filesystem types. Automated tests use deterministic fakes.</p>
+        <h4>Consequences</h4>
+        <ul>
+          <li>Use cases can be tested without network</li>
+          <li>Replacing NewsAPI or moving storage to object storage does not rewrite domain rules</li>
+          <li>Slightly more types at the start</li>
+        </ul>
+        <h4>Update — second TextGenerationProvider adapter</h4>
+        <p><code>AnthropicTextGenerationProvider</code> (Claude) was added alongside <code>OpenAITextGenerationProvider</code>, selected at startup via <code>TEXT_PROVIDER=openai|anthropic</code> in <code>apps/api/src/app.ts</code>. This is the payoff of isolating <code>TextGenerationProvider</code>: persona, opportunity, and post generation code did not change — only <code>app.ts</code>'s provider construction and <code>env.ts</code>'s schema did. Anthropic's Messages API has no strict JSON response mode equivalent to OpenAI's <code>response_format: json_object</code>, so the adapter appends a short "respond with JSON only" instruction to the system prompt; <code>parseJsonObject()</code> (already used for both providers) still strips any stray markdown fences.</p>
+        <h4>Tradeoffs</h4>
+        <p>Four interfaces is enough. Generating interfaces for Postgres or Fastify would be theater.</p>
+        <a class="back-to-index" href="#decisions">← Back to decisions index</a>
+      </article>
+
+      <article class="adr-full" id="adr-003">
+        <span class="id">ADR-003</span>
+        <h3>Unauthenticated single-workspace MVP</h3>
+        <span class="status">Accepted</span>
+        <h4>Context</h4>
+        <p>The product journey starts at a professional profile. The prompt never required login, teams, or multi-tenant isolation. Auth would consume a slice that does not demonstrate personalized authority.</p>
+        <h4>Options considered</h4>
+        <ol>
+          <li>Full signup/login before profile</li>
+          <li>Magic-link or OAuth with a User table</li>
+          <li><code>Profile</code> is the aggregate root in a local workspace, no auth</li>
+        </ol>
+        <h4>Decision</h4>
+        <p>Ship without user accounts. The local deployment holds one working profile/workspace. Security still applies to uploads, prompts, keys, and validation. Missing auth is not missing input validation.</p>
+        <h4>Consequences</h4>
+        <ul>
+          <li>Slice 1 can show product value immediately</li>
+          <li>A later User/Auth ADR will be required before any shared or hosted multi-user deployment</li>
+          <li>No personal data access-control model exists yet; the demo is trusted-local</li>
+        </ul>
+        <h4>Tradeoffs</h4>
+        <p>This is unacceptable for a public multi-user service. It is acceptable for the Compound Engineering MVP demo.</p>
+        <a class="back-to-index" href="#decisions">← Back to decisions index</a>
+      </article>
+
+      <article class="adr-full" id="adr-004">
+        <span class="id">ADR-004</span>
+        <h3>NewsAPI.org as the concrete NewsProvider</h3>
+        <span class="status">Accepted</span>
+        <h4>Context</h4>
+        <p>The product must discover recent technology events without fabricating them and without coupling domain logic to a vendor. Official blogs are higher quality than aggregators, but a persona-specific search needs a query API.</p>
+        <h4>Options considered</h4>
+        <ol>
+          <li>Curated RSS only from official engineering blogs</li>
+          <li>LLM-invented "news" (rejected: factual integrity)</li>
+          <li>Tavily/Exa/Firecrawl semantic web search</li>
+          <li>NewsAPI.org search with recency and preferred domains</li>
+          <li>Scrape Google News (rejected: brittle, legally noisy)</li>
+        </ol>
+        <h4>Decision</h4>
+        <p>Use <code>NewsProvider.searchNews(topics, dateRange)</code> and implement <code>NewsApiNewsProvider</code> for the MVP. Prefer high-quality domains when the adapter can constrain sources. Persist normalized <code>NewsArticle</code> records. Rank and reject in the relevance module, not in the adapter. Full article bodies are not required for MVP discovery — title, description, source, URL, and published date are enough for traceability.</p>
+        <h4>Consequences</h4>
+        <ul>
+          <li>Local demo needs <code>NEWS_API_KEY</code></li>
+          <li>Free NewsAPI terms are development-oriented; production use would need a license change or a new adapter</li>
+          <li>Quality still depends on relevance rejection, because aggregators are noisy</li>
+        </ul>
+        <h4>Tradeoffs</h4>
+        <p>RSS would be cleaner and poorer at matching arbitrary personas. Semantic search tools may return better pages later; the interface allows replacement without domain rewrite.</p>
+        <a class="back-to-index" href="#decisions">← Back to decisions index</a>
+      </article>
+
+      <article class="adr-full" id="adr-005">
+        <span class="id">ADR-005</span>
+        <h3>User-paced generation instead of a background pipeline</h3>
+        <span class="status">Accepted</span>
+        <h4>Context</h4>
+        <p>Persona, research, opportunities, post reviews, and image generation can exceed a comfortable single HTTP timeout. The user also must choose a topic and an angle. A hidden 90-second job would remove the product's trust surfaces.</p>
+        <h4>Options considered</h4>
+        <ol>
+          <li>One API call that runs the full pipeline</li>
+          <li>Redis/queue/worker with job polling</li>
+          <li>User-paced HTTP use cases; frontend walks the journey; durable state in Postgres</li>
+        </ol>
+        <h4>Decision</h4>
+        <p>Each stage is an explicit use case. The UI shows intermediate results. Postgres holds the <code>ContentRun</code>. Image generation retries against an existing post. No job platform in the MVP.</p>
+        <h4>Consequences</h4>
+        <ul>
+          <li>Latency is visible and recoverable per stage</li>
+          <li>Why This Post? and angle selection stay first-class</li>
+          <li>The client is an orchestrator of user decisions, not of domain rules</li>
+        </ul>
+        <h4>Tradeoffs</h4>
+        <p>More round trips. That is desirable here. A worker can be introduced later if a stage must run unattended.</p>
+        <a class="back-to-index" href="#decisions">← Back to decisions index</a>
+      </article>
+
+      <article class="adr-full" id="adr-006">
+        <span class="id">ADR-006</span>
+        <h3>Content Plan topics as deterministic synthetic opportunities</h3>
+        <span class="status">Accepted</span>
+        <h4>Context</h4>
+        <p>The user supplied <code>linkedin-technical-publishing-plan.pdf</code>: a fixed 12-week, 24-post editorial calendar with pre-approved briefs. This is a different shape of input than the existing pipeline, which discovers current events via <code>NewsProvider</code> and lets the model evaluate relevance. The plan's topics are already vetted by the user outside the app — running them back through AI opportunity evaluation would add variance and cost without adding value.</p>
+        <h4>Options considered</h4>
+        <ol>
+          <li>Extend the schema with a nullable <code>articleId</code> and a new <code>topicId</code> reference, adding a second code path through <code>OpportunityService</code></li>
+          <li>Build a fully separate post-generation pipeline for plan topics</li>
+          <li>Represent each selected plan topic as a synthetic <code>news_articles</code> row plus a deterministically-built <code>OpportunityPayload</code>, created via the existing repositories, with no AI call</li>
+        </ol>
+        <h4>Decision</h4>
+        <p>Option 3. <code>ContentPlanService.selectTopic()</code> inserts one synthetic article, builds an <code>OpportunityPayload</code> directly from the brief fields, persists it and marks it selected via the existing <code>OpportunityService.select()</code>, and records topic status in a new table, <code>content_plan_topics</code>. <code>PostService.generate()</code> needs no changes.</p>
+        <h4>Consequences</h4>
+        <ul>
+          <li>No schema change to <code>news_articles</code>, <code>research_runs</code>, <code>opportunity_sets</code>, or <code>content_opportunities</code></li>
+          <li>Selecting a plan topic creates its own research run and opportunity set, tagged <code>source: "content_plan"</code> — it does not replace Discover News' own "latest" state (see ADR-009; this was a real bug for a while)</li>
+          <li>Only the 24 approved topics (T01-T24) are imported</li>
+          <li>Only editorial status is tracked (Planned/Selected/Drafted/Published/Skipped) — no LinkedIn analytics API is available</li>
+        </ul>
+        <h4>Tradeoffs</h4>
+        <p>A schema extension (option 1) would be more explicit but duplicates code paths for no behavioral gain. Reusing the existing tables through a synthetic article keeps one code path at the cost of a slightly unusual provider value on the article record.</p>
+        <h4>Related</h4>
+        <p>Custom Topics reuses this exact synthetic-opportunity pattern verbatim, <code>source: "custom"</code> instead of <code>"content_plan"</code> — no new ADR needed for it. See ADR-009 for the source-scoping fix this pattern's second and third users made necessary.</p>
+        <a class="back-to-index" href="#decisions">← Back to decisions index</a>
+      </article>
+
+      <article class="adr-full" id="adr-007">
+        <span class="id">ADR-007</span>
+        <h3>Anthropic as a second TextGenerationProvider</h3>
+        <span class="status">Accepted</span>
+        <h4>Context</h4>
+        <p>The OpenAI account used for local development ran out of credits, blocking every AI-dependent step. Anthropic's API was cheaper to fund and the provider interface already existed specifically so a vendor could be swapped without touching domain code.</p>
+        <h4>Options considered</h4>
+        <ol>
+          <li>Wait on OpenAI credits / fund the same account</li>
+          <li>Add <code>AnthropicTextGenerationProvider</code> behind the existing interface, selectable via env var</li>
+          <li>Replace OpenAI outright</li>
+        </ol>
+        <h4>Decision</h4>
+        <p>Add <code>AnthropicTextGenerationProvider</code> implementing the same <code>TextGenerationProvider</code> interface. Select via <code>TEXT_PROVIDER=openai|anthropic</code>, defaulting to <code>openai</code>. Model name is a separate env var per vendor. No prompt, schema, or use case changed.</p>
+        <h4>Consequences</h4>
+        <ul>
+          <li>Local <code>.env</code> needs either <code>OPENAI_API_KEY</code> or <code>ANTHROPIC_API_KEY</code> depending on <code>TEXT_PROVIDER</code></li>
+          <li>Current Claude models reject the <code>temperature</code> parameter — the adapter omits it entirely</li>
+          <li>Claude's structured JSON responses were being truncated at 8,000 tokens non-streaming — the adapter streams with <code>max_tokens: 16000</code> instead, purely for size/timeout headroom, not UX</li>
+          <li>Claude is more verbose than GPT-4.1 for the same instructions, which broke schema max-lengths in two prompts until explicit character-count hints were added — absorbed in the prompt layer, exactly where ADR-002 intended</li>
+          <li>No cost/quality A/B was run; the switch was availability-driven, not benchmarked</li>
+        </ul>
+        <h4>Tradeoffs</h4>
+        <p>Keeping both providers alive means two vendor SDKs and two sets of quirks to remember, versus the single-point-of-failure ADR-002 was written to avoid.</p>
+        <a class="back-to-index" href="#decisions">← Back to decisions index</a>
+      </article>
+
+      <article class="adr-full" id="adr-008">
+        <span class="id">ADR-008</span>
+        <h3>Pollinations.ai as a free ImageGenerationProvider</h3>
+        <span class="status">Accepted</span>
+        <h4>Context</h4>
+        <p>The same unfunded OpenAI account also blocked image generation. Anthropic has no image API at all. The question was whether a genuinely free, no-key image API existed that was good enough for demo purposes.</p>
+        <h4>Options considered</h4>
+        <ol>
+          <li>Fund the OpenAI account and stay single-provider</li>
+          <li>Google AI Studio (Imagen) — free tier, still needs an API key</li>
+          <li>Hugging Face Inference API — free tier, unpredictable rate limits/latency</li>
+          <li>Pollinations.ai — fully free, no API key, direct HTTP GET</li>
+        </ol>
+        <h4>Decision</h4>
+        <p>Add <code>PollinationsImageGenerationProvider</code>. Select via <code>IMAGE_PROVIDER=openai|pollinations</code>, defaulting to <code>openai</code>. The adapter calls a plain GET against <code>image.pollinations.ai</code> and reads raw JPEG bytes — no auth, no client library, no job polling.</p>
+        <h4>Consequences</h4>
+        <ul>
+          <li><code>IMAGE_PROVIDER=pollinations</code> needs no API key at all</li>
+          <li>No reference-photo / image-to-image support — OpenAI's <code>images.edit()</code> can use uploaded reference photos, Pollinations ignores that input entirely and generates from the text prompt alone</li>
+          <li>No SLA, no documented rate limits, no uptime guarantee — acceptable for a demo, not for production without revisiting</li>
+          <li>No metadata in the response (no revised prompt, no safety classification) — the adapter normalizes both providers into the same internal model</li>
+        </ul>
+        <h4>Tradeoffs</h4>
+        <p>A paid, authenticated provider would offer more predictability at the cost of needing another API key the demo environment didn't reliably have. Pollinations trades predictability for zero setup friction.</p>
+        <a class="back-to-index" href="#decisions">← Back to decisions index</a>
+      </article>
+
+      <article class="adr-full" id="adr-009">
+        <span class="id">ADR-009</span>
+        <h3>Source-scoped "latest selection" instead of one global pointer</h3>
+        <span class="status">Accepted</span>
+        <h4>Context</h4>
+        <p>The MVP had exactly one way to reach a content opportunity: Discover News. Content Plan then added a second way, reusing the same table — this exposed missing scoping, fixed with a first <code>source</code> column. Custom Topics then added a third source value. This is when the remaining bug surfaced during manual testing: <code>OpportunityService.getSelected()</code> — what <code>PostService</code> actually calls when writing a post with no explicit <code>opportunityId</code> — still called <code>getLatest()</code> with no argument, which defaulted to <code>"discover"</code>. Selecting a Content Plan or Custom topic updated that source's own selection, but "Write post" kept resolving Discover's selection instead — silently writing about the wrong topic.</p>
+        <h4>Options considered</h4>
+        <ol>
+          <li>Have the frontend pass an explicit <code>opportunityId</code> through every "select a topic" → "write post" hand-off</li>
+          <li>Track "the one true current selection" as its own concept, independent of source</li>
+          <li>Keep <code>getSelected()</code> hardcoded to <code>"discover"</code> and special-case the other call sites</li>
+        </ol>
+        <h4>Decision</h4>
+        <p>Add <code>opportunity_sets.selected_at</code>, stamped every time a set is selected. Add <code>getMostRecentlySelected()</code>: the set with a non-null selection, ordered by <code>selected_at DESC NULLS LAST</code>, across all sources. <code>getSelected()</code> now calls this instead of the source-hardcoded <code>getLatest()</code>. A new <code>GET /api/opportunities/selected</code> route exposes the same resolution to the frontend's staleness check. <code>getLatest()</code> itself stays hardcoded to <code>"discover"</code> on purpose — it answers "what did Discover find," a different question from "what's currently selected."</p>
+        <p>Postgres orders <code>NULL</code> <strong>first</strong> in a plain <code>ORDER BY x DESC</code>, not last — the first version of this fix used a plain <code>desc()</code> and still returned a stale, pre-migration row ahead of a genuinely recent selection. The working query uses a raw SQL fragment with an explicit <code>DESC NULLS LAST</code>, since drizzle-orm 0.44 has no <code>nullsLast()</code> chain on <code>desc()</code>.</p>
+        <h4>Consequences</h4>
+        <ul>
+          <li>Every "select a topic" action across all three paths now converges on one correct, source-agnostic notion of "what should Write Post use"</li>
+          <li>Rows created before this migration have <code>selected_at IS NULL</code> and sort behind any real selection — correct for a single-workspace MVP, would need a backfill for multi-tenant</li>
+          <li>Explicit ID-threading (option 1) was rejected because it would have multiplied a UI-state concern to solve what was fundamentally a backend query bug</li>
+        </ul>
+        <h4>Tradeoffs</h4>
+        <p>Explicit ID-threading is more predictable — no query ordering to get right — at the cost of every frontend "select" flow needing to carry and hand off an ID. The chosen approach keeps the frontend simple by making the backend's notion of "current selection" actually correct, which is where the bug lived.</p>
+        <a class="back-to-index" href="#decisions">← Back to decisions index</a>
+      </article>
+    </section>
+
+    <footer>
+      Generated from the actual state of the repository at the time of writing.
+      Source: <code>docs/architecture/system-design.md</code>,
+      <code>docs/decisions/ADR-001</code> through <code>ADR-009</code>. This page
+      itself lives at <code>docs/visual/architecture-overview.html</code>.
+    </footer>
+  </main>
+</div>

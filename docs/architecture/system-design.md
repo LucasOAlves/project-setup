@@ -34,8 +34,10 @@ Controllers stay thin. Domain rules do not live in routes or React components.
 | persona | persona generation, authority model persistence |
 | news | NewsProvider calls, article normalization, persistence |
 | relevance | deterministic filters + semantic relevance |
-| opportunities | three content opportunities, rejection, why-this-post |
-| posts | story strategy, draft, reviews, scores, regeneration |
+| opportunities | content opportunities, selection (source-scoped, ADR-009), rejection, why-this-post |
+| content-plan | the 24-topic editorial calendar as deterministic synthetic opportunities (ADR-006) |
+| custom-topics | user-authored topics as deterministic synthetic opportunities (ADR-006 pattern, ADR-009) |
+| posts | story strategy, draft, reviews, scores, regeneration, publish tracking |
 | images | creative brief, prompt, generation, association with post |
 | uploads | photo validation and storage identifiers |
 | ai | prompt templates, structured-output validation, provider clients |
@@ -47,11 +49,13 @@ Modules may call use cases across boundaries. They must not import OpenAI SDK ty
 Volatile external capabilities are interfaces. Domain code depends on the interface.
 
 ```
-TextGenerationProvider
-└── OpenAITextGenerationProvider
+TextGenerationProvider              (TEXT_PROVIDER env)
+├── OpenAITextGenerationProvider    (default; OPENAI_TEXT_MODEL, e.g. gpt-4.1)
+└── AnthropicTextGenerationProvider (ANTHROPIC_TEXT_MODEL, e.g. claude-opus-5; ADR-007)
 
-ImageGenerationProvider
-└── OpenAIImageGenerationProvider
+ImageGenerationProvider             (IMAGE_PROVIDER env)
+├── OpenAIImageGenerationProvider   (default; OPENAI_IMAGE_MODEL, e.g. gpt-image-1)
+└── PollinationsImageGenerationProvider (no key; ADR-008)
 
 NewsProvider
 └── NewsApiNewsProvider
@@ -60,7 +64,9 @@ StorageProvider
 └── LocalStorageProvider
 ```
 
-There is no `OpenAIService` god object. Text and image generation are separate capabilities even though both use OpenAI in the MVP.
+There is no `OpenAIService` god object. Text and image generation are separate
+capabilities. Both now have two selectable adapters, chosen at process startup via
+env vars — see ADR-007 (text) and ADR-008 (image) for why and their consequences.
 
 Provider-specific request/response types stay in the adapter. Internal models are application-owned.
 
@@ -92,26 +98,37 @@ Hybrid:
 
 ## AI pipeline
 
-The pipeline is a sequence of use cases, not one job.
+The pipeline is a sequence of use cases, not one job. There are three ways to reach
+the "Opportunities" stage, converging on the same downstream pipeline and tagged
+by `source` on `research_runs` / `opportunity_sets` (ADR-009):
 
 ```
-Profile
-→ Persona
-→ Authority
-→ Research
-→ Relevance
-→ Opportunities
-→ Story Strategy
-→ Draft
-→ AI Writing Review
-→ Fact Review
-→ SEO
-→ Score
-→ Image Creative Brief
-→ Image Prompt
-→ Image Generation
-→ Storage
+Profile → Persona → Authority
+                       │
+        ┌──────────────┼────────────────────┐
+        ▼               ▼                    ▼
+  Discover News   Content Plan (ADR-006)  Custom Topics (ADR-006 pattern)
+  Research         synthetic article       synthetic article
+  → Relevance       (deterministic)        (deterministic, user-authored)
+  → AI-scored       → no AI evaluation     → no AI evaluation
+    Opportunities     (already vetted)       (already vetted, user-picked angle)
+        │               │                    │
+        └──────────────┴────────────────────┘
+                        ▼
+              Opportunities.select() (source-scoped)
+                        │
+                        ▼
+                Story Strategy → Draft → AI Writing Review
+                → Fact Review → SEO → Score
+                → Image Creative Brief → Image Prompt
+                → Image Generation → Storage
 ```
+
+Only Discover News calls the model to evaluate and score candidates. Content Plan
+and Custom Topics build the `OpportunityPayload` deterministically from
+already-trusted input (the plan's brief, or what the user typed) and skip AI
+evaluation entirely — see ADR-006 for why that tradeoff is correct for pre-vetted
+input.
 
 The frontend advances the user through these stages. The API persists durable results after each successful stage so image retry does not regenerate the post.
 
@@ -134,8 +151,9 @@ Persist:
 - profile, experiences, writing samples
 - uploaded photo metadata and bytes via StorageProvider
 - generated persona and authority snapshot
-- normalized news articles used in a run
-- content opportunities shown to the user
+- normalized news articles used in a run (`research_runs.source`, `news_articles.provider`)
+- content opportunities shown to the user (`opportunity_sets.source`,
+  `opportunity_sets.selected_at` — which selection is current, across sources; ADR-009)
 - selected opportunity, story strategy, post, reviews, score
 - creative brief, image prompt, generated image metadata and bytes
 

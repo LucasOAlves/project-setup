@@ -1,6 +1,8 @@
 import { z } from "zod";
 import { WRITING_TONES } from "./constants.js";
 import { ANGLE_TYPES } from "./opportunity.js";
+import { experienceInputSchema } from "./profile.js";
+import { textProviderSchema } from "./provider.js";
 
 export const POST_PROMPT_VERSION = "post.v1";
 export const POST_EDIT_PROMPT_VERSION = "post.edit.v1";
@@ -89,15 +91,61 @@ export type ModelEdit = z.infer<typeof modelEditSchema>;
 
 export const postToneInputSchema = z.object({
   tone: z.enum(WRITING_TONES),
+  postId: z.string().uuid().optional(),
+  provider: textProviderSchema.optional(),
 });
 
 export const postAngleInputSchema = z.object({
   angle: z.enum(ANGLE_TYPES),
+  postId: z.string().uuid().optional(),
+  provider: textProviderSchema.optional(),
 });
 
-export const postRewriteInputSchema = z.object({
-  section: z.string().trim().min(1).max(2000),
+export const postSectionCommentSchema = z.object({
+  excerpt: z.string().trim().min(1).max(2000),
+  comment: z.string().trim().min(1).max(1000),
 });
+
+export type PostSectionComment = z.infer<typeof postSectionCommentSchema>;
+
+export const postRewriteInputSchema = z.object({
+  sectionComments: z.array(postSectionCommentSchema).min(1).max(10),
+  postId: z.string().uuid().optional(),
+  provider: textProviderSchema.optional(),
+});
+
+export const sectionCommentReviewSchema = z.object({
+  index: z.number().int().min(0),
+  hasNewExperience: z.boolean(),
+  draftExperience: experienceInputSchema.nullish(),
+});
+
+export type SectionCommentReview = z.infer<typeof sectionCommentReviewSchema>;
+
+export const sectionCommentReviewResultSchema = z.object({
+  reviews: z.array(sectionCommentReviewSchema),
+});
+
+export const sectionCommentReviewInputSchema = z.object({
+  sectionComments: z.array(postSectionCommentSchema).min(1).max(10),
+  provider: textProviderSchema.optional(),
+});
+
+export const postHookInputSchema = z.object({
+  postId: z.string().uuid().optional(),
+  provider: textProviderSchema.optional(),
+});
+
+export const postGenerateInputSchema = z.object({
+  opportunityId: z.string().uuid().optional(),
+  provider: textProviderSchema.optional(),
+});
+
+export const POST_STATUSES = ["DRAFT", "PUBLISHED"] as const;
+export type PostStatus = (typeof POST_STATUSES)[number];
+
+export const POST_OUTCOMES = ["GOOD", "NEUTRAL", "POOR"] as const;
+export type PostOutcome = (typeof POST_OUTCOMES)[number];
 
 export const postPublicSchema = z.object({
   id: z.string().uuid(),
@@ -116,6 +164,41 @@ export const postPublicSchema = z.object({
   factReview: factReviewSchema,
   seoReview: seoReviewSchema,
   quality: qualityScoreSchema,
+  status: z.enum(POST_STATUSES),
+  publishedAt: z.string().nullable(),
+  outcome: z.enum(POST_OUTCOMES).nullable(),
+  outcomeNotes: z.string().nullable(),
 });
 
 export type PostPublic = z.infer<typeof postPublicSchema>;
+
+export const postTrackingInputSchema = z.object({
+  status: z.enum(POST_STATUSES).optional(),
+  outcome: z.enum(POST_OUTCOMES).nullable().optional(),
+  outcomeNotes: z.string().trim().max(500).nullable().optional(),
+});
+
+export type PostTrackingInput = z.infer<typeof postTrackingInputSchema>;
+
+export const POST_HISTORY_SORT_FIELDS = ["createdAt", "score", "status"] as const;
+export type PostHistorySortField = (typeof POST_HISTORY_SORT_FIELDS)[number];
+
+export const postHistoryQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(50).default(10),
+  q: z.string().trim().max(200).optional(),
+  sortBy: z.enum(POST_HISTORY_SORT_FIELDS).default("createdAt"),
+  sortDir: z.enum(["asc", "desc"]).default("desc"),
+  opportunityId: z.string().uuid().optional(),
+});
+
+export type PostHistoryQuery = z.infer<typeof postHistoryQuerySchema>;
+
+export const postHistoryPublicSchema = z.object({
+  posts: z.array(postPublicSchema),
+  total: z.number().int(),
+  page: z.number().int(),
+  pageSize: z.number().int(),
+});
+
+export type PostHistoryPublic = z.infer<typeof postHistoryPublicSchema>;

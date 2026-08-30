@@ -5,13 +5,21 @@ import {
   modelDraftSchema,
   modelEditSchema,
   modelReviewSchema,
+  sectionCommentReviewResultSchema,
   type AngleType,
   type ModelDraft,
   type OpportunityPublic,
   type PersonaPublic,
   type PostEditAction,
+  type PostHistoryPublic,
+  type PostHistoryQuery,
+  type PostOutcome,
   type PostPublic,
+  type PostSectionComment,
+  type PostStatus,
   type ProfilePublic,
+  type SectionCommentReview,
+  type TextProviderName,
   type WritingTone,
 } from "@studio/shared";
 import { malformedAiOutput, notFound, validationError } from "../../app-error.js";
@@ -28,6 +36,12 @@ import {
   POST_REVIEW_SYSTEM_PROMPT,
   buildPostReviewUserPrompt,
 } from "../ai/prompts/post-review.v1.js";
+import {
+  SECTION_COMMENT_REVIEW_PROMPT_VERSION,
+  SECTION_COMMENT_REVIEW_SYSTEM_PROMPT,
+  buildSectionCommentReviewUserPrompt,
+} from "../ai/prompts/section-comment-review.v1.js";
+import { resolveTextProvider } from "../ai/resolve-provider.js";
 import type { TextGenerationProvider } from "../ai/text-generation-provider.js";
 import type { OpportunityService } from "../opportunities/opportunity-service.js";
 import type { PersonaService } from "../persona/persona-service.js";
@@ -57,7 +71,8 @@ export class PostService {
     private readonly personas: PersonaService,
     private readonly opportunities: OpportunityService,
     private readonly posts: PostRepository,
-    private readonly text: TextGenerationProvider,
+    private readonly textProviders: Record<TextProviderName, TextGenerationProvider>,
+    private readonly defaultTextProvider: TextProviderName,
   ) {}
 
   async getLatest(): Promise<PostPublic | null> {
@@ -68,23 +83,88 @@ export class PostService {
     return this.toPublic(row);
   }
 
-  async generate(): Promise<PostPublic> {
-    const context = await this.requireWriteContext();
-    return this.persistReviewed(context, await this.draftAndReview(context));
+  async getById(id: string): Promise<PostPublic | null> {
+    const row = await this.posts.getById(id);
+    if (!row) {
+      return null;
+    }
+    return this.toPublic(row);
+  }
+
+  async list(query: PostHistoryQuery): Promise<PostHistoryPublic> {
+    const { rows, total } = await this.posts.listAll(query);
+    const posts = await Promise.all(rows.map((row) => this.toPublic(row)));
+    return { posts, total, page: query.page, pageSize: query.pageSize };
+  }
+
+  async updateTracking(
+    id: string,
+    patch: { status?: PostStatus; outcome?: PostOutcome | null; outcomeNotes?: string | null },
+  ): Promise<PostPublic> {
+    const existing = await this.posts.getById(id);
+    if (!existing) {
+      throw notFound("That post does not exist.");
+    }
+
+    const publishedAtPatch =
+      patch.status === "PUBLISHED"
+        ? { publishedAt: existing.publishedAt ?? new Date() }
+        : patch.status === "DRAFT"
+          ? { publishedAt: null }
+          : {};
+
+    const row = await this.posts.updateTracking(id, { ...patch, ...publishedAtPatch });
+    if (!row) {
+      throw notFound("That post does not exist.");
+    }
+    return this.toPublic(row);
+  }
+
+  async reviewSectionComments(
+    sectionComments: PostSectionComment[],
+    provider?: TextProviderName,
+  ): Promise<SectionCommentReview[]> {
+    const profile = await this.profiles.getProfile();
+    if (!profile) {
+      throw notFound("Save a professional profile before commenting on a post.");
+    }
+
+    const text = resolveTextProvider(this.textProviders, this.defaultTextProvider, provider);
+    const generated = await text.generateText({
+      purpose: SECTION_COMMENT_REVIEW_PROMPT_VERSION,
+      system: SECTION_COMMENT_REVIEW_SYSTEM_PROMPT,
+      user: buildSectionCommentReviewUserPrompt({ profile, sectionComments }),
+    });
+    const parsed = sectionCommentReviewResultSchema.safeParse(parseJsonObject(generated.text));
+    if (!parsed.success) {
+      throw malformedAiOutput(
+        "The model returned a comment review that did not match the required structure.",
+      );
+    }
+    return parsed.data.reviews;
+  }
+
+  async generate(opportunityId?: string, provider?: TextProviderName): Promise<PostPublic> {
+    const context = await this.requireWriteContext(opportunityId);
+    const text = resolveTextProvider(this.textProviders, this.defaultTextProvider, provider);
+    return this.persistReviewed(context, await this.draftAndReview(context, text));
   }
 
   async edit(input: {
     action: PostEditAction;
+    postId?: string;
     tone?: WritingTone;
     angle?: AngleType;
-    section?: string;
+    sectionComments?: Array<{ excerpt: string; comment: string }>;
+    provider?: TextProviderName;
   }): Promise<PostPublic> {
-    const current = await this.getLatest();
+    const current = input.postId ? await this.getById(input.postId) : await this.getLatest();
     if (!current) {
       throw notFound("Write a post before editing it.");
     }
     const context = await this.requireWriteContext(current.opportunityId);
-    const generated = await this.text.generateText({
+    const text = resolveTextProvider(this.textProviders, this.defaultTextProvider, input.provider);
+    const generated = await text.generateText({
       purpose: POST_PROMPT_VERSION,
       system: POST_EDIT_SYSTEM_PROMPT,
       user: buildPostEditUserPrompt({
@@ -92,7 +172,7 @@ export class PostService {
         action: input.action,
         tone: input.tone,
         angle: input.angle,
-        section: input.section,
+        sectionComments: input.sectionComments,
       }),
     });
     const parsed = modelEditSchema.safeParse(parseJsonObject(generated.text));
@@ -105,7 +185,7 @@ export class PostService {
       hook: parsed.data.hook,
       body: parsed.data.body,
     };
-    const reviewed = await this.reviewDraft(context, draft, generated.model);
+    const reviewed = await this.reviewDraft(context, draft, generated.model, text);
     return this.persistReviewed(
       {
         ...context,
@@ -116,8 +196,8 @@ export class PostService {
     );
   }
 
-  private async draftAndReview(context: WriteContext) {
-    const draftGenerated = await this.text.generateText(buildPostDraftPrompt(context));
+  private async draftAndReview(context: WriteContext, text: TextGenerationProvider) {
+    const draftGenerated = await text.generateText(buildPostDraftPrompt(context));
     const draftParsed = modelDraftSchema.safeParse(parseJsonObject(draftGenerated.text));
     if (!draftParsed.success) {
       throw malformedAiOutput("The model returned a draft that did not match the required structure.");
@@ -126,11 +206,16 @@ export class PostService {
       ...draftParsed.data,
       storyStrategy: groundStoryStrategy(draftParsed.data.storyStrategy, context.profile),
     };
-    return this.reviewDraft(context, draft, draftGenerated.model);
+    return this.reviewDraft(context, draft, draftGenerated.model, text);
   }
 
-  private async reviewDraft(context: WriteContext, draft: ModelDraft, previousModel: string) {
-    const reviewed = await this.text.generateText({
+  private async reviewDraft(
+    context: WriteContext,
+    draft: ModelDraft,
+    previousModel: string,
+    text: TextGenerationProvider,
+  ) {
+    const reviewed = await text.generateText({
       purpose: POST_PROMPT_VERSION,
       system: POST_REVIEW_SYSTEM_PROMPT,
       user: buildPostReviewUserPrompt({
@@ -227,6 +312,10 @@ export class PostService {
       factReview: row.factReview,
       seoReview: row.seoReview,
       quality: row.quality,
+      status: row.status === "PUBLISHED" ? "PUBLISHED" : "DRAFT",
+      publishedAt: row.publishedAt?.toISOString() ?? null,
+      outcome: (row.outcome as PostOutcome | null) ?? null,
+      outcomeNotes: row.outcomeNotes ?? null,
     };
   }
 }

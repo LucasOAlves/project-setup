@@ -1,5 +1,10 @@
 import { z } from "zod";
 import { newsArticlePublicSchema } from "./news.js";
+import { textProviderSchema } from "./provider.js";
+
+export const opportunityGenerateInputSchema = z.object({
+  provider: textProviderSchema.optional(),
+});
 
 export const ANGLE_TYPES = [
   "EXPERIENCE_DRIVEN",

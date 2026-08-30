@@ -2,6 +2,7 @@ import {
   ALLOWED_PHOTO_MIME_TYPES,
   MAX_PROFILE_PHOTOS,
   assessProfileEvidence,
+  experienceInputSchema,
   profileInputSchema,
   type ProfileInput,
   type ProfilePublic,
@@ -44,6 +45,21 @@ export class ProfileService {
       throw new AppError(ERROR_CODES.STORAGE_FAILURE, "The profile could not be saved.", 500);
     }
     return this.toPublic(record);
+  }
+
+  async addExperience(experience: unknown): Promise<ProfilePublic> {
+    const parsedExperience = experienceInputSchema.safeParse(experience);
+    if (!parsedExperience.success) {
+      throw validationError("The experience payload is invalid.");
+    }
+    const current = await this.getProfile();
+    if (!current) {
+      throw notFound("Save a professional profile before adding an experience.");
+    }
+    return this.saveProfile({
+      ...current,
+      experiences: [...current.experiences, parsedExperience.data],
+    });
   }
 
   async uploadPhoto(input: { bytes: Buffer; filename: string; claimedType: string }) {

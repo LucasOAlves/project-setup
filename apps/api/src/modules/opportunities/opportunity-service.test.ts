@@ -5,6 +5,9 @@ import type { PersonaPublic, ProfilePublic } from "@studio/shared";
 import { AppError } from "../../app-error.ts";
 import { buildOpportunityPrompt } from "./opportunity-service.ts";
 import type { ScoredCandidate } from "./relevance.ts";
+import type { TextGenerationProvider } from "../ai/text-generation-provider.ts";
+
+const textMap = (text: TextGenerationProvider) => ({ openai: text, anthropic: text }) as const;
 
 const profile = (): ProfilePublic => ({
   ...profileInputSchema.parse({
@@ -97,26 +100,34 @@ test("prompt includes professional evidence and treats articles as data", () => 
 
 test("requires discovered research before generating", async () => {
   const { OpportunityService } = await import("./opportunity-service.ts");
+  let requestedSource: unknown;
   const service = new OpportunityService(
     { async getProfile() { return profile(); } } as never,
     { async getPersona() { return persona(); } } as never,
-    { async getLatest() { return null; } } as never,
+    {
+      async getLatest(source: unknown) {
+        requestedSource = source;
+        return null;
+      },
+    } as never,
     {
       async create() {
         assert.fail("must not persist without research");
       },
     } as never,
-    {
+    textMap({
       async generateText() {
         assert.fail("must not call the model without research");
       },
-    },
+    }),
+    "openai",
   );
 
   await assert.rejects(
     () => service.generate(),
     (error: unknown) => error instanceof AppError && error.code === ERROR_CODES.NOT_FOUND,
   );
+  assert.equal(requestedSource, "discover");
 });
 
 test("maps malformed opportunity JSON", async () => {
@@ -147,11 +158,12 @@ test("maps malformed opportunity JSON", async () => {
         assert.fail("malformed output must not be persisted");
       },
     } as never,
-    {
+    textMap({
       async generateText() {
         return { text: '{"evaluations":[{"nope":true}]}', model: "fake" };
       },
-    },
+    }),
+    "openai",
   );
 
   await assert.rejects(
@@ -159,4 +171,66 @@ test("maps malformed opportunity JSON", async () => {
     (error: unknown) =>
       error instanceof AppError && error.code === ERROR_CODES.MALFORMED_AI_OUTPUT,
   );
+});
+
+test("resolves the selected opportunity by most-recent selection, not by source", async () => {
+  const { OpportunityService } = await import("./opportunity-service.ts");
+  const set = {
+    set: {
+      id: "set-1",
+      createdAt: new Date(),
+      promptVersion: "v1",
+      model: "deterministic",
+      selectedOpportunityId: "opportunity-1",
+    },
+    rows: [
+      {
+        id: "opportunity-1",
+        articleId: "article-1",
+        matchScore: 100,
+        payload: {
+          topic: "Custom topic",
+          sourceEvent: "",
+          whyItMatters: "",
+          whyItFits: "",
+          audienceCare: "",
+          targetAudience: "",
+          thesis: "",
+          pointOfView: "",
+          storytellingDirection: "",
+          readerTakeaway: "",
+          credibilityRisk: "",
+          evidence: [],
+          angle: "EDUCATIONAL",
+        },
+      },
+    ],
+    articles: [
+      {
+        id: "article-1",
+        title: "Custom topic",
+        description: "",
+        source: "Custom topic",
+        url: "https://app.local/x",
+        publishedAt: new Date(),
+        topics: [],
+      },
+    ],
+  };
+
+  const service = new OpportunityService(
+    { async getProfile() { return profile(); } } as never,
+    { async getPersona() { return persona(); } } as never,
+    { async getLatest() { assert.fail("must not use source-scoped latest"); } } as never,
+    {
+      async getMostRecentlySelected() {
+        return set;
+      },
+    } as never,
+    textMap({ async generateText() { assert.fail("must not call the model"); } }),
+    "openai",
+  );
+
+  const selected = await service.getSelected();
+  assert.equal(selected?.id, "opportunity-1");
 });

@@ -1,11 +1,25 @@
-import { ERROR_CODES } from "@studio/shared";
+import { ERROR_CODES, type ImageProviderName, type TextProviderName } from "@studio/shared";
 import cors from "@fastify/cors";
 import multipart from "@fastify/multipart";
 import Fastify from "fastify";
 import type { Env } from "./env.js";
 import { AppError } from "./app-error.js";
 import type { Database } from "./db/client.js";
+import { AnthropicTextGenerationProvider } from "./modules/ai/anthropic-text-generation-provider.js";
 import { OpenAITextGenerationProvider } from "./modules/ai/openai-text-generation-provider.js";
+import type { TextGenerationProvider } from "./modules/ai/text-generation-provider.js";
+import { registerContentPlanRoutes } from "./modules/content-plan/content-plan-routes.js";
+import { ContentPlanRepository } from "./modules/content-plan/content-plan-repository.js";
+import { ContentPlanService } from "./modules/content-plan/content-plan-service.js";
+import { registerCustomTopicRoutes } from "./modules/custom-topics/custom-topic-routes.js";
+import { CustomTopicRepository } from "./modules/custom-topics/custom-topic-repository.js";
+import { CustomTopicService } from "./modules/custom-topics/custom-topic-service.js";
+import { OpenAIImageGenerationProvider } from "./modules/ai/openai-image-generation-provider.js";
+import { PollinationsImageGenerationProvider } from "./modules/ai/pollinations-image-generation-provider.js";
+import type { ImageGenerationProvider } from "./modules/ai/image-generation-provider.js";
+import { registerImageRoutes } from "./modules/images/image-routes.js";
+import { ImageRepository } from "./modules/images/image-repository.js";
+import { ImageService } from "./modules/images/image-service.js";
 import { NewsApiNewsProvider } from "./modules/news/newsapi-adapter.js";
 import { registerOpportunityRoutes } from "./modules/opportunities/opportunity-routes.js";
 import { OpportunityRepository } from "./modules/opportunities/opportunity-repository.js";
@@ -41,11 +55,22 @@ export async function buildApp(env: Env, db: Database) {
     storage,
     env.MAX_PHOTO_BYTES,
   );
-  const text = new OpenAITextGenerationProvider(env.OPENAI_API_KEY, env.OPENAI_TEXT_MODEL);
+  const textProviders: Record<TextProviderName, TextGenerationProvider> = {
+    openai: new OpenAITextGenerationProvider(env.OPENAI_API_KEY, env.OPENAI_TEXT_MODEL),
+    anthropic: new AnthropicTextGenerationProvider(env.ANTHROPIC_API_KEY, env.ANTHROPIC_TEXT_MODEL),
+  };
+  const defaultTextProvider: TextProviderName = env.TEXT_PROVIDER;
+  const imageProviders: Record<ImageProviderName, ImageGenerationProvider> = {
+    openai: new OpenAIImageGenerationProvider(env.OPENAI_API_KEY, env.OPENAI_IMAGE_MODEL),
+    pollinations: new PollinationsImageGenerationProvider(),
+  };
+  const defaultImageProvider: ImageProviderName = env.IMAGE_PROVIDER;
+
   const personas = new PersonaService(
     profiles,
     new PersonaRepository(db),
-    text,
+    textProviders,
+    defaultTextProvider,
   );
   const research = new ResearchService(
     profiles,
@@ -59,14 +84,43 @@ export async function buildApp(env: Env, db: Database) {
     personas,
     new ResearchRepository(db),
     new OpportunityRepository(db),
-    text,
+    textProviders,
+    defaultTextProvider,
   );
   const posts = new PostService(
     profiles,
     personas,
     opportunities,
     new PostRepository(db),
-    text,
+    textProviders,
+    defaultTextProvider,
+  );
+  const contentPlan = new ContentPlanService(
+    profiles,
+    personas,
+    new ResearchRepository(db),
+    new OpportunityRepository(db),
+    opportunities,
+    new ContentPlanRepository(db),
+  );
+  const customTopics = new CustomTopicService(
+    profiles,
+    personas,
+    new ResearchRepository(db),
+    new OpportunityRepository(db),
+    opportunities,
+    new CustomTopicRepository(db),
+  );
+  const images = new ImageService(
+    profiles,
+    personas,
+    posts,
+    textProviders,
+    defaultTextProvider,
+    imageProviders,
+    defaultImageProvider,
+    storage,
+    new ImageRepository(db),
   );
 
   app.get("/health", async () => ({ ok: true }));
@@ -76,6 +130,9 @@ export async function buildApp(env: Env, db: Database) {
   await registerResearchRoutes(app, research);
   await registerOpportunityRoutes(app, opportunities);
   await registerPostRoutes(app, posts);
+  await registerContentPlanRoutes(app, contentPlan);
+  await registerCustomTopicRoutes(app, customTopics);
+  await registerImageRoutes(app, images);
 
   app.setErrorHandler((error, _request, reply) => {
     if (error instanceof AppError) {

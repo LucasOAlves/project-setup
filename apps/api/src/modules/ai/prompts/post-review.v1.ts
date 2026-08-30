@@ -25,18 +25,23 @@ PROCESS
 3. Score 0-100 for credibility, specificity, and usefulness to the named audience.
 
 OUTPUT FORMAT
-JSON object:
+JSON object. Every string is short and plain — one or two sentences, not a paragraph.
+Hard character limits (stay well under these, do not pad to reach them):
 {
-  "hook": "...",
-  "body": "full post including the hook as the first line",
-  "writingReview": { "summary": "...", "revisedSections": [], "remainingRisks": [] },
-  "factReview": {
-    "summary": "...",
-    "claims": [{ "claim": "...", "kind": "ARTICLE|PROFILE|INTERPRETATION", "source": "url or profile quote", "supported": true }],
-    "unsupportedClaims": []
+  "hook": "... (max 280 characters)",
+  "body": "full post including the hook as the first line (max 5000 characters)",
+  "writingReview": {
+    "summary": "... (max 400 characters)",
+    "revisedSections": ["... (max 200 characters each)"],
+    "remainingRisks": ["... (max 200 characters each)"]
   },
-  "seoReview": { "summary": "...", "keywordsUsed": [], "stuffingRisk": "..." },
-  "quality": { "score": 0, "explanation": "...", "strengths": [], "improvements": [] }
+  "factReview": {
+    "summary": "... (max 400 characters)",
+    "claims": [{ "claim": "... (max 300 characters)", "kind": "ARTICLE|PROFILE|INTERPRETATION", "source": "url or profile quote (max 400 characters)", "supported": true }],
+    "unsupportedClaims": ["... (max 300 characters each)"]
+  },
+  "seoReview": { "summary": "... (max 400 characters)", "keywordsUsed": ["... (max 80 characters each)"], "stuffingRisk": "... (max 200 characters)" },
+  "quality": { "score": 0, "explanation": "... (max 400 characters)", "strengths": ["... (max 200 characters each)"], "improvements": ["... (max 200 characters each)"] }
 }`;
 
 export function buildPostReviewUserPrompt(input: {
@@ -60,6 +65,8 @@ export function buildPostReviewUserPrompt(input: {
         experiences: input.profile.experiences.map((experience) => ({
           role: experience.role,
           company: experience.company,
+          description: experience.description,
+          responsibilities: experience.responsibilities,
           achievements: experience.achievements,
           measurableOutcomes: experience.measurableOutcomes,
         })),

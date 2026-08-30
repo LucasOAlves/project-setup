@@ -24,7 +24,7 @@ export function buildPostEditUserPrompt(input: {
   action: PostEditAction;
   tone?: WritingTone;
   angle?: AngleType;
-  section?: string;
+  sectionComments?: Array<{ excerpt: string; comment: string }>;
 }): string {
   const request =
     input.action === "HOOK"
@@ -33,7 +33,16 @@ export function buildPostEditUserPrompt(input: {
         ? `Rewrite the post in this tone: ${input.tone ?? input.post.tone}. Keep facts.`
         : input.action === "ANGLE"
           ? `Rewrite using this angle: ${input.angle ?? input.post.angle}. Same event and evidence.`
-          : `Rewrite only this section, keep the rest:\n${input.section ?? ""}`;
+          : [
+              "Apply these paragraph-specific revisions. Keep every other paragraph's",
+              "meaning unchanged — you may smooth a transition where a revised paragraph",
+              "now sits differently, but do not rewrite paragraphs with no comment below.",
+              "",
+              ...(input.sectionComments ?? []).map(
+                (item, index) =>
+                  `${index + 1}. Paragraph: "${item.excerpt}"\n   Comment: ${item.comment}`,
+              ),
+            ].join("\n");
 
   return [
     `Prompt version: ${POST_EDIT_PROMPT_VERSION}`,

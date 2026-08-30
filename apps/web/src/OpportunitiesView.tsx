@@ -1,11 +1,18 @@
 import { useEffect, useState } from "react";
-import { ANGLE_LABELS, type OpportunitySetPublic } from "@studio/shared";
+import {
+  ANGLE_LABELS,
+  TEXT_PROVIDERS,
+  TEXT_PROVIDER_LABELS,
+  type OpportunitySetPublic,
+  type TextProviderName,
+} from "@studio/shared";
 import {
   fetchOpportunities,
   generateOpportunities,
   selectOpportunity,
   type ApiError,
 } from "./api";
+import { ProviderSelect } from "./ProviderSelect";
 
 export function OpportunitiesView({ onContinue }: { onContinue: () => void }) {
   const [set, setSet] = useState<OpportunitySetPublic | null>(null);
@@ -13,6 +20,7 @@ export function OpportunitiesView({ onContinue }: { onContinue: () => void }) {
     "loading",
   );
   const [error, setError] = useState<string | null>(null);
+  const [provider, setProvider] = useState<TextProviderName | "">("");
 
   useEffect(() => {
     let cancelled = false;
@@ -38,7 +46,7 @@ export function OpportunitiesView({ onContinue }: { onContinue: () => void }) {
     setError(null);
     setStatus("generating");
     try {
-      setSet(await generateOpportunities());
+      setSet(await generateOpportunities(provider || undefined));
     } catch (err) {
       setError((err as ApiError).message);
     } finally {
@@ -130,6 +138,15 @@ export function OpportunitiesView({ onContinue }: { onContinue: () => void }) {
         <p className="empty">No opportunities yet. Generate them from the discovered events.</p>
       ) : null}
 
+      <div className="grid-2">
+        <ProviderSelect
+          label="Text provider"
+          value={provider}
+          onChange={setProvider}
+          options={TEXT_PROVIDERS}
+          labels={TEXT_PROVIDER_LABELS}
+        />
+      </div>
       <div className="actions">
         <button
           className="btn primary"

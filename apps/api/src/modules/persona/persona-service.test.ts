@@ -7,6 +7,8 @@ import type { TextGenerationProvider } from "../ai/text-generation-provider.ts";
 import { groundPersona } from "./ground-persona.ts";
 import { PersonaService, buildPersonaPrompt } from "./persona-service.ts";
 
+const textMap = (text: TextGenerationProvider) => ({ openai: text, anthropic: text }) as const;
+
 const validPersona = (): PersonaPayload => ({
   positioningStatement: "A staff platform engineer who keeps production boring.",
   coreExpertise: ["Platform engineering"],
@@ -114,7 +116,8 @@ test("malformed model output is not treated as a persona", async () => {
         return null;
       },
     } as never,
-    text,
+    textMap(text),
+    "openai",
   );
 
   await assert.rejects(
@@ -148,11 +151,12 @@ test("provider failure is retryable and not persisted", async () => {
         return null;
       },
     } as never,
-    {
+    textMap({
       async generateText() {
         throw new AppError(ERROR_CODES.PROVIDER_UNAVAILABLE, "down", 503);
       },
-    },
+    }),
+    "openai",
   );
 
   await assert.rejects(

@@ -34,3 +34,17 @@ test("builds queries from authority not from risky topics", () => {
   assert.ok(topics.includes("Kubernetes"));
   assert.equal(topics.includes("Quantum computing"), false);
 });
+
+test("splits long compound labels into individual searchable words", () => {
+  const topics = buildSearchTopics(
+    persona({
+      coreExpertise: ["Angular & Node.js fullstack development"],
+      contentPillars: ["Clean Architecture"],
+    }),
+  );
+  assert.equal(topics.includes("Angular & Node.js fullstack development"), false);
+  assert.ok(topics.includes("Angular"));
+  assert.ok(topics.includes("Node.js"));
+  assert.ok(topics.includes("fullstack"));
+  assert.ok(topics.includes("Clean Architecture"));
+});

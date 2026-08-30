@@ -13,6 +13,19 @@ const STOP = new Set([
   "professional",
 ]);
 
+// NewsAPI matches phrases literally, so a five-word persona label like "Angular &
+// Node.js fullstack development" almost never appears verbatim in a real article.
+// Short labels (up to two words) are kept as a phrase; longer ones are split into
+// their individual meaningful words so the search actually finds coverage.
+function searchTerms(raw: string): string[] {
+  const cleaned = raw.trim().replaceAll('"', "");
+  if (!cleaned) {
+    return [];
+  }
+  const words = cleaned.split(/\s+/).filter(Boolean);
+  return words.length <= 2 ? [cleaned] : words;
+}
+
 export function buildSearchTopics(persona: PersonaPayload, limit = 8): string[] {
   const ranked = [
     ...persona.strongAuthorityTopics.map((item) => item.topic),
@@ -32,15 +45,16 @@ export function buildSearchTopics(persona: PersonaPayload, limit = 8): string[] 
   const seen = new Set<string>();
 
   for (const raw of ranked) {
-    const topic = raw.trim().replaceAll('"', "");
-    const key = topic.toLowerCase();
-    if (topic.length < 3 || STOP.has(key) || blocked.has(key) || seen.has(key)) {
-      continue;
-    }
-    seen.add(key);
-    unique.push(topic);
-    if (unique.length >= limit) {
-      break;
+    for (const topic of searchTerms(raw)) {
+      const key = topic.toLowerCase();
+      if (topic.length < 3 || STOP.has(key) || blocked.has(key) || seen.has(key)) {
+        continue;
+      }
+      seen.add(key);
+      unique.push(topic);
+      if (unique.length >= limit) {
+        return unique;
+      }
     }
   }
 

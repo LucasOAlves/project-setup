@@ -1,18 +1,22 @@
 import { randomUUID } from "node:crypto";
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import type { Database } from "../../db/client.js";
 import { newsArticles, researchRuns } from "../../db/schema.js";
 import { WORKSPACE_PROFILE_ID } from "../profile/profile-repository.js";
 import type { NormalizedNewsArticle } from "./news-provider.js";
 
+export type ResearchSource = "discover" | "content_plan" | "custom";
+
 export class ResearchRepository {
   constructor(private readonly db: Database) {}
 
-  async getLatest() {
+  async getLatest(source: ResearchSource = "discover") {
     const [run] = await this.db
       .select()
       .from(researchRuns)
-      .where(eq(researchRuns.profileId, WORKSPACE_PROFILE_ID))
+      .where(
+        and(eq(researchRuns.profileId, WORKSPACE_PROFILE_ID), eq(researchRuns.source, source)),
+      )
       .orderBy(desc(researchRuns.createdAt))
       .limit(1);
     if (!run) {
@@ -31,6 +35,7 @@ export class ResearchRepository {
     personaId: string;
     queryTopics: string[];
     articles: NormalizedNewsArticle[];
+    source?: ResearchSource;
   }) {
     return this.db.transaction(async (tx) => {
       const [run] = await tx
@@ -40,6 +45,7 @@ export class ResearchRepository {
           profileId: WORKSPACE_PROFILE_ID,
           personaId: input.personaId,
           queryTopics: input.queryTopics,
+          source: input.source ?? "discover",
         })
         .returning();
 

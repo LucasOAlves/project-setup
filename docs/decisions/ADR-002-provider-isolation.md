@@ -30,6 +30,18 @@ Automated tests use deterministic fakes.
 - Replacing NewsAPI or moving storage to object storage does not rewrite domain rules
 - Slightly more types at the start
 
+## Update — second TextGenerationProvider adapter
+
+`AnthropicTextGenerationProvider` (Claude) was added alongside
+`OpenAITextGenerationProvider`, selected at startup via `TEXT_PROVIDER=openai|anthropic`
+in `apps/api/src/app.ts`. This is the payoff of isolating `TextGenerationProvider`:
+persona, opportunity, and post generation code did not change — only `app.ts`'s
+provider construction and `env.ts`'s schema did. Anthropic's Messages API has no
+strict JSON response mode equivalent to OpenAI's `response_format: json_object`, so
+the adapter appends a short "respond with JSON only" instruction to the system prompt;
+`parseJsonObject()` (already used for both providers) still strips any stray markdown
+fences.
+
 ## Tradeoffs
 
 Four interfaces is enough. Generating interfaces for Postgres or Fastify would be theater.

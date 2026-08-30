@@ -6,10 +6,14 @@ import {
   type ProfileInput,
   type ProfilePublic,
 } from "@studio/shared";
-import { OpportunitiesView } from "./OpportunitiesView";
+import { ContentPlanView } from "./ContentPlanView";
+import { CustomTopicsView } from "./CustomTopicsView";
+import { DiscoverView } from "./DiscoverView";
+import { DocsView } from "./DocsView";
 import { PersonaView } from "./PersonaView";
+import { PostHistoryView } from "./PostHistoryView";
 import { PostView } from "./PostView";
-import { TopicsView } from "./TopicsView";
+import { TagInput } from "./TagInput";
 import {
   deletePhoto,
   emptyProfile,
@@ -27,9 +31,11 @@ const STEPS = [
   { id: "writing", label: "Writing" },
   { id: "photos", label: "Photos" },
   { id: "persona", label: "Persona" },
-  { id: "topics", label: "Topics" },
-  { id: "opportunities", label: "Angles" },
+  { id: "plan", label: "Content plan" },
+  { id: "custom", label: "My topics" },
+  { id: "discover", label: "Discover news" },
   { id: "post", label: "Post" },
+  { id: "history", label: "History" },
 ] as const;
 
 type StepId = (typeof STEPS)[number]["id"];
@@ -40,6 +46,9 @@ export function App() {
   const [saved, setSaved] = useState<ProfilePublic | null>(null);
   const [status, setStatus] = useState<"idle" | "loading" | "saving" | "uploading">("loading");
   const [error, setError] = useState<string | null>(null);
+  const [editingPostId, setEditingPostId] = useState<string | null>(null);
+  const [showDocs, setShowDocs] = useState(false);
+  const [compareOpportunityId, setCompareOpportunityId] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -111,41 +120,67 @@ export function App() {
         <div className="brand">
           Content <span>Studio</span>
         </div>
-        <div className="eyebrow">LinkedIn for technology professionals</div>
+        <div style={{ display: "flex", alignItems: "baseline", gap: 14 }}>
+          <div className="eyebrow">LinkedIn for technology professionals</div>
+          <button
+            className="docs-link"
+            type="button"
+            onClick={() => setShowDocs(true)}
+          >
+            Docs
+          </button>
+        </div>
       </header>
 
-      {step === "welcome" ? (
+      {showDocs ? (
+        <section className="panel">
+          <DocsView onClose={() => setShowDocs(false)} />
+        </section>
+      ) : step === "welcome" ? (
         <Welcome onStart={() => setStep("identity")} />
       ) : (
         <section className="panel">
           <p className="eyebrow">
             {step === "persona"
               ? "Content authority"
-              : step === "topics"
-                ? "Current events"
-                : step === "opportunities"
-                  ? "Why this post"
-                  : step === "post"
-                    ? "Publishable draft"
-                    : "Professional profile"}
+              : step === "plan"
+                ? "12-week content plan"
+                : step === "custom"
+                  ? "Your own ideas"
+                  : step === "discover"
+                    ? "Current events"
+                    : step === "post"
+                      ? "Publishable draft"
+                      : step === "history"
+                        ? "Post history"
+                        : "Professional profile"}
           </p>
           <h2>
             {step === "persona"
               ? "How the system reads your profile"
-              : step === "topics"
-                ? "What you have a reason to discuss"
-                : step === "opportunities"
-                  ? "Pick a credible angle"
-                  : step === "post"
-                    ? "Write from the selected angle"
-                    : "Tell the system who you actually are"}
+              : step === "plan"
+                ? "Choose from the approved calendar"
+                : step === "custom"
+                  ? "Write from a topic only you thought of"
+                  : step === "discover"
+                    ? "React to what's happening now"
+                    : step === "post"
+                      ? "Write from the selected angle"
+                      : step === "history"
+                        ? "Everything you've written so far"
+                        : "Tell the system who you actually are"}
           </h2>
           <nav className="steps" aria-label="Profile sections">
             {STEPS.filter((item) => item.id !== "welcome").map((item) => (
               <button
                 key={item.id}
                 className={item.id === step ? "step active" : "step"}
-                onClick={() => setStep(item.id)}
+                onClick={() => {
+                  if (item.id === "history") {
+                    setCompareOpportunityId(null);
+                  }
+                  setStep(item.id);
+                }}
                 type="button"
               >
                 {item.label}
@@ -156,9 +191,11 @@ export function App() {
           {error ? <div className="error">{error}</div> : null}
           {saved?.evidenceWarning &&
           step !== "persona" &&
-          step !== "topics" &&
-          step !== "opportunities" &&
-          step !== "post" ? (
+          step !== "plan" &&
+          step !== "custom" &&
+          step !== "discover" &&
+          step !== "post" &&
+          step !== "history" ? (
             <div className="notice">{saved.evidenceWarning}</div>
           ) : null}
 
@@ -183,16 +220,57 @@ export function App() {
             />
           ) : null}
           {step === "persona" ? <PersonaView /> : null}
-          {step === "topics" ? <TopicsView /> : null}
-          {step === "opportunities" ? (
-            <OpportunitiesView onContinue={() => setStep("post")} />
+          {step === "plan" ? (
+            <ContentPlanView
+              onSelected={() => {
+                setEditingPostId(null);
+                setStep("post");
+              }}
+            />
           ) : null}
-          {step === "post" ? <PostView /> : null}
+          {step === "custom" ? (
+            <CustomTopicsView
+              onSelected={() => {
+                setEditingPostId(null);
+                setStep("post");
+              }}
+            />
+          ) : null}
+          {step === "discover" ? (
+            <DiscoverView
+              onContinue={() => {
+                setEditingPostId(null);
+                setStep("post");
+              }}
+            />
+          ) : null}
+          {step === "post" ? (
+            <PostView
+              editingPostId={editingPostId}
+              onExitEditing={() => setEditingPostId(null)}
+              onCompareVersions={(opportunityId) => {
+                setCompareOpportunityId(opportunityId);
+                setStep("history");
+              }}
+            />
+          ) : null}
+          {step === "history" ? (
+            <PostHistoryView
+              opportunityId={compareOpportunityId ?? undefined}
+              onClearFilter={() => setCompareOpportunityId(null)}
+              onEdit={(id) => {
+                setEditingPostId(id);
+                setStep("post");
+              }}
+            />
+          ) : null}
 
           {step !== "persona" &&
-          step !== "topics" &&
-          step !== "opportunities" &&
-          step !== "post" ? (
+          step !== "plan" &&
+          step !== "custom" &&
+          step !== "discover" &&
+          step !== "post" &&
+          step !== "history" ? (
           <div className="actions">
             <button
               className="btn ghost"
@@ -234,30 +312,40 @@ export function App() {
                 type="button"
                 onClick={() =>
                   setStep(
-                    step === "post"
-                      ? "opportunities"
-                      : step === "opportunities"
-                        ? "topics"
-                        : step === "topics"
+                    step === "history"
+                      ? "post"
+                      : step === "post"
+                        ? "discover"
+                        : step === "discover"
                           ? "persona"
-                          : "photos",
+                          : step === "custom"
+                            ? "persona"
+                            : step === "plan"
+                              ? "persona"
+                              : "photos",
                   )
                 }
               >
                 Back
               </button>
               {step === "persona" ? (
-                <button className="btn primary" type="button" onClick={() => setStep("topics")}>
-                  Continue to topics
+                <button className="btn primary" type="button" onClick={() => setStep("plan")}>
+                  Continue to content plan
                 </button>
               ) : null}
-              {step === "topics" ? (
-                <button
-                  className="btn primary"
-                  type="button"
-                  onClick={() => setStep("opportunities")}
-                >
-                  Continue to angles
+              {step === "persona" ? (
+                <button className="btn ghost" type="button" onClick={() => setStep("custom")}>
+                  Continue to my topics
+                </button>
+              ) : null}
+              {step === "persona" ? (
+                <button className="btn ghost" type="button" onClick={() => setStep("discover")}>
+                  Continue to discover news
+                </button>
+              ) : null}
+              {step === "post" ? (
+                <button className="btn ghost" type="button" onClick={() => setStep("history")}>
+                  Continue to history
                 </button>
               ) : null}
             </div>
@@ -699,58 +787,6 @@ function Field({
       {label}
       {children}
     </label>
-  );
-}
-
-function TagInput({
-  values,
-  onChange,
-}: {
-  values: string[];
-  onChange: (values: string[]) => void;
-}) {
-  const [draft, setDraft] = useState("");
-  const unique = values;
-
-  function add() {
-    const next = draft.trim();
-    if (!next || unique.includes(next)) {
-      setDraft("");
-      return;
-    }
-    onChange([...unique, next]);
-    setDraft("");
-  }
-
-  return (
-    <div>
-      <div className="tag-row">
-        <input
-          value={draft}
-          onChange={(event) => setDraft(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === "Enter") {
-              event.preventDefault();
-              add();
-            }
-          }}
-          placeholder="Type and press Enter"
-        />
-        <button className="btn ghost" type="button" onClick={add}>
-          Add
-        </button>
-      </div>
-      <div className="tags">
-        {unique.map((value) => (
-          <span className="tag" key={value}>
-            {value}
-            <button type="button" onClick={() => onChange(unique.filter((item) => item !== value))}>
-              ×
-            </button>
-          </span>
-        ))}
-      </div>
-    </div>
   );
 }
 
