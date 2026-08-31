@@ -76,3 +76,16 @@ opportunity pattern verbatim — same `ResearchRepository.create()` /
 `OpportunityRepository.create()` / `OpportunityService.select()` sequence, `source:
 "custom"` instead of `"content_plan"`, no new ADR needed for it. See ADR-009 for
 the source-scoping fix this pattern's second and third users made necessary.
+
+## Update — document upload as a second source of topics
+
+`PLAN_TOPICS` (this ADR's original, sole source) is now a fallback rather than
+the only source. `ContentPlanRepository` gained `content_plan_uploads`, a
+latest-row-wins table of full topic content; `list()`/`selectTopic()` now read
+`(await this.repo.getActiveTopics()) ?? PLAN_TOPICS`. A user can upload their
+own plan as a PDF and have it parsed into the same `ContentPlanTopic` shape
+instead of editing `plan-data.ts` by hand. See ADR-010 for the extraction
+pattern itself (draft-review-confirm, shared with resume upload). Nothing else
+in this ADR's decision changed: selection still goes through the same
+synthetic-article, no-AI-evaluation path regardless of which source the topic
+came from.

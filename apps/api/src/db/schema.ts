@@ -7,6 +7,7 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 import type {
+  ContentPlanTopic,
   FactReview,
   ImageBriefPayload,
   OpportunityPayload,
@@ -163,6 +164,13 @@ export const contentPlanTopics = pgTable("content_plan_topics", {
     onDelete: "set null",
   }),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const contentPlanUploads = pgTable("content_plan_uploads", {
+  id: uuid("id").primaryKey(),
+  sourceFilename: text("source_filename").notNull(),
+  topics: jsonb("topics").$type<ContentPlanTopic[]>().notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
 export const generatedPosts = pgTable("generated_posts", {

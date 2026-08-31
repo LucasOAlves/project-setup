@@ -18,11 +18,13 @@ export {
   profileEvidenceFlags,
   profileInputSchema,
   profilePublicSchema,
+  resumeDraftSchema,
   writingSampleInputSchema,
   type ExperienceInput,
   type PhotoPublic,
   type ProfileInput,
   type ProfilePublic,
+  type ResumeDraft,
 } from "./profile.js";
 export {
   PERSONA_PROMPT_VERSION,

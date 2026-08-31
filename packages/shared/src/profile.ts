@@ -50,6 +50,21 @@ export const profileInputSchema = z.object({
 export type ProfileInput = z.infer<typeof profileInputSchema>;
 export type ExperienceInput = z.infer<typeof experienceInputSchema>;
 
+export const resumeDraftSchema = profileInputSchema.pick({
+  fullName: true,
+  headline: true,
+  currentJobTitle: true,
+  currentCompany: true,
+  about: true,
+  topSkills: true,
+  technologies: true,
+  industries: true,
+  yearsOfExperience: true,
+  experiences: true,
+});
+
+export type ResumeDraft = z.infer<typeof resumeDraftSchema>;
+
 export const photoPublicSchema = z.object({
   id: z.string().uuid(),
   mimeType: z.string(),

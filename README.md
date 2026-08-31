@@ -33,7 +33,7 @@ docker compose up --build
 
 Then open `http://localhost:5173`.
 
-Slice 1 is available: progressive professional profile, experiences, positioning, writing preferences, and up to three reference photos.
+Slice 1 is available: progressive professional profile, experiences, positioning, writing preferences, and up to three reference photos. On the Identity step, upload a resume PDF to pre-fill these forms (nothing is saved until you review and click Save and continue); on the Experience step, download a résumé PDF generated from the current saved profile, any time new information is added.
 
 Slice 2 is available: generate a structured professional persona and authority map from the saved profile. Set `OPENAI_API_KEY` in `.env` before generating.
 
@@ -43,7 +43,7 @@ Slice 4 is available: generate up to three content opportunities with Why this p
 
 Slice 5 is available: write a post from the selected angle, with story strategy, reviews, score, copy, and limited regeneration.
 
-Content plan is available: after generating a persona, the "Content plan" step lists a pre-approved editorial calendar defined in `apps/api/src/modules/content-plan/plan-data.ts` (a small example set is included — replace it with your own topics, same shape). Picking one writes a post grounded in that topic's brief instead of a discovered news article; the ad-hoc Topics/Angles path still works as before.
+Content plan is available: after generating a persona, the "Content plan" step lists a pre-approved editorial calendar. A small example set ships in `apps/api/src/modules/content-plan/plan-data.ts`; upload your own plan as a PDF from the Content plan step to replace it (preview, then "Use this plan" — nothing is saved until you confirm), or edit `plan-data.ts` directly. Picking a topic writes a post grounded in that topic's brief instead of a discovered news article; the ad-hoc Topics/Angles path still works as before.
 
 Without Docker:
 

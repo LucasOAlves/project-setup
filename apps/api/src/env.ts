@@ -6,6 +6,7 @@ const envSchema = z.object({
   DATABASE_URL: z.string().min(1),
   STORAGE_DIR: z.string().min(1).default("./storage"),
   MAX_PHOTO_BYTES: z.coerce.number().int().positive().default(8 * 1024 * 1024),
+  MAX_DOCUMENT_BYTES: z.coerce.number().int().positive().default(8 * 1024 * 1024),
   TEXT_PROVIDER: z.enum(["openai", "anthropic"]).default("openai"),
   IMAGE_PROVIDER: z.enum(["openai", "pollinations"]).default("openai"),
   OPENAI_API_KEY: z.string().optional().default(""),

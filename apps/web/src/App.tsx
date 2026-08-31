@@ -1,10 +1,13 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   POSITIONING_OPTIONS,
   POST_LENGTHS,
+  TEXT_PROVIDERS,
+  TEXT_PROVIDER_LABELS,
   WRITING_TONES,
   type ProfileInput,
   type ProfilePublic,
+  type TextProviderName,
 } from "@studio/shared";
 import { ContentPlanView } from "./ContentPlanView";
 import { CustomTopicsView } from "./CustomTopicsView";
@@ -13,10 +16,13 @@ import { DocsView } from "./DocsView";
 import { PersonaView } from "./PersonaView";
 import { PostHistoryView } from "./PostHistoryView";
 import { PostView } from "./PostView";
+import { ProviderSelect } from "./ProviderSelect";
 import { TagInput } from "./TagInput";
 import {
   deletePhoto,
+  downloadResumePdf,
   emptyProfile,
+  extractResumeDraft,
   fetchProfile,
   saveProfile,
   uploadPhoto,
@@ -49,6 +55,9 @@ export function App() {
   const [editingPostId, setEditingPostId] = useState<string | null>(null);
   const [showDocs, setShowDocs] = useState(false);
   const [compareOpportunityId, setCompareOpportunityId] = useState<string | null>(null);
+  const [resumeProvider, setResumeProvider] = useState<TextProviderName | "">("");
+  const [resumeStatus, setResumeStatus] = useState<"idle" | "extracting">("idle");
+  const resumeInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -100,6 +109,31 @@ export function App() {
       setError((err as ApiError).message);
     } finally {
       setStatus("idle");
+    }
+  }
+
+  async function onExtractResume(file: File) {
+    setError(null);
+    setResumeStatus("extracting");
+    try {
+      const draft = await extractResumeDraft(file, resumeProvider || undefined);
+      setProfile((current) => ({ ...current, ...draft }));
+    } catch (err) {
+      setError((err as ApiError).message);
+    } finally {
+      setResumeStatus("idle");
+      if (resumeInputRef.current) {
+        resumeInputRef.current.value = "";
+      }
+    }
+  }
+
+  async function onDownloadResume() {
+    setError(null);
+    try {
+      await downloadResumePdf();
+    } catch (err) {
+      setError((err as ApiError).message);
     }
   }
 
@@ -200,10 +234,47 @@ export function App() {
           ) : null}
 
           {step === "identity" ? (
-            <IdentityForm profile={profile} onChange={setProfile} />
+            <>
+              <div className="notice">
+                <p>
+                  Upload a resume PDF to pre-fill these forms with what it actually says. Nothing
+                  is saved until you review the fields below and click Save and continue.
+                </p>
+                <div className="actions" style={{ justifyContent: "flex-start", marginTop: 8 }}>
+                  <input
+                    ref={resumeInputRef}
+                    type="file"
+                    accept="application/pdf"
+                    disabled={resumeStatus === "extracting"}
+                    onChange={(event) => {
+                      const file = event.target.files?.[0];
+                      if (file) void onExtractResume(file);
+                    }}
+                  />
+                  <ProviderSelect
+                    label="Text provider"
+                    value={resumeProvider}
+                    onChange={setResumeProvider}
+                    options={TEXT_PROVIDERS}
+                    labels={TEXT_PROVIDER_LABELS}
+                  />
+                </div>
+                {resumeStatus === "extracting" ? (
+                  <p className="status">Reading the resume…</p>
+                ) : null}
+              </div>
+              <IdentityForm profile={profile} onChange={setProfile} />
+            </>
           ) : null}
           {step === "experience" ? (
-            <ExperienceForm profile={profile} onChange={setProfile} />
+            <>
+              <div className="actions" style={{ justifyContent: "flex-start" }}>
+                <button className="btn ghost" type="button" onClick={() => void onDownloadResume()}>
+                  Download updated résumé
+                </button>
+              </div>
+              <ExperienceForm profile={profile} onChange={setProfile} />
+            </>
           ) : null}
           {step === "positioning" ? (
             <PositioningForm profile={profile} onChange={setProfile} />

@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
-import { eq } from "drizzle-orm";
-import type { ContentPlanStatus } from "@studio/shared";
+import { desc, eq } from "drizzle-orm";
+import type { ContentPlanStatus, ContentPlanTopic } from "@studio/shared";
 import type { Database } from "../../db/client.js";
-import { contentPlanTopics } from "../../db/schema.js";
+import { contentPlanTopics, contentPlanUploads } from "../../db/schema.js";
 
 export type ContentPlanStatusRow = typeof contentPlanTopics.$inferSelect;
 
@@ -63,5 +63,22 @@ export class ContentPlanRepository {
       throw new Error("content plan topic insert failed");
     }
     return created;
+  }
+
+  async saveUpload(topics: ContentPlanTopic[], sourceFilename: string): Promise<void> {
+    await this.db.insert(contentPlanUploads).values({
+      id: randomUUID(),
+      sourceFilename,
+      topics,
+    });
+  }
+
+  async getActiveTopics(): Promise<ContentPlanTopic[] | null> {
+    const [latest] = await this.db
+      .select()
+      .from(contentPlanUploads)
+      .orderBy(desc(contentPlanUploads.createdAt))
+      .limit(1);
+    return latest ? (latest.topics as ContentPlanTopic[]) : null;
   }
 }

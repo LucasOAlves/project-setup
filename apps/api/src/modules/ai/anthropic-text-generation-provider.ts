@@ -31,7 +31,7 @@ export class AnthropicTextGenerationProvider implements TextGenerationProvider {
     try {
       const stream = client.messages.stream({
         model: this.model,
-        max_tokens: 16000,
+        max_tokens: 32000,
         system: request.system + JSON_ONLY_SUFFIX,
         messages: [{ role: "user", content: request.user }],
       });

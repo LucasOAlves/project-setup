@@ -44,17 +44,12 @@ export async function buildApp(env: Env, db: Database) {
   await app.register(cors, { origin: true });
   await app.register(multipart, {
     limits: {
-      fileSize: env.MAX_PHOTO_BYTES,
+      fileSize: Math.max(env.MAX_PHOTO_BYTES, env.MAX_DOCUMENT_BYTES),
       files: 1,
     },
   });
 
   const storage = new LocalStorageProvider(env.STORAGE_DIR);
-  const profiles = new ProfileService(
-    new ProfileRepository(db),
-    storage,
-    env.MAX_PHOTO_BYTES,
-  );
   const textProviders: Record<TextProviderName, TextGenerationProvider> = {
     openai: new OpenAITextGenerationProvider(env.OPENAI_API_KEY, env.OPENAI_TEXT_MODEL),
     anthropic: new AnthropicTextGenerationProvider(env.ANTHROPIC_API_KEY, env.ANTHROPIC_TEXT_MODEL),
@@ -65,6 +60,13 @@ export async function buildApp(env: Env, db: Database) {
     pollinations: new PollinationsImageGenerationProvider(),
   };
   const defaultImageProvider: ImageProviderName = env.IMAGE_PROVIDER;
+  const profiles = new ProfileService(
+    new ProfileRepository(db),
+    storage,
+    env.MAX_PHOTO_BYTES,
+    textProviders,
+    defaultTextProvider,
+  );
 
   const personas = new PersonaService(
     profiles,
@@ -102,6 +104,8 @@ export async function buildApp(env: Env, db: Database) {
     new OpportunityRepository(db),
     opportunities,
     new ContentPlanRepository(db),
+    textProviders,
+    defaultTextProvider,
   );
   const customTopics = new CustomTopicService(
     profiles,
@@ -125,12 +129,12 @@ export async function buildApp(env: Env, db: Database) {
 
   app.get("/health", async () => ({ ok: true }));
 
-  await registerProfileRoutes(app, profiles);
+  await registerProfileRoutes(app, profiles, env.MAX_DOCUMENT_BYTES);
   await registerPersonaRoutes(app, personas);
   await registerResearchRoutes(app, research);
   await registerOpportunityRoutes(app, opportunities);
   await registerPostRoutes(app, posts);
-  await registerContentPlanRoutes(app, contentPlan);
+  await registerContentPlanRoutes(app, contentPlan, env.MAX_DOCUMENT_BYTES);
   await registerCustomTopicRoutes(app, customTopics);
   await registerImageRoutes(app, images);
 
@@ -149,7 +153,7 @@ export async function buildApp(env: Env, db: Database) {
       return reply.code(413).send({
         error: {
           code: ERROR_CODES.PAYLOAD_TOO_LARGE,
-          message: "Each photo must be 8 MB or smaller.",
+          message: "The uploaded file is too large.",
         },
       });
     }

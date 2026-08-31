@@ -1,6 +1,7 @@
 import type {
   AngleType,
   ContentPlanStatus,
+  ContentPlanTopic,
   ContentPlanTopicPublic,
   CustomTopicInput,
   CustomTopicPublic,
@@ -17,6 +18,7 @@ import type {
   ProfileInput,
   ProfilePublic,
   ResearchRunPublic,
+  ResumeDraft,
   SectionCommentReview,
   TextProviderName,
   WritingTone,
@@ -86,6 +88,38 @@ export async function deletePhoto(photoId: string): Promise<ProfilePublic> {
   }
   const body = (await response.json()) as { profile: ProfilePublic };
   return body.profile;
+}
+
+export async function extractResumeDraft(
+  file: File,
+  provider?: TextProviderName,
+): Promise<ResumeDraft> {
+  const data = new FormData();
+  data.append("file", file);
+  const query = provider ? `?provider=${encodeURIComponent(provider)}` : "";
+  const response = await fetch(`/api/profile/resume/extract${query}`, {
+    method: "POST",
+    body: data,
+  });
+  if (!response.ok) {
+    throw await parseError(response);
+  }
+  const body = (await response.json()) as { draft: ResumeDraft };
+  return body.draft;
+}
+
+export async function downloadResumePdf(): Promise<void> {
+  const response = await fetch("/api/profile/resume/export");
+  if (!response.ok) {
+    throw await parseError(response);
+  }
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = "resume.pdf";
+  link.click();
+  URL.revokeObjectURL(url);
 }
 
 export async function fetchPersona(): Promise<PersonaPublic | null> {
@@ -350,6 +384,40 @@ export async function selectContentPlanTopic(topicId: string): Promise<Opportuni
   }
   const body = (await response.json()) as { opportunities: OpportunitySetPublic };
   return body.opportunities;
+}
+
+export async function extractPlanDocument(
+  file: File,
+  provider?: TextProviderName,
+): Promise<ContentPlanTopic[]> {
+  const data = new FormData();
+  data.append("file", file);
+  const query = provider ? `?provider=${encodeURIComponent(provider)}` : "";
+  const response = await fetch(`/api/content-plan/upload/extract${query}`, {
+    method: "POST",
+    body: data,
+  });
+  if (!response.ok) {
+    throw await parseError(response);
+  }
+  const body = (await response.json()) as { topics: ContentPlanTopic[] };
+  return body.topics;
+}
+
+export async function savePlanTopics(
+  topics: ContentPlanTopic[],
+  sourceFilename: string,
+): Promise<ContentPlanTopicPublic[]> {
+  const response = await fetch("/api/content-plan/upload/save", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ topics, sourceFilename }),
+  });
+  if (!response.ok) {
+    throw await parseError(response);
+  }
+  const body = (await response.json()) as { topics: ContentPlanTopicPublic[] };
+  return body.topics;
 }
 
 export async function updateContentPlanTopicStatus(

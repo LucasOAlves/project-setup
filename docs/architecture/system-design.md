@@ -30,12 +30,12 @@ Controllers stay thin. Domain rules do not live in routes or React components.
 
 | Module | Owns |
 | --- | --- |
-| profile | profile, experiences, writing samples, photos metadata |
+| profile | profile, experiences, writing samples, photos metadata, resume PDF import (draft, ADR-010) and export |
 | persona | persona generation, authority model persistence |
 | news | NewsProvider calls, article normalization, persistence |
 | relevance | deterministic filters + semantic relevance |
 | opportunities | content opportunities, selection (source-scoped, ADR-009), rejection, why-this-post |
-| content-plan | the 24-topic editorial calendar as deterministic synthetic opportunities (ADR-006) |
+| content-plan | the 24-topic editorial calendar as deterministic synthetic opportunities (ADR-006), replaceable by PDF upload (ADR-010) |
 | custom-topics | user-authored topics as deterministic synthetic opportunities (ADR-006 pattern, ADR-009) |
 | posts | story strategy, draft, reviews, scores, regeneration, publish tracking |
 | images | creative brief, prompt, generation, association with post |
@@ -163,6 +163,9 @@ Do not persist:
 - raw OpenAI payloads as a product feature
 - failed provider dumps
 - client filenames as paths
+- an uploaded resume/content-plan PDF's raw bytes, or an extraction draft the
+  user has not confirmed (ADR-010) — the generated résumé PDF is likewise
+  rendered on demand from the saved profile, never stored
 
 History: keep the latest persona per profile. Keep generated posts and images so regeneration can add a new version without deleting the previous publishable result. Do not build a full event-sourced history.
 

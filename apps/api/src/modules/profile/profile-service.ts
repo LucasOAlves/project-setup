@@ -4,13 +4,25 @@ import {
   assessProfileEvidence,
   experienceInputSchema,
   profileInputSchema,
+  resumeDraftSchema,
   type ProfileInput,
   type ProfilePublic,
+  type ResumeDraft,
+  type TextProviderName,
 } from "@studio/shared";
 import { ERROR_CODES } from "@studio/shared";
-import { AppError, notFound, validationError } from "../../app-error.js";
+import { AppError, malformedAiOutput, notFound, validationError } from "../../app-error.js";
+import { parseJsonObject } from "../ai/parse-json.js";
+import {
+  RESUME_EXTRACTION_PROMPT_VERSION,
+  RESUME_EXTRACTION_SYSTEM_PROMPT,
+  buildResumeExtractionUserPrompt,
+} from "../ai/prompts/resume-extraction.v1.js";
+import { resolveTextProvider } from "../ai/resolve-provider.js";
+import type { TextGenerationProvider } from "../ai/text-generation-provider.js";
 import type { StorageProvider } from "../uploads/storage-provider.js";
 import type { ProfileRepository } from "./profile-repository.js";
+import { extractPdfText } from "./pdf-text.js";
 
 const MAGIC = {
   png: Buffer.from([0x89, 0x50, 0x4e, 0x47]),
@@ -24,6 +36,8 @@ export class ProfileService {
     private readonly repo: ProfileRepository,
     private readonly storage: StorageProvider,
     private readonly maxPhotoBytes: number,
+    private readonly textProviders: Record<TextProviderName, TextGenerationProvider>,
+    private readonly defaultTextProvider: TextProviderName,
   ) {}
 
   async getProfile(): Promise<ProfilePublic | null> {
@@ -60,6 +74,24 @@ export class ProfileService {
       ...current,
       experiences: [...current.experiences, parsedExperience.data],
     });
+  }
+
+  async extractResumeDraft(bytes: Buffer, provider?: TextProviderName): Promise<ResumeDraft> {
+    const resumeText = await extractPdfText(bytes);
+    const prompt = {
+      purpose: RESUME_EXTRACTION_PROMPT_VERSION,
+      system: RESUME_EXTRACTION_SYSTEM_PROMPT,
+      user: buildResumeExtractionUserPrompt(resumeText),
+    };
+    const text = resolveTextProvider(this.textProviders, this.defaultTextProvider, provider);
+    const generated = await text.generateText(prompt);
+    const parsed = resumeDraftSchema.safeParse(parseJsonObject(generated.text));
+    if (!parsed.success) {
+      throw malformedAiOutput(
+        "The model returned resume data that did not match the required structure.",
+      );
+    }
+    return parsed.data;
   }
 
   async uploadPhoto(input: { bytes: Buffer; filename: string; claimedType: string }) {
