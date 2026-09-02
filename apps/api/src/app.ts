@@ -8,6 +8,9 @@ import type { Database } from "./db/client.js";
 import { AnthropicTextGenerationProvider } from "./modules/ai/anthropic-text-generation-provider.js";
 import { OpenAITextGenerationProvider } from "./modules/ai/openai-text-generation-provider.js";
 import type { TextGenerationProvider } from "./modules/ai/text-generation-provider.js";
+import { registerCareerRoutes } from "./modules/career/career-routes.js";
+import { CareerRepository } from "./modules/career/career-repository.js";
+import { CareerService } from "./modules/career/career-service.js";
 import { registerContentPlanRoutes } from "./modules/content-plan/content-plan-routes.js";
 import { ContentPlanRepository } from "./modules/content-plan/content-plan-repository.js";
 import { ContentPlanService } from "./modules/content-plan/content-plan-service.js";
@@ -115,6 +118,7 @@ export async function buildApp(env: Env, db: Database) {
     opportunities,
     new CustomTopicRepository(db),
   );
+  const career = new CareerService(new CareerRepository(db));
   const images = new ImageService(
     profiles,
     personas,
@@ -137,6 +141,7 @@ export async function buildApp(env: Env, db: Database) {
   await registerContentPlanRoutes(app, contentPlan, env.MAX_DOCUMENT_BYTES);
   await registerCustomTopicRoutes(app, customTopics);
   await registerImageRoutes(app, images);
+  await registerCareerRoutes(app, career);
 
   app.setErrorHandler((error, _request, reply) => {
     if (error instanceof AppError) {

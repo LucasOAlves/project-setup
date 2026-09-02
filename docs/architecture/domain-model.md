@@ -113,6 +113,30 @@ Profile
     └── GeneratedImage
 ```
 
+## Company (Career domain)
+
+Independent of `Profile` — a company you're tracking, not something the user "owns" the way
+a profile field does. Name, website, LinkedIn URL, industry, size, locations, career page,
+notes. Added in Slice 1 of the Career expansion (ADR-011).
+
+## Job (Career domain)
+
+Belongs to a `Company`. Carries both the posting's own data (title, url, location,
+workplace/employment type, salary range, description, requirements, preferred qualifications,
+technologies, seniority) and the pursuit funnel as a single `status`
+(`SAVED → SHORTLISTED → PREPARING → APPLIED → ... → OFFER/REJECTED/WITHDRAWN`), plus
+`appliedAt` (stamped automatically the first time status reaches `APPLIED` or later, cleared
+if moved back below it — same pattern as `GeneratedPost.publishedAt`), `notes`, and
+`nextAction`.
+
+Deliberately **not** split into a separate `Application` entity in Slice 1 — see ADR-011's
+"Deferred" section. `source`/`externalId` exist now so a future `JobProvider` adapter
+(Greenhouse, Lever, LinkedIn) can populate `Job` rows without a schema change, even though
+Slice 1's only source is a person typing the data in (`source: "manual"`).
+
+`fitScore` is a nullable column reserved for the Job Fit engine (a later slice); nothing
+computes it yet.
+
 ## Ephemeral
 
 - token streams

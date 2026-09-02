@@ -41,6 +41,7 @@ Controllers stay thin. Domain rules do not live in routes or React components.
 | images | creative brief, prompt, generation, association with post |
 | uploads | photo validation and storage identifiers |
 | ai | prompt templates, structured-output validation, provider clients |
+| career | companies, jobs, and job-pursuit status tracking — additive domain, shares `Profile` as its only cross-domain aggregate (ADR-011); no provider/LinkedIn integration yet |
 
 Modules may call use cases across boundaries. They must not import OpenAI SDK types, NewsAPI types, or filesystem paths.
 
@@ -156,6 +157,8 @@ Persist:
   `opportunity_sets.selected_at` — which selection is current, across sources; ADR-009)
 - selected opportunity, story strategy, post, reviews, score
 - creative brief, image prompt, generated image metadata and bytes
+- companies and jobs tracked in the Career module, including pursuit status and the
+  first-applied timestamp (ADR-011)
 
 Do not persist:
 

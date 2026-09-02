@@ -122,6 +122,27 @@ export {
   type CustomTopicPublic,
 } from "./custom-topic.js";
 export {
+  JOB_EMPLOYMENT_TYPES,
+  JOB_SOURCES,
+  JOB_STATUSES,
+  JOB_WORKPLACE_TYPES,
+  companyInputSchema,
+  companyPublicSchema,
+  jobInputSchema,
+  jobPatchInputSchema,
+  jobPublicSchema,
+  jobStatusInputSchema,
+  type CompanyInput,
+  type CompanyPublic,
+  type JobEmploymentType,
+  type JobInput,
+  type JobPatchInput,
+  type JobPublic,
+  type JobSource,
+  type JobStatus,
+  type JobWorkplaceType,
+} from "./career.js";
+export {
   CONTENT_PLAN_FORMATS,
   CONTENT_PLAN_STATUSES,
   contentPlanSourceSchema,

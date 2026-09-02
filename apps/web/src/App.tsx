@@ -9,6 +9,7 @@ import {
   type ProfilePublic,
   type TextProviderName,
 } from "@studio/shared";
+import { CareerView } from "./CareerView";
 import { ContentPlanView } from "./ContentPlanView";
 import { CustomTopicsView } from "./CustomTopicsView";
 import { DiscoverView } from "./DiscoverView";
@@ -42,6 +43,7 @@ const STEPS = [
   { id: "discover", label: "Discover news" },
   { id: "post", label: "Post" },
   { id: "history", label: "History" },
+  { id: "career", label: "Career" },
 ] as const;
 
 type StepId = (typeof STEPS)[number]["id"];
@@ -187,7 +189,9 @@ export function App() {
                       ? "Publishable draft"
                       : step === "history"
                         ? "Post history"
-                        : "Professional profile"}
+                        : step === "career"
+                          ? "Career tracker"
+                          : "Professional profile"}
           </p>
           <h2>
             {step === "persona"
@@ -202,7 +206,9 @@ export function App() {
                       ? "Write from the selected angle"
                       : step === "history"
                         ? "Everything you've written so far"
-                        : "Tell the system who you actually are"}
+                        : step === "career"
+                          ? "Track companies and roles you're pursuing"
+                          : "Tell the system who you actually are"}
           </h2>
           <nav className="steps" aria-label="Profile sections">
             {STEPS.filter((item) => item.id !== "welcome").map((item) => (
@@ -229,7 +235,8 @@ export function App() {
           step !== "custom" &&
           step !== "discover" &&
           step !== "post" &&
-          step !== "history" ? (
+          step !== "history" &&
+          step !== "career" ? (
             <div className="notice">{saved.evidenceWarning}</div>
           ) : null}
 
@@ -335,13 +342,15 @@ export function App() {
               }}
             />
           ) : null}
+          {step === "career" ? <CareerView /> : null}
 
           {step !== "persona" &&
           step !== "plan" &&
           step !== "custom" &&
           step !== "discover" &&
           step !== "post" &&
-          step !== "history" ? (
+          step !== "history" &&
+          step !== "career" ? (
           <div className="actions">
             <button
               className="btn ghost"
@@ -393,7 +402,9 @@ export function App() {
                             ? "persona"
                             : step === "plan"
                               ? "persona"
-                              : "photos",
+                              : step === "career"
+                                ? "persona"
+                                : "photos",
                   )
                 }
               >

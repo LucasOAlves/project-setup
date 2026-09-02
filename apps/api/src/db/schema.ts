@@ -166,6 +166,50 @@ export const contentPlanTopics = pgTable("content_plan_topics", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+export const companies = pgTable("companies", {
+  id: uuid("id").primaryKey(),
+  name: text("name").notNull(),
+  website: text("website").notNull().default(""),
+  linkedinUrl: text("linkedin_url").notNull().default(""),
+  industry: text("industry").notNull().default(""),
+  size: text("size").notNull().default(""),
+  locations: jsonb("locations").$type<string[]>().notNull().default([]),
+  careerPageUrl: text("career_page_url").notNull().default(""),
+  notes: text("notes").notNull().default(""),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const jobs = pgTable("jobs", {
+  id: uuid("id").primaryKey(),
+  companyId: uuid("company_id")
+    .notNull()
+    .references(() => companies.id, { onDelete: "cascade" }),
+  source: text("source").notNull().default("manual"),
+  externalId: text("external_id").notNull().default(""),
+  url: text("url").notNull().default(""),
+  title: text("title").notNull(),
+  location: text("location").notNull().default(""),
+  workplaceType: text("workplace_type"),
+  employmentType: text("employment_type"),
+  salaryMin: integer("salary_min"),
+  salaryMax: integer("salary_max"),
+  salaryCurrency: text("salary_currency").notNull().default(""),
+  description: text("description").notNull().default(""),
+  requirements: jsonb("requirements").$type<string[]>().notNull().default([]),
+  preferredQualifications: jsonb("preferred_qualifications").$type<string[]>().notNull().default([]),
+  technologies: jsonb("technologies").$type<string[]>().notNull().default([]),
+  seniority: text("seniority").notNull().default(""),
+  status: text("status").notNull().default("SAVED"),
+  fitScore: integer("fit_score"),
+  discoveredAt: timestamp("discovered_at", { withTimezone: true }).notNull().defaultNow(),
+  appliedAt: timestamp("applied_at", { withTimezone: true }),
+  notes: text("notes").notNull().default(""),
+  nextAction: text("next_action").notNull().default(""),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 export const contentPlanUploads = pgTable("content_plan_uploads", {
   id: uuid("id").primaryKey(),
   sourceFilename: text("source_filename").notNull(),

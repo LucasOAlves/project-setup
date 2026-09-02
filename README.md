@@ -45,6 +45,14 @@ Slice 5 is available: write a post from the selected angle, with story strategy,
 
 Content plan is available: after generating a persona, the "Content plan" step lists a pre-approved editorial calendar. A small example set ships in `apps/api/src/modules/content-plan/plan-data.ts`; upload your own plan as a PDF from the Content plan step to replace it (preview, then "Use this plan" — nothing is saved until you confirm), or edit `plan-data.ts` directly. Picking a topic writes a post grounded in that topic's brief instead of a discovered news article; the ad-hoc Topics/Angles path still works as before.
 
+Career tracker is available: the "Career" step lets you track companies and jobs you're
+actually pursuing — add a company, add a job against it, move it through a status funnel
+(Saved → ... → Offer/Rejected/Withdrawn), and keep notes and a next action per job. This is
+local tracking only; nothing talks to LinkedIn, a job board, or any external API yet — see
+[ADR-011](docs/decisions/ADR-011-career-domain-boundaries.md) for the domain boundaries and
+[ADR-012](docs/decisions/ADR-012-external-action-approval.md) for the human-approval policy
+that will govern any future capability that writes to an external system.
+
 Without Docker:
 
 ```bash

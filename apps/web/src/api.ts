@@ -1,5 +1,7 @@
 import type {
   AngleType,
+  CompanyInput,
+  CompanyPublic,
   ContentPlanStatus,
   ContentPlanTopic,
   ContentPlanTopicPublic,
@@ -8,6 +10,10 @@ import type {
   ExperienceInput,
   ImageProviderName,
   ImagePublic,
+  JobInput,
+  JobPatchInput,
+  JobPublic,
+  JobStatus,
   OpportunitySetPublic,
   PersonaPublic,
   PostHistoryPublic,
@@ -490,4 +496,83 @@ export async function updateCustomTopicStatus(
   }
   const body = (await response.json()) as { topics: CustomTopicPublic[] };
   return body.topics;
+}
+
+export async function fetchCompanies(): Promise<CompanyPublic[]> {
+  const response = await fetch("/api/career/companies");
+  if (!response.ok) {
+    throw await parseError(response);
+  }
+  const body = (await response.json()) as { companies: CompanyPublic[] };
+  return body.companies;
+}
+
+export async function createCompany(input: CompanyInput): Promise<CompanyPublic> {
+  const response = await fetch("/api/career/companies", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!response.ok) {
+    throw await parseError(response);
+  }
+  const body = (await response.json()) as { company: CompanyPublic };
+  return body.company;
+}
+
+export async function fetchJobs(): Promise<JobPublic[]> {
+  const response = await fetch("/api/career/jobs");
+  if (!response.ok) {
+    throw await parseError(response);
+  }
+  const body = (await response.json()) as { jobs: JobPublic[] };
+  return body.jobs;
+}
+
+export async function createJob(input: JobInput): Promise<JobPublic> {
+  const response = await fetch("/api/career/jobs", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!response.ok) {
+    throw await parseError(response);
+  }
+  const body = (await response.json()) as { job: JobPublic };
+  return body.job;
+}
+
+export async function updateJobStatus(id: string, status: JobStatus): Promise<JobPublic> {
+  const response = await fetch(`/api/career/jobs/${id}/status`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ status }),
+  });
+  if (!response.ok) {
+    throw await parseError(response);
+  }
+  const body = (await response.json()) as { job: JobPublic };
+  return body.job;
+}
+
+export async function patchJob(id: string, patch: JobPatchInput): Promise<JobPublic> {
+  const response = await fetch(`/api/career/jobs/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(patch),
+  });
+  if (!response.ok) {
+    throw await parseError(response);
+  }
+  const body = (await response.json()) as { job: JobPublic };
+  return body.job;
+}
+
+export async function deleteJob(id: string): Promise<JobPublic[]> {
+  const response = await fetch(`/api/career/jobs/${id}`, { method: "DELETE" });
+  if (!response.ok) {
+    throw await parseError(response);
+  }
+  const body = (await response.json()) as { jobs: JobPublic[] };
+  return body.jobs;
 }
