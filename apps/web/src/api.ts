@@ -16,6 +16,11 @@ import type {
   JobPublic,
   JobStatus,
   OpportunitySetPublic,
+  OutreachMessage,
+  RecruiterConnectionStatus,
+  RecruiterInput,
+  RecruiterPatchInput,
+  RecruiterPublic,
   ResumeTailoringPlan,
   PersonaPublic,
   PostHistoryPublic,
@@ -614,6 +619,94 @@ export async function downloadTailoredResume(
   link.download = "tailored-resume.pdf";
   link.click();
   URL.revokeObjectURL(url);
+}
+
+export async function fetchRecruiters(): Promise<RecruiterPublic[]> {
+  const response = await fetch("/api/career/recruiters");
+  if (!response.ok) {
+    throw await parseError(response);
+  }
+  const body = (await response.json()) as { recruiters: RecruiterPublic[] };
+  return body.recruiters;
+}
+
+export async function createRecruiter(input: RecruiterInput): Promise<RecruiterPublic> {
+  const response = await fetch("/api/career/recruiters", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!response.ok) {
+    throw await parseError(response);
+  }
+  const body = (await response.json()) as { recruiter: RecruiterPublic };
+  return body.recruiter;
+}
+
+export async function updateRecruiterConnectionStatus(
+  id: string,
+  connectionStatus: RecruiterConnectionStatus,
+): Promise<RecruiterPublic> {
+  const response = await fetch(`/api/career/recruiters/${id}/connection`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ connectionStatus }),
+  });
+  if (!response.ok) {
+    throw await parseError(response);
+  }
+  const body = (await response.json()) as { recruiter: RecruiterPublic };
+  return body.recruiter;
+}
+
+export async function patchRecruiter(
+  id: string,
+  patch: RecruiterPatchInput,
+): Promise<RecruiterPublic> {
+  const response = await fetch(`/api/career/recruiters/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(patch),
+  });
+  if (!response.ok) {
+    throw await parseError(response);
+  }
+  const body = (await response.json()) as { recruiter: RecruiterPublic };
+  return body.recruiter;
+}
+
+export async function scoreRecruiter(id: string): Promise<RecruiterPublic> {
+  const response = await fetch(`/api/career/recruiters/${id}/score`, { method: "POST" });
+  if (!response.ok) {
+    throw await parseError(response);
+  }
+  const body = (await response.json()) as { recruiter: RecruiterPublic };
+  return body.recruiter;
+}
+
+export async function generateOutreachMessage(
+  id: string,
+  provider?: TextProviderName,
+): Promise<OutreachMessage> {
+  const response = await fetch(`/api/career/recruiters/${id}/outreach`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ provider }),
+  });
+  if (!response.ok) {
+    throw await parseError(response);
+  }
+  const body = (await response.json()) as { message: OutreachMessage };
+  return body.message;
+}
+
+export async function deleteRecruiter(id: string): Promise<RecruiterPublic[]> {
+  const response = await fetch(`/api/career/recruiters/${id}`, { method: "DELETE" });
+  if (!response.ok) {
+    throw await parseError(response);
+  }
+  const body = (await response.json()) as { recruiters: RecruiterPublic[] };
+  return body.recruiters;
 }
 
 export async function deleteJob(id: string): Promise<JobPublic[]> {

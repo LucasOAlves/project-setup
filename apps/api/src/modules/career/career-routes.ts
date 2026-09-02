@@ -3,6 +3,9 @@ import {
   jobInputSchema,
   jobPatchInputSchema,
   jobStatusInputSchema,
+  recruiterConnectionStatusInputSchema,
+  recruiterInputSchema,
+  recruiterPatchInputSchema,
   resumeTailoringPlanSchema,
   textProviderSchema,
 } from "@studio/shared";
@@ -99,5 +102,66 @@ export async function registerCareerRoutes(
     await service.removeJob(id);
     const jobs = await service.listJobs();
     return { jobs };
+  });
+
+  app.get("/api/career/recruiters", async () => {
+    const recruiters = await service.listRecruiters();
+    return { recruiters };
+  });
+
+  app.post("/api/career/recruiters", async (request, reply) => {
+    const parsed = recruiterInputSchema.safeParse(request.body);
+    if (!parsed.success) {
+      throw validationError("Give the recruiter a company and a name.");
+    }
+    const recruiter = await service.createRecruiter(parsed.data);
+    return reply.code(201).send({ recruiter });
+  });
+
+  app.patch("/api/career/recruiters/:id/connection", async (request) => {
+    const { id } = request.params as { id: string };
+    const parsed = recruiterConnectionStatusInputSchema.safeParse(request.body);
+    if (!parsed.success) {
+      throw validationError("Invalid connection status.");
+    }
+    const recruiter = await service.updateRecruiterConnectionStatus(
+      id,
+      parsed.data.connectionStatus,
+    );
+    return { recruiter };
+  });
+
+  app.patch("/api/career/recruiters/:id", async (request) => {
+    const { id } = request.params as { id: string };
+    const parsed = recruiterPatchInputSchema.safeParse(request.body);
+    if (!parsed.success) {
+      throw validationError("Invalid recruiter update.");
+    }
+    const recruiter = await service.patchRecruiter(id, parsed.data);
+    return { recruiter };
+  });
+
+  app.post("/api/career/recruiters/:id/score", async (request) => {
+    const { id } = request.params as { id: string };
+    const recruiter = await service.scoreRecruiter(id);
+    return { recruiter };
+  });
+
+  app.post("/api/career/recruiters/:id/outreach", async (request) => {
+    const { id } = request.params as { id: string };
+    const body = (request.body ?? {}) as { provider?: string };
+    const provider = textProviderSchema.safeParse(body.provider);
+    const message = await service.generateOutreachMessage(
+      id,
+      provider.success ? provider.data : undefined,
+    );
+    return { message };
+  });
+
+  app.delete("/api/career/recruiters/:id", async (request) => {
+    const { id } = request.params as { id: string };
+    await service.removeRecruiter(id);
+    const recruiters = await service.listRecruiters();
+    return { recruiters };
   });
 }

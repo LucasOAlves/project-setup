@@ -27,6 +27,25 @@ function fakeCompany(overrides: Partial<Record<string, unknown>> = {}) {
   };
 }
 
+function fakeRecruiter(overrides: Partial<Record<string, unknown>> = {}) {
+  return {
+    id: "00000000-0000-4000-8000-000000000003",
+    companyId: "00000000-0000-4000-8000-000000000001",
+    relatedJobId: null,
+    name: "Alex Recruiter",
+    role: "Technical Recruiter",
+    linkedinUrl: "",
+    connectionStatus: "NOT_CONNECTED",
+    relevanceScore: null,
+    notes: "",
+    nextAction: "",
+    lastInteractionAt: null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    ...overrides,
+  };
+}
+
 function fakeJob(overrides: Partial<Record<string, unknown>> = {}) {
   return {
     id: "00000000-0000-4000-8000-000000000002",
@@ -320,4 +339,165 @@ test("generateResumeTailoringPlan rejects a model response that fails the schema
   );
 
   await assert.rejects(() => service.generateResumeTailoringPlan("job-1"));
+});
+
+test("createRecruiter rejects a recruiter for a company that does not exist", async () => {
+  const service = new CareerService(
+    {
+      async getCompany() {
+        return null;
+      },
+      async createRecruiter() {
+        assert.fail("must not insert a recruiter for a missing company");
+      },
+    } as never,
+    {} as never,
+    textMap(noTextCalls),
+    "openai",
+  );
+
+  await assert.rejects(() =>
+    service.createRecruiter({
+      companyId: "00000000-0000-4000-8000-000000000099",
+      relatedJobId: null,
+      name: "Alex Recruiter",
+      role: "",
+      linkedinUrl: "",
+      notes: "",
+      nextAction: "",
+    }),
+  );
+});
+
+test("createRecruiter rejects a relatedJobId that does not exist", async () => {
+  const service = new CareerService(
+    {
+      async getCompany() {
+        return fakeCompany();
+      },
+      async getJob() {
+        return null;
+      },
+      async createRecruiter() {
+        assert.fail("must not insert a recruiter linked to a missing job");
+      },
+    } as never,
+    {} as never,
+    textMap(noTextCalls),
+    "openai",
+  );
+
+  await assert.rejects(() =>
+    service.createRecruiter({
+      companyId: "00000000-0000-4000-8000-000000000001",
+      relatedJobId: "00000000-0000-4000-8000-000000000099",
+      name: "Alex Recruiter",
+      role: "",
+      linkedinUrl: "",
+      notes: "",
+      nextAction: "",
+    }),
+  );
+});
+
+test("scoreRecruiter combines role, company, and job-link signals and persists the score", async () => {
+  let persistedScore: number | undefined;
+  const service = new CareerService(
+    {
+      async getRecruiter() {
+        return fakeRecruiter({ role: "Technical Recruiter", relatedJobId: "job-1" });
+      },
+      async hasActiveJobAtCompany() {
+        return true;
+      },
+      async setRecruiterRelevanceScore(_id: string, score: number) {
+        persistedScore = score;
+        return fakeRecruiter({ relevanceScore: score });
+      },
+    } as never,
+    {} as never,
+    textMap(noTextCalls),
+    "openai",
+  );
+
+  const recruiter = await service.scoreRecruiter("recruiter-1");
+
+  assert.equal(recruiter.relevanceScore, 100);
+  assert.equal(persistedScore, 100);
+});
+
+test("patchRecruiter stamps lastInteractionAt when notes are saved", async () => {
+  let patch: unknown;
+  const service = new CareerService(
+    {
+      async patchRecruiter(_id: string, input: unknown) {
+        patch = input;
+        return fakeRecruiter({ notes: "Talked on the phone." });
+      },
+    } as never,
+    {} as never,
+    textMap(noTextCalls),
+    "openai",
+  );
+
+  await service.patchRecruiter("recruiter-1", { notes: "Talked on the phone." });
+
+  assert.deepEqual(patch, { notes: "Talked on the phone." });
+});
+
+test("generateOutreachMessage requires a saved profile", async () => {
+  const service = new CareerService(
+    {
+      async getRecruiter() {
+        return fakeRecruiter();
+      },
+      async getCompany() {
+        return fakeCompany();
+      },
+    } as never,
+    {
+      async getProfile() {
+        return null;
+      },
+    } as never,
+    textMap(noTextCalls),
+    "openai",
+  );
+
+  await assert.rejects(() => service.generateOutreachMessage("recruiter-1"));
+});
+
+test("generateOutreachMessage returns the model's structured draft", async () => {
+  const service = new CareerService(
+    {
+      async getRecruiter() {
+        return fakeRecruiter();
+      },
+      async getCompany() {
+        return fakeCompany();
+      },
+    } as never,
+    {
+      async getProfile() {
+        return { fullName: "Jordan Rivera", experiences: [] } as never;
+      },
+    } as never,
+    textMap({
+      async generateText() {
+        return {
+          text: JSON.stringify({
+            connectionNote: "Hi Alex, I'd love to connect about the platform role at Nimbus.",
+            message: "Hi Alex, following up on the Staff Platform Engineer role at Nimbus...",
+          }),
+          model: "test-model",
+        };
+      },
+    }),
+    "openai",
+  );
+
+  const message = await service.generateOutreachMessage("recruiter-1");
+
+  assert.ok(message.connectionNote.length > 0);
+  assert.ok(message.message.length > 0);
 });

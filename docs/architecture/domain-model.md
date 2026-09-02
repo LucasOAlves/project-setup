@@ -155,6 +155,22 @@ the tailored PDF is generated on demand and not stored; only the plan is round-t
 client back to server for export, and the server re-grounds it against the current profile
 rather than trusting the client's copy.
 
+## Recruiter (Career domain)
+
+Belongs to a `Company`; may optionally reference one `Job`. Name, role, LinkedIn URL,
+connection status (`NOT_CONNECTED`/`REQUESTED`/`CONNECTED`, always set by the user — nothing
+here reads real LinkedIn connection state), a deterministic `relevanceScore`
+(`recruiter-scoring.ts` — company match + role keywords + job link, same weighted-dimension
+shape as Job Fit), `notes`/`nextAction` (same append-only pattern as `Job`), and
+`lastInteractionAt`, auto-stamped whenever notes are saved. No separate interaction-log table
+in this slice — see career.ts's comment for why, and the same "split later if it proves too
+coarse" reasoning ADR-011 already applied to `Application`.
+
+Outreach messages (`OutreachMessage`: a connection note + a fuller message) are generated
+on demand, grounded only in real profile facts, and never persisted or sent — every send
+remains a manual, human action outside this app, per
+[ADR-012](../decisions/ADR-012-external-action-approval.md).
+
 ## Ephemeral
 
 - token streams

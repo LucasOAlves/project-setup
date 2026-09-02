@@ -210,6 +210,24 @@ export const jobs = pgTable("jobs", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+export const recruiters = pgTable("recruiters", {
+  id: uuid("id").primaryKey(),
+  companyId: uuid("company_id")
+    .notNull()
+    .references(() => companies.id, { onDelete: "cascade" }),
+  relatedJobId: uuid("related_job_id").references(() => jobs.id, { onDelete: "set null" }),
+  name: text("name").notNull(),
+  role: text("role").notNull().default(""),
+  linkedinUrl: text("linkedin_url").notNull().default(""),
+  connectionStatus: text("connection_status").notNull().default("NOT_CONNECTED"),
+  relevanceScore: integer("relevance_score"),
+  notes: text("notes").notNull().default(""),
+  nextAction: text("next_action").notNull().default(""),
+  lastInteractionAt: timestamp("last_interaction_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 export const contentPlanUploads = pgTable("content_plan_uploads", {
   id: uuid("id").primaryKey(),
   sourceFilename: text("source_filename").notNull(),

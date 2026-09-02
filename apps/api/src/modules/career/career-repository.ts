@@ -1,11 +1,12 @@
 import { randomUUID } from "node:crypto";
 import { desc, eq } from "drizzle-orm";
-import type { CompanyInput, JobInput, JobPatchInput } from "@studio/shared";
+import type { CompanyInput, JobInput, JobPatchInput, RecruiterInput, RecruiterPatchInput } from "@studio/shared";
 import type { Database } from "../../db/client.js";
-import { companies, jobs } from "../../db/schema.js";
+import { companies, jobs, recruiters } from "../../db/schema.js";
 
 export type CompanyRow = typeof companies.$inferSelect;
 export type JobRow = typeof jobs.$inferSelect;
+export type RecruiterRow = typeof recruiters.$inferSelect;
 
 export class CareerRepository {
   constructor(private readonly db: Database) {}
@@ -119,5 +120,79 @@ export class CareerRepository {
       .where(eq(jobs.id, id))
       .returning();
     return row ?? null;
+  }
+
+  async listRecruiters(): Promise<RecruiterRow[]> {
+    return this.db.select().from(recruiters).orderBy(desc(recruiters.createdAt));
+  }
+
+  async getRecruiter(id: string): Promise<RecruiterRow | null> {
+    const [row] = await this.db.select().from(recruiters).where(eq(recruiters.id, id)).limit(1);
+    return row ?? null;
+  }
+
+  async hasActiveJobAtCompany(companyId: string): Promise<boolean> {
+    const rows = await this.db.select().from(jobs).where(eq(jobs.companyId, companyId));
+    return rows.some((row) => row.status !== "REJECTED" && row.status !== "WITHDRAWN");
+  }
+
+  async createRecruiter(input: RecruiterInput): Promise<RecruiterRow> {
+    const [row] = await this.db
+      .insert(recruiters)
+      .values({
+        id: randomUUID(),
+        companyId: input.companyId,
+        relatedJobId: input.relatedJobId,
+        name: input.name,
+        role: input.role,
+        linkedinUrl: input.linkedinUrl,
+        notes: input.notes,
+        nextAction: input.nextAction,
+      })
+      .returning();
+    if (!row) {
+      throw new Error("recruiter insert failed");
+    }
+    return row;
+  }
+
+  async updateRecruiterConnectionStatus(
+    id: string,
+    connectionStatus: string,
+  ): Promise<RecruiterRow | null> {
+    const [row] = await this.db
+      .update(recruiters)
+      .set({ connectionStatus, updatedAt: new Date() })
+      .where(eq(recruiters.id, id))
+      .returning();
+    return row ?? null;
+  }
+
+  async patchRecruiter(id: string, patch: RecruiterPatchInput): Promise<RecruiterRow | null> {
+    const stampInteraction = patch.notes !== undefined;
+    const [row] = await this.db
+      .update(recruiters)
+      .set({
+        ...(patch.notes !== undefined ? { notes: patch.notes } : {}),
+        ...(patch.nextAction !== undefined ? { nextAction: patch.nextAction } : {}),
+        ...(stampInteraction ? { lastInteractionAt: new Date() } : {}),
+        updatedAt: new Date(),
+      })
+      .where(eq(recruiters.id, id))
+      .returning();
+    return row ?? null;
+  }
+
+  async setRecruiterRelevanceScore(id: string, relevanceScore: number): Promise<RecruiterRow | null> {
+    const [row] = await this.db
+      .update(recruiters)
+      .set({ relevanceScore, updatedAt: new Date() })
+      .where(eq(recruiters.id, id))
+      .returning();
+    return row ?? null;
+  }
+
+  async deleteRecruiter(id: string): Promise<void> {
+    await this.db.delete(recruiters).where(eq(recruiters.id, id));
   }
 }

@@ -3,6 +3,7 @@ import {
   JOB_EMPLOYMENT_TYPES,
   JOB_STATUSES,
   JOB_WORKPLACE_TYPES,
+  RECRUITER_CONNECTION_STATUSES,
   TEXT_PROVIDERS,
   TEXT_PROVIDER_LABELS,
   type CompanyPublic,
@@ -11,6 +12,9 @@ import {
   type JobPublic,
   type JobStatus,
   type JobWorkplaceType,
+  type OutreachMessage,
+  type RecruiterConnectionStatus,
+  type RecruiterPublic,
   type ResumeTailoringPlan,
   type TextProviderName,
 } from "@studio/shared";
@@ -18,17 +22,30 @@ import {
   computeJobFit,
   createCompany,
   createJob,
+  createRecruiter,
   deleteJob,
+  deleteRecruiter,
   downloadTailoredResume,
   fetchCompanies,
   fetchJobs,
+  fetchRecruiters,
+  generateOutreachMessage,
   generateResumeTailoringPlan,
   patchJob,
+  patchRecruiter,
+  scoreRecruiter,
   updateJobStatus,
+  updateRecruiterConnectionStatus,
   type ApiError,
 } from "./api";
 import { ProviderSelect } from "./ProviderSelect";
 import { TagInput } from "./TagInput";
+
+const CONNECTION_STATUS_LABELS: Record<RecruiterConnectionStatus, string> = {
+  NOT_CONNECTED: "Not connected",
+  REQUESTED: "Requested",
+  CONNECTED: "Connected",
+};
 
 const STATUS_LABELS: Record<JobStatus, string> = {
   SAVED: "Saved",
@@ -58,6 +75,14 @@ const emptyJobForm = () => ({
   technologies: [] as string[],
 });
 
+const emptyRecruiterForm = () => ({
+  companyId: "",
+  relatedJobId: "",
+  name: "",
+  role: "",
+  linkedinUrl: "",
+});
+
 export function CareerView() {
   const [companies, setCompanies] = useState<CompanyPublic[]>([]);
   const [jobs, setJobs] = useState<JobPublic[]>([]);
@@ -70,14 +95,21 @@ export function CareerView() {
   const [tailoringPlans, setTailoringPlans] = useState<Record<string, ResumeTailoringPlan>>({});
   const [tailoringJobId, setTailoringJobId] = useState<string | null>(null);
   const [tailoringProvider, setTailoringProvider] = useState<TextProviderName | "">("");
+  const [recruiters, setRecruiters] = useState<RecruiterPublic[]>([]);
+  const [recruiterForm, setRecruiterForm] = useState(emptyRecruiterForm());
+  const [scoringRecruiterId, setScoringRecruiterId] = useState<string | null>(null);
+  const [outreachRecruiterId, setOutreachRecruiterId] = useState<string | null>(null);
+  const [outreachMessages, setOutreachMessages] = useState<Record<string, OutreachMessage>>({});
+  const [outreachProvider, setOutreachProvider] = useState<TextProviderName | "">("");
 
   useEffect(() => {
     let cancelled = false;
-    Promise.all([fetchCompanies(), fetchJobs()])
-      .then(([existingCompanies, existingJobs]) => {
+    Promise.all([fetchCompanies(), fetchJobs(), fetchRecruiters()])
+      .then(([existingCompanies, existingJobs, existingRecruiters]) => {
         if (cancelled) return;
         setCompanies(existingCompanies);
         setJobs(existingJobs);
+        setRecruiters(existingRecruiters);
         setStatus("idle");
       })
       .catch((err: ApiError) => {
@@ -217,6 +249,87 @@ export function CareerView() {
     setError(null);
     try {
       setJobs(await deleteJob(id));
+    } catch (err) {
+      setError((err as ApiError).message);
+    }
+  }
+
+  async function addRecruiter() {
+    setError(null);
+    if (!recruiterForm.companyId || !recruiterForm.name.trim()) {
+      setError("Pick a company and give the contact a name.");
+      return;
+    }
+    setStatus("saving");
+    try {
+      const recruiter = await createRecruiter({
+        companyId: recruiterForm.companyId,
+        relatedJobId: recruiterForm.relatedJobId || null,
+        name: recruiterForm.name.trim(),
+        role: recruiterForm.role.trim(),
+        linkedinUrl: recruiterForm.linkedinUrl.trim(),
+        notes: "",
+        nextAction: "",
+      });
+      setRecruiters((current) => [recruiter, ...current]);
+      setRecruiterForm({ ...emptyRecruiterForm(), companyId: recruiterForm.companyId });
+    } catch (err) {
+      setError((err as ApiError).message);
+    } finally {
+      setStatus("idle");
+    }
+  }
+
+  async function changeConnectionStatus(id: string, next: RecruiterConnectionStatus) {
+    setError(null);
+    try {
+      const recruiter = await updateRecruiterConnectionStatus(id, next);
+      setRecruiters((current) => current.map((item) => (item.id === id ? recruiter : item)));
+    } catch (err) {
+      setError((err as ApiError).message);
+    }
+  }
+
+  async function saveRecruiterNotes(id: string, notes: string, nextAction: string) {
+    setError(null);
+    try {
+      const recruiter = await patchRecruiter(id, { notes, nextAction });
+      setRecruiters((current) => current.map((item) => (item.id === id ? recruiter : item)));
+    } catch (err) {
+      setError((err as ApiError).message);
+    }
+  }
+
+  async function scoreRecruiterRelevance(id: string) {
+    setError(null);
+    setScoringRecruiterId(id);
+    try {
+      const recruiter = await scoreRecruiter(id);
+      setRecruiters((current) => current.map((item) => (item.id === id ? recruiter : item)));
+    } catch (err) {
+      setError((err as ApiError).message);
+    } finally {
+      setScoringRecruiterId(null);
+    }
+  }
+
+  async function prepareOutreach(id: string) {
+    setError(null);
+    setOutreachRecruiterId(id);
+    try {
+      const message = await generateOutreachMessage(id, outreachProvider || undefined);
+      setOutreachMessages((current) => ({ ...current, [id]: message }));
+    } catch (err) {
+      setError((err as ApiError).message);
+    } finally {
+      setOutreachRecruiterId(null);
+    }
+  }
+
+  async function removeRecruiter(id: string) {
+    setError(null);
+    try {
+      setRecruiters(await deleteRecruiter(id));
     } catch (err) {
       setError((err as ApiError).message);
     }
@@ -429,6 +542,121 @@ export function CareerView() {
           ))}
         </div>
       )}
+
+      <h3>Recruiters &amp; contacts</h3>
+      <div className="grid-2">
+        <ProviderSelect
+          label="Outreach text provider"
+          value={outreachProvider}
+          onChange={setOutreachProvider}
+          options={TEXT_PROVIDERS}
+          labels={TEXT_PROVIDER_LABELS}
+        />
+      </div>
+      {companies.length > 0 ? (
+        <>
+          <div className="grid-2">
+            <label className="field">
+              Company
+              <select
+                value={recruiterForm.companyId}
+                onChange={(event) =>
+                  setRecruiterForm({ ...recruiterForm, companyId: event.target.value })
+                }
+              >
+                <option value="">Select a company…</option>
+                {companies.map((company) => (
+                  <option key={company.id} value={company.id}>
+                    {company.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="field">
+              Related job (optional)
+              <select
+                value={recruiterForm.relatedJobId}
+                onChange={(event) =>
+                  setRecruiterForm({ ...recruiterForm, relatedJobId: event.target.value })
+                }
+              >
+                <option value="">None</option>
+                {jobs
+                  .filter((job) => job.companyId === recruiterForm.companyId)
+                  .map((job) => (
+                    <option key={job.id} value={job.id}>
+                      {job.title}
+                    </option>
+                  ))}
+              </select>
+            </label>
+            <label className="field">
+              Name
+              <input
+                value={recruiterForm.name}
+                onChange={(event) =>
+                  setRecruiterForm({ ...recruiterForm, name: event.target.value })
+                }
+              />
+            </label>
+            <label className="field">
+              Role (optional)
+              <input
+                value={recruiterForm.role}
+                onChange={(event) =>
+                  setRecruiterForm({ ...recruiterForm, role: event.target.value })
+                }
+                placeholder="Technical Recruiter, Engineering Manager…"
+              />
+            </label>
+            <label className="field">
+              LinkedIn URL (optional)
+              <input
+                value={recruiterForm.linkedinUrl}
+                onChange={(event) =>
+                  setRecruiterForm({ ...recruiterForm, linkedinUrl: event.target.value })
+                }
+                placeholder="https://linkedin.com/in/…"
+              />
+            </label>
+          </div>
+          <div className="actions">
+            <button
+              className="btn primary"
+              type="button"
+              disabled={status === "saving"}
+              onClick={() => void addRecruiter()}
+            >
+              Add contact
+            </button>
+          </div>
+        </>
+      ) : null}
+
+      {recruiters.length === 0 ? (
+        <p className="empty">No recruiters or contacts tracked yet.</p>
+      ) : (
+        <div className="article-list">
+          {recruiters.map((recruiter) => (
+            <RecruiterCard
+              key={recruiter.id}
+              recruiter={recruiter}
+              companyName={companyName(recruiter.companyId)}
+              relatedJobTitle={jobs.find((job) => job.id === recruiter.relatedJobId)?.title ?? null}
+              scoring={scoringRecruiterId === recruiter.id}
+              outreaching={outreachRecruiterId === recruiter.id}
+              outreachMessage={outreachMessages[recruiter.id] ?? null}
+              onConnectionChange={(next) => void changeConnectionStatus(recruiter.id, next)}
+              onSaveNotes={(notes, nextAction) =>
+                void saveRecruiterNotes(recruiter.id, notes, nextAction)
+              }
+              onScore={() => void scoreRecruiterRelevance(recruiter.id)}
+              onPrepareOutreach={() => void prepareOutreach(recruiter.id)}
+              onDelete={() => void removeRecruiter(recruiter.id)}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -540,6 +768,102 @@ function JobCard({
           {JOB_STATUSES.map((option) => (
             <option key={option} value={option}>
               {STATUS_LABELS[option]}
+            </option>
+          ))}
+        </select>
+        <button
+          className="btn ghost"
+          type="button"
+          onClick={() => onSaveNotes(notes, nextAction)}
+        >
+          Save notes
+        </button>
+        <button className="btn ghost" type="button" onClick={onDelete}>
+          Delete
+        </button>
+      </div>
+    </article>
+  );
+}
+
+function RecruiterCard({
+  recruiter,
+  companyName,
+  relatedJobTitle,
+  scoring,
+  outreaching,
+  outreachMessage,
+  onConnectionChange,
+  onSaveNotes,
+  onScore,
+  onPrepareOutreach,
+  onDelete,
+}: {
+  recruiter: RecruiterPublic;
+  companyName: string;
+  relatedJobTitle: string | null;
+  scoring: boolean;
+  outreaching: boolean;
+  outreachMessage: OutreachMessage | null;
+  onConnectionChange: (next: RecruiterConnectionStatus) => void;
+  onSaveNotes: (notes: string, nextAction: string) => void;
+  onScore: () => void;
+  onPrepareOutreach: () => void;
+  onDelete: () => void;
+}) {
+  const [notes, setNotes] = useState(recruiter.notes);
+  const [nextAction, setNextAction] = useState(recruiter.nextAction);
+
+  return (
+    <article className="article-card">
+      <p className="eyebrow">
+        {companyName}
+        {recruiter.role ? ` · ${recruiter.role}` : ""}
+        {relatedJobTitle ? ` · re: ${relatedJobTitle}` : ""}
+        {recruiter.relevanceScore !== null ? ` · Relevance ${recruiter.relevanceScore}/100` : ""}
+      </p>
+      <h3>{recruiter.name}</h3>
+      {recruiter.linkedinUrl ? <p>{recruiter.linkedinUrl}</p> : null}
+
+      <div className="actions" style={{ justifyContent: "flex-start" }}>
+        <button className="btn ghost" type="button" disabled={scoring} onClick={onScore}>
+          {scoring ? "Scoring…" : "Score relevance"}
+        </button>
+        <button className="btn ghost" type="button" disabled={outreaching} onClick={onPrepareOutreach}>
+          {outreaching ? "Drafting…" : "Prepare outreach"}
+        </button>
+      </div>
+
+      {outreachMessage ? (
+        <div className="notice">
+          <p>
+            <strong>Connection note.</strong> {outreachMessage.connectionNote}
+          </p>
+          <p>
+            <strong>Message.</strong> {outreachMessage.message}
+          </p>
+          <p className="status">
+            Draft only — copy and send this yourself. Nothing here contacts the recruiter for you.
+          </p>
+        </div>
+      ) : null}
+
+      <label className="field full">
+        Notes
+        <textarea value={notes} onChange={(event) => setNotes(event.target.value)} />
+      </label>
+      <label className="field full">
+        Next action
+        <input value={nextAction} onChange={(event) => setNextAction(event.target.value)} />
+      </label>
+      <div className="actions">
+        <select
+          value={recruiter.connectionStatus}
+          onChange={(event) => onConnectionChange(event.target.value as RecruiterConnectionStatus)}
+        >
+          {RECRUITER_CONNECTION_STATUSES.map((option) => (
+            <option key={option} value={option}>
+              {CONNECTION_STATUS_LABELS[option]}
             </option>
           ))}
         </select>

@@ -5,12 +5,21 @@ import type {
   JobInput,
   JobPatchInput,
   JobPublic,
+  OutreachMessage,
+  RecruiterInput,
+  RecruiterPatchInput,
+  RecruiterPublic,
   ResumeTailoringPlan,
   TextProviderName,
 } from "@studio/shared";
-import { resumeTailoringPlanSchema } from "@studio/shared";
+import { outreachMessageSchema, resumeTailoringPlanSchema } from "@studio/shared";
 import { malformedAiOutput, notFound, validationError } from "../../app-error.js";
 import { parseJsonObject } from "../ai/parse-json.js";
+import {
+  OUTREACH_MESSAGE_PROMPT_VERSION,
+  OUTREACH_MESSAGE_SYSTEM_PROMPT,
+  buildOutreachMessageUserPrompt,
+} from "../ai/prompts/outreach-message.v1.js";
 import {
   RESUME_TAILORING_PROMPT_VERSION,
   RESUME_TAILORING_SYSTEM_PROMPT,
@@ -20,8 +29,9 @@ import { resolveTextProvider } from "../ai/resolve-provider.js";
 import type { TextGenerationProvider } from "../ai/text-generation-provider.js";
 import { buildResumePdf } from "../profile/resume-pdf.js";
 import type { ProfileService } from "../profile/profile-service.js";
-import type { CareerRepository, CompanyRow, JobRow } from "./career-repository.js";
+import type { CareerRepository, CompanyRow, JobRow, RecruiterRow } from "./career-repository.js";
 import { computeJobFit } from "./job-fit.js";
+import { scoreRecruiterRelevance } from "./recruiter-scoring.js";
 import { applyTailoringPlan, groundTailoringPlan } from "./resume-tailoring.js";
 
 const APPLIED_OR_LATER = new Set<string>([
@@ -165,6 +175,124 @@ export class CareerService {
     const result = computeJobFit(this.jobToPublic(jobRow), profile);
     await this.repo.setFitScore(id, result.overall);
     return result;
+  }
+
+  async listRecruiters(): Promise<RecruiterPublic[]> {
+    const rows = await this.repo.listRecruiters();
+    return rows.map((row) => this.recruiterToPublic(row));
+  }
+
+  async createRecruiter(input: RecruiterInput): Promise<RecruiterPublic> {
+    const company = await this.repo.getCompany(input.companyId);
+    if (!company) {
+      throw validationError("Add the company before adding a recruiter for it.");
+    }
+    if (input.relatedJobId) {
+      const job = await this.repo.getJob(input.relatedJobId);
+      if (!job) {
+        throw validationError("The related job does not exist.");
+      }
+    }
+    const row = await this.repo.createRecruiter(input);
+    return this.recruiterToPublic(row);
+  }
+
+  async updateRecruiterConnectionStatus(
+    id: string,
+    connectionStatus: string,
+  ): Promise<RecruiterPublic> {
+    const row = await this.repo.updateRecruiterConnectionStatus(id, connectionStatus);
+    if (!row) {
+      throw notFound("That recruiter does not exist.");
+    }
+    return this.recruiterToPublic(row);
+  }
+
+  async patchRecruiter(id: string, patch: RecruiterPatchInput): Promise<RecruiterPublic> {
+    const row = await this.repo.patchRecruiter(id, patch);
+    if (!row) {
+      throw notFound("That recruiter does not exist.");
+    }
+    return this.recruiterToPublic(row);
+  }
+
+  async removeRecruiter(id: string): Promise<void> {
+    await this.repo.deleteRecruiter(id);
+  }
+
+  async scoreRecruiter(id: string): Promise<RecruiterPublic> {
+    const recruiterRow = await this.repo.getRecruiter(id);
+    if (!recruiterRow) {
+      throw notFound("That recruiter does not exist.");
+    }
+    const companyHasTrackedJob = await this.repo.hasActiveJobAtCompany(recruiterRow.companyId);
+    const score = scoreRecruiterRelevance({
+      role: recruiterRow.role,
+      companyHasTrackedJob,
+      linkedToJob: recruiterRow.relatedJobId !== null,
+    });
+    const row = await this.repo.setRecruiterRelevanceScore(id, score);
+    if (!row) {
+      throw notFound("That recruiter does not exist.");
+    }
+    return this.recruiterToPublic(row);
+  }
+
+  async generateOutreachMessage(
+    id: string,
+    provider?: TextProviderName,
+  ): Promise<OutreachMessage> {
+    const recruiterRow = await this.repo.getRecruiter(id);
+    if (!recruiterRow) {
+      throw notFound("That recruiter does not exist.");
+    }
+    const [company, profile, job] = await Promise.all([
+      this.repo.getCompany(recruiterRow.companyId),
+      this.profiles.getProfile(),
+      recruiterRow.relatedJobId ? this.repo.getJob(recruiterRow.relatedJobId) : null,
+    ]);
+    if (!profile) {
+      throw notFound("Save a professional profile before preparing outreach.");
+    }
+
+    const prompt = {
+      purpose: OUTREACH_MESSAGE_PROMPT_VERSION,
+      system: OUTREACH_MESSAGE_SYSTEM_PROMPT,
+      user: buildOutreachMessageUserPrompt({
+        recruiterName: recruiterRow.name,
+        recruiterRole: recruiterRow.role,
+        companyName: company?.name ?? "",
+        job: job ? this.jobToPublic(job) : null,
+        profile,
+      }),
+    };
+    const text = resolveTextProvider(this.textProviders, this.defaultTextProvider, provider);
+    const generated = await text.generateText(prompt);
+    const parsed = outreachMessageSchema.safeParse(parseJsonObject(generated.text));
+    if (!parsed.success) {
+      throw malformedAiOutput(
+        "The model returned an outreach message that did not match the required structure.",
+      );
+    }
+    return parsed.data;
+  }
+
+  private recruiterToPublic(row: RecruiterRow): RecruiterPublic {
+    return {
+      id: row.id,
+      companyId: row.companyId,
+      relatedJobId: row.relatedJobId,
+      name: row.name,
+      role: row.role,
+      linkedinUrl: row.linkedinUrl,
+      connectionStatus: row.connectionStatus as RecruiterPublic["connectionStatus"],
+      relevanceScore: row.relevanceScore,
+      notes: row.notes,
+      nextAction: row.nextAction,
+      lastInteractionAt: row.lastInteractionAt?.toISOString() ?? null,
+      createdAt: row.createdAt.toISOString(),
+      updatedAt: row.updatedAt.toISOString(),
+    };
   }
 
   private companyToPublic(row: CompanyRow): CompanyPublic {

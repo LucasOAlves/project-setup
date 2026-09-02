@@ -65,6 +65,14 @@ tailored résumé" renders a PDF from that ordering. The model never writes new 
 it only re-ranks real profile content, and anything it invents or omits is corrected
 deterministically before export (see `apps/api/src/modules/career/resume-tailoring.ts`).
 
+Recruiters & contacts is a lightweight career CRM: add a contact under a company, optionally
+tie them to a tracked job, and track connection status (Not connected/Requested/Connected).
+"Score relevance" is a deterministic score (company match, role, job link — see
+`recruiter-scoring.ts`); "Prepare outreach" drafts a short connection note and message
+grounded only in real profile facts. Both outreach fields are always a draft you copy and
+send yourself — this app never sends a message, a connection request, or anything else on
+your behalf (see [ADR-012](docs/decisions/ADR-012-external-action-approval.md)).
+
 Without Docker:
 
 ```bash

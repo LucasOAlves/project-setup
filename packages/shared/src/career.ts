@@ -139,3 +139,52 @@ export const jobFitResultSchema = z.object({
   recommendation: z.enum(JOB_FIT_RECOMMENDATIONS),
 });
 export type JobFitResult = z.infer<typeof jobFitResultSchema>;
+
+// Networking / recruiter CRM (Slice 4). A Recruiter always belongs to a Company (the CRM
+// shape the mission asked for: Company -> Recruiters), and may optionally be tied to one
+// specific tracked Job. No separate interaction-log table yet — `notes` is an append-only
+// free-text log the same way Job.notes already works, and `lastInteractionAt` is stamped
+// automatically whenever notes are saved (see career-service.ts). A discrete interaction
+// table is a reasonable future split if that turns out to be too coarse — not built ahead of
+// that need, per ADR-011's standing bias against speculative modeling.
+export const RECRUITER_CONNECTION_STATUSES = ["NOT_CONNECTED", "REQUESTED", "CONNECTED"] as const;
+export type RecruiterConnectionStatus = (typeof RECRUITER_CONNECTION_STATUSES)[number];
+
+export const recruiterInputSchema = z.object({
+  companyId: z.string().uuid(),
+  relatedJobId: z.string().uuid().nullable().default(null),
+  name: z.string().trim().min(1).max(200),
+  role: z.string().trim().max(160).default(""),
+  linkedinUrl: z.string().trim().max(300).default(""),
+  notes: z.string().trim().max(4000).default(""),
+  nextAction: z.string().trim().max(300).default(""),
+});
+export type RecruiterInput = z.infer<typeof recruiterInputSchema>;
+
+export const recruiterPublicSchema = recruiterInputSchema.extend({
+  id: z.string().uuid(),
+  connectionStatus: z.enum(RECRUITER_CONNECTION_STATUSES),
+  relevanceScore: z.number().int().min(0).max(100).nullable(),
+  lastInteractionAt: z.string().nullable(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+export type RecruiterPublic = z.infer<typeof recruiterPublicSchema>;
+
+export const recruiterConnectionStatusInputSchema = z.object({
+  connectionStatus: z.enum(RECRUITER_CONNECTION_STATUSES),
+});
+
+export const recruiterPatchInputSchema = z.object({
+  notes: z.string().trim().max(4000).optional(),
+  nextAction: z.string().trim().max(300).optional(),
+});
+export type RecruiterPatchInput = z.infer<typeof recruiterPatchInputSchema>;
+
+// Outreach message drafting (PREPARE level per ADR-012 — always a draft the user copies out
+// and sends themselves; this codebase has no channel to send it through even if it wanted to).
+export const outreachMessageSchema = z.object({
+  connectionNote: z.string().trim().max(300),
+  message: z.string().trim().max(2000),
+});
+export type OutreachMessage = z.infer<typeof outreachMessageSchema>;
