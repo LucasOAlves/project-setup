@@ -130,9 +130,12 @@ if moved back below it — same pattern as `GeneratedPost.publishedAt`), `notes`
 `nextAction`.
 
 Deliberately **not** split into a separate `Application` entity in Slice 1 — see ADR-011's
-"Deferred" section. `source`/`externalId` exist now so a future `JobProvider` adapter
-(Greenhouse, Lever, LinkedIn) can populate `Job` rows without a schema change, even though
-Slice 1's only source is a person typing the data in (`source: "manual"`).
+"Deferred" section. `source`/`externalId` exist since Slice 1 specifically so a `JobProvider`
+adapter could populate `Job` rows without a schema change — that's now real:
+`GreenhouseJobProvider` sets `source: "greenhouse"` and `externalId` to Greenhouse's own job
+id, and `CareerRepository.getJobByExternalId()` makes re-importing the same board idempotent
+(already-tracked postings are skipped, never duplicated or overwritten). Manually-added jobs
+keep `source: "manual"`.
 
 `fitScore` (the overall Job Fit score, 0-100) is computed deterministically by
 `computeJobFit()` (`apps/api/src/modules/career/job-fit.ts`) against the saved `Profile` and
@@ -170,6 +173,28 @@ Outreach messages (`OutreachMessage`: a connection note + a fuller message) are 
 on demand, grounded only in real profile facts, and never persisted or sent — every send
 remains a manual, human action outside this app, per
 [ADR-012](../decisions/ADR-012-external-action-approval.md).
+
+## JobStatusEvent (Career domain)
+
+Insert-only history row, written every time a job is created or its status changes
+(`CareerRepository.recordJobStatusEvent`, private — callers never write it directly). Exists
+solely so Career Analytics can answer "did this job ever reach interview stage," which
+`Job.status` alone cannot: a job that interviewed and was later rejected has a current status
+of `REJECTED` with no trace of the interview unless the event history is checked. Never
+exposed as its own public entity or edited — analytics is the only reader.
+
+## CareerAnalytics (Career domain, computed)
+
+Not a table — `CareerService.getAnalytics()` aggregates `Job`/`Company`/`Recruiter`/
+`JobStatusEvent` rows deterministically on every request (`career-analytics.ts`, a pure
+function taking already-fetched rows so it stays trivially unit-testable). Every field is
+something this app can measure truthfully from data it actually holds — no vanity metric
+that would require data this app doesn't have (e.g. "recruiter responses" is left out
+entirely, since there's no real messaging channel to observe a response through). Rates
+(`applicationToInterviewRate`, `rejectionRate`) are `null`, never `0` or `NaN`, when there are
+zero applications to compute them from. `topGaps` is recomputed from `job-fit.ts` on the fly
+for every scored job rather than persisted, the same "cheap to recompute, not worth storing"
+choice already made for the Job Fit breakdown itself.
 
 ## Ephemeral
 

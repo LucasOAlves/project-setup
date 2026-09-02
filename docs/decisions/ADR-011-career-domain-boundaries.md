@@ -102,6 +102,33 @@ a migration and a backfill, but building the join now would mean maintaining two
 two write paths for a relationship that is 1:1 in every case this product currently has to
 serve. Judged as the right trade for Slice 1's actual scale.
 
+## Update — the deferred `JobProvider` port is now implemented (Greenhouse)
+
+The "Deferred" section above described `JobProvider` as a boundary drawn now, implemented
+later, once a second real source of jobs existed. That happened: `GreenhouseJobProvider`
+(`apps/api/src/modules/career/greenhouse-job-provider.ts`) is the first real adapter, following
+[ADR-002](./ADR-002-provider-isolation.md)'s exact shape — `JobProvider` (the port,
+`job-provider.ts`) names the capability ("list normalized job postings from a board"), never
+the vendor; `CareerService` depends on the interface, not on Greenhouse's JSON.
+
+This was chosen over LinkedIn deliberately, not just for convenience: Greenhouse's Job Board
+API (`boards-api.greenhouse.io`) is public, documented, and requires no authentication — no
+OAuth, no API key, nothing that would touch [ADR-003](./ADR-003-unauthenticated-workspace.md)'s
+still-unresolved auth question. LinkedIn has no equivalent self-serve API (job/people search
+requires a Talent Solutions partner relationship — a business process, not something this
+codebase can implement its way into), and the third-party "LinkedIn MCP" ecosystem researched
+during discovery relies overwhelmingly on ToS-violating scraping, which
+[ADR-012](./ADR-012-external-action-approval.md) and the original expansion brief both rule out.
+Greenhouse import stays a `SEARCH`-level `CareerAction` (ADR-012): read-only, runs
+automatically, no approval needed.
+
+`Job.source`/`externalId` (present since Slice 1 specifically for this) are what make imports
+idempotent: `CareerRepository.getJobByExternalId(source, externalId)` skips a posting already
+imported rather than re-creating or overwriting it, so re-running an import only adds what's
+genuinely new. Verified against GitLab's real, live Greenhouse board (231 real postings) —
+first import created all 231; a second import against the same board created zero and
+reported all 231 as already tracked.
+
 ## Related
 
 [ADR-002](./ADR-002-provider-isolation.md) (provider isolation pattern reused for the deferred

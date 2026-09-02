@@ -1,12 +1,13 @@
 import { randomUUID } from "node:crypto";
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import type { CompanyInput, JobInput, JobPatchInput, RecruiterInput, RecruiterPatchInput } from "@studio/shared";
 import type { Database } from "../../db/client.js";
-import { companies, jobs, recruiters } from "../../db/schema.js";
+import { companies, jobStatusEvents, jobs, recruiters } from "../../db/schema.js";
 
 export type CompanyRow = typeof companies.$inferSelect;
 export type JobRow = typeof jobs.$inferSelect;
 export type RecruiterRow = typeof recruiters.$inferSelect;
+export type JobStatusEventRow = typeof jobStatusEvents.$inferSelect;
 
 export class CareerRepository {
   constructor(private readonly db: Database) {}
@@ -77,6 +78,7 @@ export class CareerRepository {
     if (!row) {
       throw new Error("job insert failed");
     }
+    await this.recordJobStatusEvent(row.id, row.status);
     return row;
   }
 
@@ -93,7 +95,59 @@ export class CareerRepository {
       })
       .where(eq(jobs.id, id))
       .returning();
+    if (row) {
+      await this.recordJobStatusEvent(row.id, row.status);
+    }
     return row ?? null;
+  }
+
+  async getJobByExternalId(source: string, externalId: string): Promise<JobRow | null> {
+    const [row] = await this.db
+      .select()
+      .from(jobs)
+      .where(and(eq(jobs.source, source), eq(jobs.externalId, externalId)))
+      .limit(1);
+    return row ?? null;
+  }
+
+  async createImportedJob(input: {
+    companyId: string;
+    source: string;
+    externalId: string;
+    title: string;
+    url: string;
+    location: string;
+    description: string;
+  }): Promise<JobRow> {
+    const [row] = await this.db
+      .insert(jobs)
+      .values({
+        id: randomUUID(),
+        companyId: input.companyId,
+        source: input.source,
+        externalId: input.externalId,
+        title: input.title,
+        url: input.url,
+        location: input.location,
+        description: input.description,
+      })
+      .returning();
+    if (!row) {
+      throw new Error("job insert failed");
+    }
+    await this.recordJobStatusEvent(row.id, row.status);
+    return row;
+  }
+
+  private async recordJobStatusEvent(jobId: string, status: string): Promise<void> {
+    await this.db.insert(jobStatusEvents).values({ id: randomUUID(), jobId, status });
+  }
+
+  // For analytics: every status a job has ever passed through, not just its current one —
+  // Job.status alone can't tell you "did this job ever reach interview stage" once it later
+  // moves to REJECTED.
+  async listJobStatusEvents(): Promise<JobStatusEventRow[]> {
+    return this.db.select().from(jobStatusEvents);
   }
 
   async patchJob(id: string, patch: JobPatchInput): Promise<JobRow | null> {

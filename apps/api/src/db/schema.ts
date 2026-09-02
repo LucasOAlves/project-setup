@@ -228,6 +228,15 @@ export const recruiters = pgTable("recruiters", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+export const jobStatusEvents = pgTable("job_status_events", {
+  id: uuid("id").primaryKey(),
+  jobId: uuid("job_id")
+    .notNull()
+    .references(() => jobs.id, { onDelete: "cascade" }),
+  status: text("status").notNull(),
+  occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 export const contentPlanUploads = pgTable("content_plan_uploads", {
   id: uuid("id").primaryKey(),
   sourceFilename: text("source_filename").notNull(),

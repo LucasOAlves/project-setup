@@ -90,6 +90,11 @@ export const jobPublicSchema = jobInputSchema.extend({
 });
 export type JobPublic = z.infer<typeof jobPublicSchema>;
 
+export const greenhouseImportInputSchema = z.object({
+  boardToken: z.string().trim().min(1).max(100),
+});
+export type GreenhouseImportInput = z.infer<typeof greenhouseImportInputSchema>;
+
 export const jobStatusInputSchema = z.object({
   status: z.enum(JOB_STATUSES),
 });
@@ -180,6 +185,29 @@ export const recruiterPatchInputSchema = z.object({
   nextAction: z.string().trim().max(300).optional(),
 });
 export type RecruiterPatchInput = z.infer<typeof recruiterPatchInputSchema>;
+
+// Career Analytics (Slice 6): everything here is a deterministic aggregate over Job/Company/
+// Recruiter records already in the database — no AI call, no new user-facing input. A metric
+// only appears here if this app can measure it truthfully from data it actually has; see
+// career-service.ts's computeAnalytics() for what's deliberately left out (e.g. "recruiter
+// responses" isn't measurable without a real messaging channel, so it isn't reported).
+export const careerAnalyticsSchema = z.object({
+  totalJobs: z.number().int(),
+  jobsByStatus: z.record(z.enum(JOB_STATUSES), z.number().int()),
+  applications: z.number().int(),
+  interviewsReached: z.number().int(),
+  offers: z.number().int(),
+  applicationToInterviewRate: z.number().min(0).max(100).nullable(),
+  rejectionRate: z.number().min(0).max(100).nullable(),
+  averageFitScore: z.number().min(0).max(100).nullable(),
+  companiesTargeted: z.number().int(),
+  recruiterContacts: z.number().int(),
+  recruitersConnected: z.number().int(),
+  topTechnologies: z.array(z.object({ technology: z.string(), count: z.number().int() })).max(10),
+  topGaps: z.array(z.object({ skill: z.string(), count: z.number().int() })).max(10),
+  jobsBySource: z.record(z.enum(JOB_SOURCES), z.number().int()),
+});
+export type CareerAnalytics = z.infer<typeof careerAnalyticsSchema>;
 
 // Outreach message drafting (PREPARE level per ADR-012 — always a draft the user copies out
 // and sends themselves; this codebase has no channel to send it through even if it wanted to).

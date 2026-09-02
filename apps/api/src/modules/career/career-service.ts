@@ -1,10 +1,12 @@
 import type {
+  CareerAnalytics,
   CompanyInput,
   CompanyPublic,
   JobFitResult,
   JobInput,
   JobPatchInput,
   JobPublic,
+  JobStatus,
   OutreachMessage,
   RecruiterInput,
   RecruiterPatchInput,
@@ -29,7 +31,9 @@ import { resolveTextProvider } from "../ai/resolve-provider.js";
 import type { TextGenerationProvider } from "../ai/text-generation-provider.js";
 import { buildResumePdf } from "../profile/resume-pdf.js";
 import type { ProfileService } from "../profile/profile-service.js";
+import { computeCareerAnalytics } from "./career-analytics.js";
 import type { CareerRepository, CompanyRow, JobRow, RecruiterRow } from "./career-repository.js";
+import type { JobProvider } from "./job-provider.js";
 import { computeJobFit } from "./job-fit.js";
 import { scoreRecruiterRelevance } from "./recruiter-scoring.js";
 import { applyTailoringPlan, groundTailoringPlan } from "./resume-tailoring.js";
@@ -50,6 +54,7 @@ export class CareerService {
     private readonly profiles: ProfileService,
     private readonly textProviders: Record<TextProviderName, TextGenerationProvider>,
     private readonly defaultTextProvider: TextProviderName,
+    private readonly greenhouseProvider: JobProvider,
   ) {}
 
   async listCompanies(): Promise<CompanyPublic[]> {
@@ -74,6 +79,42 @@ export class CareerService {
     }
     const row = await this.repo.createJob(input);
     return this.jobToPublic(row);
+  }
+
+  // SEARCH-level per ADR-012: pulling public job postings is read-only and non-consequential,
+  // so it runs automatically, no approval step. Postings already imported (matched by
+  // source + externalId) are skipped, never re-created or overwritten — a re-sync only adds
+  // what's new.
+  async importFromGreenhouse(
+    companyId: string,
+    boardToken: string,
+  ): Promise<{ imported: JobPublic[]; skipped: number }> {
+    const company = await this.repo.getCompany(companyId);
+    if (!company) {
+      throw notFound("That company does not exist.");
+    }
+
+    const postings = await this.greenhouseProvider.listJobs(boardToken);
+    const imported: JobPublic[] = [];
+    let skipped = 0;
+    for (const posting of postings) {
+      const existing = await this.repo.getJobByExternalId("greenhouse", posting.externalId);
+      if (existing) {
+        skipped += 1;
+        continue;
+      }
+      const row = await this.repo.createImportedJob({
+        companyId,
+        source: "greenhouse",
+        externalId: posting.externalId,
+        title: posting.title,
+        url: posting.url,
+        location: posting.location,
+        description: posting.description,
+      });
+      imported.push(this.jobToPublic(row));
+    }
+    return { imported, skipped };
   }
 
   async updateJobStatus(id: string, status: string): Promise<JobPublic> {
@@ -275,6 +316,38 @@ export class CareerService {
       );
     }
     return parsed.data;
+  }
+
+  async getAnalytics(): Promise<CareerAnalytics> {
+    const [jobRows, recruiterRows, statusEventRows, profile] = await Promise.all([
+      this.repo.listJobs(),
+      this.repo.listRecruiters(),
+      this.repo.listJobStatusEvents(),
+      this.profiles.getProfile(),
+    ]);
+
+    const jobs = jobRows.map((row) => this.jobToPublic(row));
+    const recruiters = recruiterRows.map((row) => this.recruiterToPublic(row));
+
+    const statusEventsByJobId = new Map<string, Set<JobStatus>>();
+    for (const event of statusEventRows) {
+      const set = statusEventsByJobId.get(event.jobId) ?? new Set<JobStatus>();
+      set.add(event.status as JobStatus);
+      statusEventsByJobId.set(event.jobId, set);
+    }
+
+    // Gaps aren't persisted (only the overall fitScore is — see job-fit.ts's own docs) so
+    // they're recomputed here the same cheap, deterministic way the UI does on demand.
+    const gapsByJobId = new Map<string, string[]>();
+    if (profile) {
+      for (const job of jobs) {
+        if (job.fitScore !== null) {
+          gapsByJobId.set(job.id, computeJobFit(job, profile).gaps);
+        }
+      }
+    }
+
+    return computeCareerAnalytics({ jobs, recruiters, statusEventsByJobId, gapsByJobId });
   }
 
   private recruiterToPublic(row: RecruiterRow): RecruiterPublic {

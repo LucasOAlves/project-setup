@@ -10,6 +10,7 @@ import {
   type JobEmploymentType,
   type JobFitResult,
   type JobPublic,
+  type CareerAnalytics,
   type JobStatus,
   type JobWorkplaceType,
   type OutreachMessage,
@@ -26,11 +27,13 @@ import {
   deleteJob,
   deleteRecruiter,
   downloadTailoredResume,
+  fetchCareerAnalytics,
   fetchCompanies,
   fetchJobs,
   fetchRecruiters,
   generateOutreachMessage,
   generateResumeTailoringPlan,
+  importFromGreenhouse,
   patchJob,
   patchRecruiter,
   scoreRecruiter,
@@ -101,15 +104,19 @@ export function CareerView() {
   const [outreachRecruiterId, setOutreachRecruiterId] = useState<string | null>(null);
   const [outreachMessages, setOutreachMessages] = useState<Record<string, OutreachMessage>>({});
   const [outreachProvider, setOutreachProvider] = useState<TextProviderName | "">("");
+  const [analytics, setAnalytics] = useState<CareerAnalytics | null>(null);
+  const [importingCompanyId, setImportingCompanyId] = useState<string | null>(null);
+  const [importResults, setImportResults] = useState<Record<string, { imported: number; skipped: number }>>({});
 
   useEffect(() => {
     let cancelled = false;
-    Promise.all([fetchCompanies(), fetchJobs(), fetchRecruiters()])
-      .then(([existingCompanies, existingJobs, existingRecruiters]) => {
+    Promise.all([fetchCompanies(), fetchJobs(), fetchRecruiters(), fetchCareerAnalytics()])
+      .then(([existingCompanies, existingJobs, existingRecruiters, existingAnalytics]) => {
         if (cancelled) return;
         setCompanies(existingCompanies);
         setJobs(existingJobs);
         setRecruiters(existingRecruiters);
+        setAnalytics(existingAnalytics);
         setStatus("idle");
       })
       .catch((err: ApiError) => {
@@ -121,6 +128,16 @@ export function CareerView() {
       cancelled = true;
     };
   }, []);
+
+  async function refreshAnalytics() {
+    try {
+      setAnalytics(await fetchCareerAnalytics());
+    } catch {
+      // Analytics are a summary, not the primary action the user is taking — fail quietly and
+      // let the next natural refresh (or a manual reload) pick it up rather than surfacing a
+      // second error banner on top of whatever the user was actually doing.
+    }
+  }
 
   async function addCompany() {
     setError(null);
@@ -147,6 +164,24 @@ export function CareerView() {
       setError((err as ApiError).message);
     } finally {
       setStatus("idle");
+    }
+  }
+
+  async function importGreenhouse(companyId: string, boardToken: string) {
+    setError(null);
+    setImportingCompanyId(companyId);
+    try {
+      const result = await importFromGreenhouse(companyId, boardToken);
+      setJobs((current) => [...result.imported, ...current]);
+      setImportResults((current) => ({
+        ...current,
+        [companyId]: { imported: result.imported.length, skipped: result.skipped },
+      }));
+      void refreshAnalytics();
+    } catch (err) {
+      setError((err as ApiError).message);
+    } finally {
+      setImportingCompanyId(null);
     }
   }
 
@@ -178,6 +213,7 @@ export function CareerView() {
       });
       setJobs((current) => [job, ...current]);
       setJobForm({ ...emptyJobForm(), companyId: jobForm.companyId });
+      void refreshAnalytics();
     } catch (err) {
       setError((err as ApiError).message);
     } finally {
@@ -190,6 +226,7 @@ export function CareerView() {
     try {
       const job = await updateJobStatus(id, next);
       setJobs((current) => current.map((item) => (item.id === id ? job : item)));
+      void refreshAnalytics();
     } catch (err) {
       setError((err as ApiError).message);
     }
@@ -214,6 +251,7 @@ export function CareerView() {
       setJobs((current) =>
         current.map((item) => (item.id === id ? { ...item, fitScore: fit.overall } : item)),
       );
+      void refreshAnalytics();
     } catch (err) {
       setError((err as ApiError).message);
     } finally {
@@ -249,6 +287,7 @@ export function CareerView() {
     setError(null);
     try {
       setJobs(await deleteJob(id));
+      void refreshAnalytics();
     } catch (err) {
       setError((err as ApiError).message);
     }
@@ -273,6 +312,7 @@ export function CareerView() {
       });
       setRecruiters((current) => [recruiter, ...current]);
       setRecruiterForm({ ...emptyRecruiterForm(), companyId: recruiterForm.companyId });
+      void refreshAnalytics();
     } catch (err) {
       setError((err as ApiError).message);
     } finally {
@@ -285,6 +325,7 @@ export function CareerView() {
     try {
       const recruiter = await updateRecruiterConnectionStatus(id, next);
       setRecruiters((current) => current.map((item) => (item.id === id ? recruiter : item)));
+      void refreshAnalytics();
     } catch (err) {
       setError((err as ApiError).message);
     }
@@ -330,6 +371,7 @@ export function CareerView() {
     setError(null);
     try {
       setRecruiters(await deleteRecruiter(id));
+      void refreshAnalytics();
     } catch (err) {
       setError((err as ApiError).message);
     }
@@ -351,6 +393,8 @@ export function CareerView() {
         workspace works.
       </p>
       {error ? <div className="error">{error}</div> : null}
+
+      {analytics ? <AnalyticsPanel analytics={analytics} /> : null}
 
       <h3>Companies</h3>
       <div className="grid-2">
@@ -396,10 +440,13 @@ export function CareerView() {
       ) : (
         <div className="article-list">
           {companies.map((company) => (
-            <article className="article-card" key={company.id}>
-              <h3>{company.name}</h3>
-              {company.website ? <p>{company.website}</p> : null}
-            </article>
+            <CompanyCard
+              key={company.id}
+              company={company}
+              importing={importingCompanyId === company.id}
+              importResult={importResults[company.id] ?? null}
+              onImport={(boardToken) => void importGreenhouse(company.id, boardToken)}
+            />
           ))}
         </div>
       )}
@@ -878,6 +925,118 @@ function RecruiterCard({
           Delete
         </button>
       </div>
+    </article>
+  );
+}
+
+function AnalyticsPanel({ analytics }: { analytics: CareerAnalytics }) {
+  const tiles: Array<{ role: string; value: string; sub?: string }> = [
+    { role: "Jobs tracked", value: String(analytics.totalJobs) },
+    { role: "Applications", value: String(analytics.applications) },
+    { role: "Interviews reached", value: String(analytics.interviewsReached) },
+    { role: "Offers", value: String(analytics.offers) },
+    {
+      role: "Application → interview",
+      value: analytics.applicationToInterviewRate === null ? "—" : `${analytics.applicationToInterviewRate}%`,
+      sub: analytics.applications === 0 ? "no applications yet" : `of ${analytics.applications} applications`,
+    },
+    {
+      role: "Rejection rate",
+      value: analytics.rejectionRate === null ? "—" : `${analytics.rejectionRate}%`,
+      sub: "of applications",
+    },
+    {
+      role: "Average fit score",
+      value: analytics.averageFitScore === null ? "—" : `${analytics.averageFitScore}/100`,
+      sub: "of scored jobs",
+    },
+    { role: "Companies targeted", value: String(analytics.companiesTargeted) },
+    {
+      role: "Recruiter contacts",
+      value: String(analytics.recruiterContacts),
+      sub: `${analytics.recruitersConnected} connected`,
+    },
+  ];
+
+  return (
+    <section>
+      <h3>Overview</h3>
+      <div className="tech-stack-grid">
+        {tiles.map((tile) => (
+          <div className="tech-item" key={tile.role}>
+            <p className="role">{tile.role}</p>
+            <p className="name">{tile.value}</p>
+            {tile.sub ? <p className="ver">{tile.sub}</p> : null}
+          </div>
+        ))}
+      </div>
+
+      {analytics.topTechnologies.length > 0 || analytics.topGaps.length > 0 ? (
+        <div className="grid-2">
+          {analytics.topTechnologies.length > 0 ? (
+            <div>
+              <p className="eyebrow">Most requested technologies</p>
+              <p>
+                {analytics.topTechnologies
+                  .map((item) => `${item.technology} (${item.count})`)
+                  .join(" · ")}
+              </p>
+            </div>
+          ) : null}
+          {analytics.topGaps.length > 0 ? (
+            <div>
+              <p className="eyebrow">Most common gaps (scored jobs)</p>
+              <p>{analytics.topGaps.map((item) => `${item.skill} (${item.count})`).join(" · ")}</p>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+function CompanyCard({
+  company,
+  importing,
+  importResult,
+  onImport,
+}: {
+  company: CompanyPublic;
+  importing: boolean;
+  importResult: { imported: number; skipped: number } | null;
+  onImport: (boardToken: string) => void;
+}) {
+  const [boardToken, setBoardToken] = useState("");
+
+  return (
+    <article className="article-card">
+      <h3>{company.name}</h3>
+      {company.website ? <p>{company.website}</p> : null}
+
+      <label className="field">
+        Greenhouse board token
+        <input
+          value={boardToken}
+          onChange={(event) => setBoardToken(event.target.value)}
+          placeholder="e.g. nimbus (from boards.greenhouse.io/nimbus)"
+        />
+      </label>
+      <div className="actions" style={{ justifyContent: "flex-start" }}>
+        <button
+          className="btn ghost"
+          type="button"
+          disabled={importing || !boardToken.trim()}
+          onClick={() => onImport(boardToken.trim())}
+        >
+          {importing ? "Importing…" : "Import from Greenhouse"}
+        </button>
+      </div>
+      {importResult ? (
+        <p className="status">
+          Imported {importResult.imported} new job{importResult.imported === 1 ? "" : "s"}
+          {importResult.skipped > 0 ? ` · ${importResult.skipped} already tracked` : ""}
+        </p>
+      ) : null}
     </article>
   );
 }

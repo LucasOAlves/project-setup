@@ -11,6 +11,7 @@ import type { TextGenerationProvider } from "./modules/ai/text-generation-provid
 import { registerCareerRoutes } from "./modules/career/career-routes.js";
 import { CareerRepository } from "./modules/career/career-repository.js";
 import { CareerService } from "./modules/career/career-service.js";
+import { GreenhouseJobProvider } from "./modules/career/greenhouse-job-provider.js";
 import { registerContentPlanRoutes } from "./modules/content-plan/content-plan-routes.js";
 import { ContentPlanRepository } from "./modules/content-plan/content-plan-repository.js";
 import { ContentPlanService } from "./modules/content-plan/content-plan-service.js";
@@ -123,6 +124,7 @@ export async function buildApp(env: Env, db: Database) {
     profiles,
     textProviders,
     defaultTextProvider,
+    new GreenhouseJobProvider(),
   );
   const images = new ImageService(
     profiles,

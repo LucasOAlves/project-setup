@@ -8,6 +8,7 @@ import type {
   CustomTopicInput,
   CustomTopicPublic,
   ExperienceInput,
+  CareerAnalytics,
   ImageProviderName,
   ImagePublic,
   JobFitResult,
@@ -505,6 +506,15 @@ export async function updateCustomTopicStatus(
   return body.topics;
 }
 
+export async function fetchCareerAnalytics(): Promise<CareerAnalytics> {
+  const response = await fetch("/api/career/analytics");
+  if (!response.ok) {
+    throw await parseError(response);
+  }
+  const body = (await response.json()) as { analytics: CareerAnalytics };
+  return body.analytics;
+}
+
 export async function fetchCompanies(): Promise<CompanyPublic[]> {
   const response = await fetch("/api/career/companies");
   if (!response.ok) {
@@ -512,6 +522,21 @@ export async function fetchCompanies(): Promise<CompanyPublic[]> {
   }
   const body = (await response.json()) as { companies: CompanyPublic[] };
   return body.companies;
+}
+
+export async function importFromGreenhouse(
+  companyId: string,
+  boardToken: string,
+): Promise<{ imported: JobPublic[]; skipped: number }> {
+  const response = await fetch(`/api/career/companies/${companyId}/import/greenhouse`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ boardToken }),
+  });
+  if (!response.ok) {
+    throw await parseError(response);
+  }
+  return (await response.json()) as { imported: JobPublic[]; skipped: number };
 }
 
 export async function createCompany(input: CompanyInput): Promise<CompanyPublic> {

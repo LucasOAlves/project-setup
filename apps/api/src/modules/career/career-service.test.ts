@@ -85,7 +85,7 @@ test("createJob rejects a job for a company that does not exist", async () => {
     async createJob() {
       assert.fail("must not insert a job for a missing company");
     },
-  } as never, {} as never, textMap(noTextCalls), "openai");
+  } as never, {} as never, textMap(noTextCalls), "openai", { async listJobs() { assert.fail("must not call the job provider"); } });
 
   await assert.rejects(() =>
     service.createJob({
@@ -119,7 +119,7 @@ test("createJob persists a job once the company exists", async () => {
       inserted = input;
       return fakeJob();
     },
-  } as never, {} as never, textMap(noTextCalls), "openai");
+  } as never, {} as never, textMap(noTextCalls), "openai", { async listJobs() { assert.fail("must not call the job provider"); } });
 
   const job = await service.createJob({
     companyId: "00000000-0000-4000-8000-000000000001",
@@ -156,7 +156,7 @@ test("updateJobStatus stamps appliedAt the first time status reaches APPLIED-or-
       patch = input;
       return fakeJob({ status: "APPLIED", appliedAt: new Date() });
     },
-  } as never, {} as never, textMap(noTextCalls), "openai");
+  } as never, {} as never, textMap(noTextCalls), "openai", { async listJobs() { assert.fail("must not call the job provider"); } });
 
   const job = await service.updateJobStatus("job-1", "APPLIED");
 
@@ -175,7 +175,7 @@ test("updateJobStatus does not restamp appliedAt if already set", async () => {
       patch = input;
       return fakeJob({ status: "SCREENING", appliedAt: existingAppliedAt });
     },
-  } as never, {} as never, textMap(noTextCalls), "openai");
+  } as never, {} as never, textMap(noTextCalls), "openai", { async listJobs() { assert.fail("must not call the job provider"); } });
 
   await service.updateJobStatus("job-1", "SCREENING");
 
@@ -192,7 +192,7 @@ test("updateJobStatus clears appliedAt when moved back to a pre-application stag
       patch = input;
       return fakeJob({ status: "SHORTLISTED", appliedAt: null });
     },
-  } as never, {} as never, textMap(noTextCalls), "openai");
+  } as never, {} as never, textMap(noTextCalls), "openai", { async listJobs() { assert.fail("must not call the job provider"); } });
 
   await service.updateJobStatus("job-1", "SHORTLISTED");
 
@@ -204,7 +204,7 @@ test("updateJobStatus rejects an unknown job id", async () => {
     async getJob() {
       return null;
     },
-  } as never, {} as never, textMap(noTextCalls), "openai");
+  } as never, {} as never, textMap(noTextCalls), "openai", { async listJobs() { assert.fail("must not call the job provider"); } });
 
   await assert.rejects(() => service.updateJobStatus("missing", "APPLIED"));
 });
@@ -223,6 +223,7 @@ test("computeFit requires a saved profile", async () => {
     } as never,
     textMap(noTextCalls),
     "openai",
+    { async listJobs() { assert.fail("must not call the job provider"); } } as never,
   );
 
   await assert.rejects(() => service.computeFit("job-1"));
@@ -254,6 +255,7 @@ test("computeFit persists the overall score and returns the full breakdown", asy
     } as never,
     textMap(noTextCalls),
     "openai",
+    { async listJobs() { assert.fail("must not call the job provider"); } } as never,
   );
 
   const fit = await service.computeFit("job-1");
@@ -304,6 +306,7 @@ test("generateResumeTailoringPlan grounds the model's plan against the real prof
       },
     }),
     "openai",
+    { async listJobs() { assert.fail("must not call the job provider"); } } as never,
   );
 
   const plan = await service.generateResumeTailoringPlan("job-1");
@@ -336,6 +339,7 @@ test("generateResumeTailoringPlan rejects a model response that fails the schema
       },
     }),
     "openai",
+    { async listJobs() { assert.fail("must not call the job provider"); } } as never,
   );
 
   await assert.rejects(() => service.generateResumeTailoringPlan("job-1"));
@@ -354,6 +358,7 @@ test("createRecruiter rejects a recruiter for a company that does not exist", as
     {} as never,
     textMap(noTextCalls),
     "openai",
+    { async listJobs() { assert.fail("must not call the job provider"); } } as never,
   );
 
   await assert.rejects(() =>
@@ -385,6 +390,7 @@ test("createRecruiter rejects a relatedJobId that does not exist", async () => {
     {} as never,
     textMap(noTextCalls),
     "openai",
+    { async listJobs() { assert.fail("must not call the job provider"); } } as never,
   );
 
   await assert.rejects(() =>
@@ -418,6 +424,7 @@ test("scoreRecruiter combines role, company, and job-link signals and persists t
     {} as never,
     textMap(noTextCalls),
     "openai",
+    { async listJobs() { assert.fail("must not call the job provider"); } } as never,
   );
 
   const recruiter = await service.scoreRecruiter("recruiter-1");
@@ -438,6 +445,7 @@ test("patchRecruiter stamps lastInteractionAt when notes are saved", async () =>
     {} as never,
     textMap(noTextCalls),
     "openai",
+    { async listJobs() { assert.fail("must not call the job provider"); } } as never,
   );
 
   await service.patchRecruiter("recruiter-1", { notes: "Talked on the phone." });
@@ -462,6 +470,7 @@ test("generateOutreachMessage requires a saved profile", async () => {
     } as never,
     textMap(noTextCalls),
     "openai",
+    { async listJobs() { assert.fail("must not call the job provider"); } } as never,
   );
 
   await assert.rejects(() => service.generateOutreachMessage("recruiter-1"));
@@ -494,10 +503,109 @@ test("generateOutreachMessage returns the model's structured draft", async () =>
       },
     }),
     "openai",
+    { async listJobs() { assert.fail("must not call the job provider"); } } as never,
   );
 
   const message = await service.generateOutreachMessage("recruiter-1");
 
   assert.ok(message.connectionNote.length > 0);
   assert.ok(message.message.length > 0);
+});
+
+test("getAnalytics composes jobs, recruiters, and status history into one report", async () => {
+  const service = new CareerService(
+    {
+      async listJobs() {
+        return [fakeJob({ status: "APPLIED", appliedAt: new Date() })];
+      },
+      async listRecruiters() {
+        return [fakeRecruiter()];
+      },
+      async listJobStatusEvents() {
+        return [{ jobId: "00000000-0000-4000-8000-000000000002", status: "APPLIED" }];
+      },
+    } as never,
+    {
+      async getProfile() {
+        return null;
+      },
+    } as never,
+    textMap(noTextCalls),
+    "openai",
+    { async listJobs() { assert.fail("must not call the job provider"); } } as never,
+  );
+
+  const analytics = await service.getAnalytics();
+
+  assert.equal(analytics.totalJobs, 1);
+  assert.equal(analytics.applications, 1);
+  assert.equal(analytics.recruiterContacts, 1);
+});
+
+test("importFromGreenhouse rejects an unknown company without calling the provider", async () => {
+  const service = new CareerService(
+    {
+      async getCompany() {
+        return null;
+      },
+    } as never,
+    {} as never,
+    textMap(noTextCalls),
+    "openai",
+    { async listJobs() { assert.fail("must not call the job provider for a missing company"); } } as never,
+  );
+
+  await assert.rejects(() => service.importFromGreenhouse("company-1", "nimbus"));
+});
+
+test("importFromGreenhouse skips postings already imported and only creates the new ones", async () => {
+  const created: unknown[] = [];
+  const service = new CareerService(
+    {
+      async getCompany() {
+        return fakeCompany();
+      },
+      async getJobByExternalId(_source: string, externalId: string) {
+        return externalId === "1" ? fakeJob({ externalId: "1" }) : null;
+      },
+      async createImportedJob(input: unknown) {
+        created.push(input);
+        return fakeJob({ ...(input as Record<string, unknown>) });
+      },
+    } as never,
+    {} as never,
+    textMap(noTextCalls),
+    "openai",
+    {
+      async listJobs() {
+        return [
+          {
+            externalId: "1",
+            title: "Already imported",
+            url: "https://x/1",
+            location: "",
+            description: "",
+            companyNameFromSource: "Nimbus",
+            updatedAt: new Date(),
+          },
+          {
+            externalId: "2",
+            title: "New posting",
+            url: "https://x/2",
+            location: "",
+            description: "",
+            companyNameFromSource: "Nimbus",
+            updatedAt: new Date(),
+          },
+        ];
+      },
+    } as never,
+  );
+
+  const result = await service.importFromGreenhouse("company-1", "nimbus");
+
+  assert.equal(result.skipped, 1);
+  assert.equal(result.imported.length, 1);
+  assert.equal(created.length, 1);
+  assert.equal((created[0] as { externalId: string }).externalId, "2");
 });

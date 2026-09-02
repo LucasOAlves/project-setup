@@ -1,5 +1,6 @@
 import {
   companyInputSchema,
+  greenhouseImportInputSchema,
   jobInputSchema,
   jobPatchInputSchema,
   jobStatusInputSchema,
@@ -17,6 +18,11 @@ export async function registerCareerRoutes(
   app: FastifyInstance,
   service: CareerService,
 ): Promise<void> {
+  app.get("/api/career/analytics", async () => {
+    const analytics = await service.getAnalytics();
+    return { analytics };
+  });
+
   app.get("/api/career/companies", async () => {
     const companies = await service.listCompanies();
     return { companies };
@@ -29,6 +35,16 @@ export async function registerCareerRoutes(
     }
     const company = await service.createCompany(parsed.data);
     return reply.code(201).send({ company });
+  });
+
+  app.post("/api/career/companies/:id/import/greenhouse", async (request) => {
+    const { id } = request.params as { id: string };
+    const parsed = greenhouseImportInputSchema.safeParse(request.body);
+    if (!parsed.success) {
+      throw validationError("A Greenhouse board token is required.");
+    }
+    const result = await service.importFromGreenhouse(id, parsed.data.boardToken);
+    return result;
   });
 
   app.get("/api/career/jobs", async () => {

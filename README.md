@@ -73,6 +73,22 @@ grounded only in real profile facts. Both outreach fields are always a draft you
 send yourself — this app never sends a message, a connection request, or anything else on
 your behalf (see [ADR-012](docs/decisions/ADR-012-external-action-approval.md)).
 
+Greenhouse import is available on each tracked company: enter that company's Greenhouse board
+token (the slug in `boards.greenhouse.io/<token>`) and "Import from Greenhouse" pulls every
+open posting from that board's real, public, unauthenticated Job Board API — no OAuth, no
+LinkedIn. Re-running an import only adds postings not already tracked (matched by source +
+external id); nothing is re-created or overwritten. See
+[ADR-011](docs/decisions/ADR-011-career-domain-boundaries.md)'s update note for why Greenhouse,
+not LinkedIn, is this project's first real job provider.
+
+Career Analytics is the "Overview" panel at the top of the Career step: jobs tracked,
+applications, interviews reached, offers, application→interview rate, rejection rate,
+average fit score, companies targeted, recruiter contacts, most requested technologies, and
+most common fit gaps — all computed deterministically from what's actually tracked, refreshed
+after every action that could change them. Interview/offer counts use a full status-history
+log (`job_status_events`), not just each job's current status, so a job that reached
+interview and was later marked rejected still counts as having reached interview.
+
 Without Docker:
 
 ```bash
