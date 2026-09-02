@@ -3,24 +3,31 @@ import {
   JOB_EMPLOYMENT_TYPES,
   JOB_STATUSES,
   JOB_WORKPLACE_TYPES,
+  TEXT_PROVIDERS,
+  TEXT_PROVIDER_LABELS,
   type CompanyPublic,
   type JobEmploymentType,
   type JobFitResult,
   type JobPublic,
   type JobStatus,
   type JobWorkplaceType,
+  type ResumeTailoringPlan,
+  type TextProviderName,
 } from "@studio/shared";
 import {
   computeJobFit,
   createCompany,
   createJob,
   deleteJob,
+  downloadTailoredResume,
   fetchCompanies,
   fetchJobs,
+  generateResumeTailoringPlan,
   patchJob,
   updateJobStatus,
   type ApiError,
 } from "./api";
+import { ProviderSelect } from "./ProviderSelect";
 import { TagInput } from "./TagInput";
 
 const STATUS_LABELS: Record<JobStatus, string> = {
@@ -60,6 +67,9 @@ export function CareerView() {
   const [jobForm, setJobForm] = useState(emptyJobForm());
   const [fitResults, setFitResults] = useState<Record<string, JobFitResult>>({});
   const [scoringJobId, setScoringJobId] = useState<string | null>(null);
+  const [tailoringPlans, setTailoringPlans] = useState<Record<string, ResumeTailoringPlan>>({});
+  const [tailoringJobId, setTailoringJobId] = useState<string | null>(null);
+  const [tailoringProvider, setTailoringProvider] = useState<TextProviderName | "">("");
 
   useEffect(() => {
     let cancelled = false;
@@ -179,6 +189,30 @@ export function CareerView() {
     }
   }
 
+  async function tailorResume(id: string) {
+    setError(null);
+    setTailoringJobId(id);
+    try {
+      const plan = await generateResumeTailoringPlan(id, tailoringProvider || undefined);
+      setTailoringPlans((current) => ({ ...current, [id]: plan }));
+    } catch (err) {
+      setError((err as ApiError).message);
+    } finally {
+      setTailoringJobId(null);
+    }
+  }
+
+  async function downloadTailored(id: string) {
+    setError(null);
+    const plan = tailoringPlans[id];
+    if (!plan) return;
+    try {
+      await downloadTailoredResume(id, plan);
+    } catch (err) {
+      setError((err as ApiError).message);
+    }
+  }
+
   async function removeJob(id: string) {
     setError(null);
     try {
@@ -258,6 +292,15 @@ export function CareerView() {
       )}
 
       <h3>Jobs</h3>
+      <div className="grid-2">
+        <ProviderSelect
+          label="Résumé tailoring text provider"
+          value={tailoringProvider}
+          onChange={setTailoringProvider}
+          options={TEXT_PROVIDERS}
+          labels={TEXT_PROVIDER_LABELS}
+        />
+      </div>
       {companies.length > 0 ? (
         <>
           <div className="grid-2">
@@ -374,10 +417,14 @@ export function CareerView() {
               companyName={companyName(job.companyId)}
               fit={fitResults[job.id] ?? null}
               scoring={scoringJobId === job.id}
+              tailoringPlan={tailoringPlans[job.id] ?? null}
+              tailoring={tailoringJobId === job.id}
               onStatusChange={(next) => void markStatus(job.id, next)}
               onSaveNotes={(notes, nextAction) => void saveNotes(job.id, notes, nextAction)}
               onDelete={() => void removeJob(job.id)}
               onScoreFit={() => void scoreFit(job.id)}
+              onTailorResume={() => void tailorResume(job.id)}
+              onDownloadTailored={() => void downloadTailored(job.id)}
             />
           ))}
         </div>
@@ -398,19 +445,27 @@ function JobCard({
   companyName,
   fit,
   scoring,
+  tailoringPlan,
+  tailoring,
   onStatusChange,
   onSaveNotes,
   onDelete,
   onScoreFit,
+  onTailorResume,
+  onDownloadTailored,
 }: {
   job: JobPublic;
   companyName: string;
   fit: JobFitResult | null;
   scoring: boolean;
+  tailoringPlan: ResumeTailoringPlan | null;
+  tailoring: boolean;
   onStatusChange: (next: JobStatus) => void;
   onSaveNotes: (notes: string, nextAction: string) => void;
   onDelete: () => void;
   onScoreFit: () => void;
+  onTailorResume: () => void;
+  onDownloadTailored: () => void;
 }) {
   const [notes, setNotes] = useState(job.notes);
   const [nextAction, setNextAction] = useState(job.nextAction);
@@ -430,7 +485,24 @@ function JobCard({
         <button className="btn ghost" type="button" disabled={scoring} onClick={onScoreFit}>
           {scoring ? "Scoring…" : job.fitScore !== null ? "Rescore fit" : "Score fit"}
         </button>
+        <button className="btn ghost" type="button" disabled={tailoring} onClick={onTailorResume}>
+          {tailoring ? "Tailoring…" : "Tailor résumé"}
+        </button>
+        {tailoringPlan ? (
+          <button className="btn ghost" type="button" onClick={onDownloadTailored}>
+            Download tailored résumé
+          </button>
+        ) : null}
       </div>
+
+      {tailoringPlan ? (
+        <div className="notice">
+          <p>{tailoringPlan.rationale}</p>
+          <p className="status">
+            Emphasizing: {tailoringPlan.topSkillsOrder.slice(0, 5).join(", ")}
+          </p>
+        </div>
+      ) : null}
 
       {fit ? (
         <div className="notice">

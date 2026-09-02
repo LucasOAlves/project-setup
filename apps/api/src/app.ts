@@ -118,7 +118,12 @@ export async function buildApp(env: Env, db: Database) {
     opportunities,
     new CustomTopicRepository(db),
   );
-  const career = new CareerService(new CareerRepository(db), profiles);
+  const career = new CareerService(
+    new CareerRepository(db),
+    profiles,
+    textProviders,
+    defaultTextProvider,
+  );
   const images = new ImageService(
     profiles,
     personas,

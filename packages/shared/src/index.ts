@@ -135,6 +135,7 @@ export {
   jobPatchInputSchema,
   jobPublicSchema,
   jobStatusInputSchema,
+  resumeTailoringPlanSchema,
   type CompanyInput,
   type CompanyPublic,
   type JobEmploymentType,
@@ -147,6 +148,7 @@ export {
   type JobSource,
   type JobStatus,
   type JobWorkplaceType,
+  type ResumeTailoringPlan,
 } from "./career.js";
 export {
   CONTENT_PLAN_FORMATS,

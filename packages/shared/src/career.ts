@@ -115,6 +115,22 @@ export const jobFitDimensionsSchema = z.object({
 });
 export type JobFitDimensions = z.infer<typeof jobFitDimensionsSchema>;
 
+// Resume tailoring: the model only ever RE-ORDERS existing profile content (which experience
+// leads, which skills are emphasized) — it never writes new prose. See
+// apps/api/src/modules/career/resume-tailoring.ts for the grounding step that enforces this
+// regardless of what the model returns (unknown ids are dropped; anything real the model
+// forgot to mention is appended, never silently hidden).
+export const resumeTailoringPlanSchema = z.object({
+  rationale: z.string().trim().max(600),
+  // Deliberately not `.uuid()` — a model that hallucinates an id can return any string shape;
+  // the grounding step (resume-tailoring.ts) is what actually enforces membership in the real
+  // profile, so the schema only needs to guard size/type, not format.
+  experienceOrder: z.array(z.string().min(1).max(100)).max(20),
+  topSkillsOrder: z.array(z.string().trim().max(80)).max(30),
+  technologiesOrder: z.array(z.string().trim().max(80)).max(50),
+});
+export type ResumeTailoringPlan = z.infer<typeof resumeTailoringPlanSchema>;
+
 export const jobFitResultSchema = z.object({
   overall: z.number().int().min(0).max(100),
   dimensions: jobFitDimensionsSchema,

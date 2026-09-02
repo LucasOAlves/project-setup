@@ -5,11 +5,24 @@ import type {
   JobInput,
   JobPatchInput,
   JobPublic,
+  ResumeTailoringPlan,
+  TextProviderName,
 } from "@studio/shared";
-import { notFound, validationError } from "../../app-error.js";
+import { resumeTailoringPlanSchema } from "@studio/shared";
+import { malformedAiOutput, notFound, validationError } from "../../app-error.js";
+import { parseJsonObject } from "../ai/parse-json.js";
+import {
+  RESUME_TAILORING_PROMPT_VERSION,
+  RESUME_TAILORING_SYSTEM_PROMPT,
+  buildResumeTailoringUserPrompt,
+} from "../ai/prompts/resume-tailoring.v1.js";
+import { resolveTextProvider } from "../ai/resolve-provider.js";
+import type { TextGenerationProvider } from "../ai/text-generation-provider.js";
+import { buildResumePdf } from "../profile/resume-pdf.js";
 import type { ProfileService } from "../profile/profile-service.js";
 import type { CareerRepository, CompanyRow, JobRow } from "./career-repository.js";
 import { computeJobFit } from "./job-fit.js";
+import { applyTailoringPlan, groundTailoringPlan } from "./resume-tailoring.js";
 
 const APPLIED_OR_LATER = new Set<string>([
   "APPLIED",
@@ -25,6 +38,8 @@ export class CareerService {
   constructor(
     private readonly repo: CareerRepository,
     private readonly profiles: ProfileService,
+    private readonly textProviders: Record<TextProviderName, TextGenerationProvider>,
+    private readonly defaultTextProvider: TextProviderName,
   ) {}
 
   async listCompanies(): Promise<CompanyPublic[]> {
@@ -81,6 +96,60 @@ export class CareerService {
 
   async removeJob(id: string): Promise<void> {
     await this.repo.deleteJob(id);
+  }
+
+  async generateResumeTailoringPlan(
+    id: string,
+    provider?: TextProviderName,
+  ): Promise<ResumeTailoringPlan> {
+    const jobRow = await this.repo.getJob(id);
+    if (!jobRow) {
+      throw notFound("That job does not exist.");
+    }
+    const profile = await this.profiles.getProfile();
+    if (!profile) {
+      throw notFound("Save a professional profile before tailoring a résumé.");
+    }
+
+    const job = this.jobToPublic(jobRow);
+    const prompt = {
+      purpose: RESUME_TAILORING_PROMPT_VERSION,
+      system: RESUME_TAILORING_SYSTEM_PROMPT,
+      user: buildResumeTailoringUserPrompt(job, profile),
+    };
+    const text = resolveTextProvider(this.textProviders, this.defaultTextProvider, provider);
+    const generated = await text.generateText(prompt);
+    const parsed = resumeTailoringPlanSchema.safeParse(parseJsonObject(generated.text));
+    if (!parsed.success) {
+      throw malformedAiOutput(
+        "The model returned a résumé tailoring plan that did not match the required structure.",
+      );
+    }
+
+    return groundTailoringPlan(parsed.data, profile);
+  }
+
+  async exportTailoredResume(id: string, plan: ResumeTailoringPlan): Promise<Buffer> {
+    const jobRow = await this.repo.getJob(id);
+    if (!jobRow) {
+      throw notFound("That job does not exist.");
+    }
+    const profile = await this.profiles.getProfile();
+    if (!profile) {
+      throw notFound("Save a professional profile before exporting a résumé.");
+    }
+
+    const parsed = resumeTailoringPlanSchema.safeParse(plan);
+    if (!parsed.success) {
+      throw validationError("The résumé tailoring plan payload is invalid.");
+    }
+
+    // Never trust the client's copy of the plan blindly — re-ground it against the current
+    // profile the same way the plan was grounded when it was first generated, in case the
+    // profile changed since, or the payload was tampered with.
+    const grounded = groundTailoringPlan(parsed.data, profile);
+    const tailoredProfile = applyTailoringPlan(profile, grounded);
+    return buildResumePdf(tailoredProfile);
   }
 
   async computeFit(id: string): Promise<JobFitResult> {

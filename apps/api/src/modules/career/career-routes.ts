@@ -3,6 +3,8 @@ import {
   jobInputSchema,
   jobPatchInputSchema,
   jobStatusInputSchema,
+  resumeTailoringPlanSchema,
+  textProviderSchema,
 } from "@studio/shared";
 import type { FastifyInstance } from "fastify";
 import { validationError } from "../../app-error.js";
@@ -64,6 +66,32 @@ export async function registerCareerRoutes(
     const { id } = request.params as { id: string };
     const fit = await service.computeFit(id);
     return { fit };
+  });
+
+  app.post("/api/career/jobs/:id/resume-tailoring", async (request) => {
+    const { id } = request.params as { id: string };
+    const body = (request.body ?? {}) as { provider?: string };
+    const provider = textProviderSchema.safeParse(body.provider);
+    const plan = await service.generateResumeTailoringPlan(
+      id,
+      provider.success ? provider.data : undefined,
+    );
+    return { plan };
+  });
+
+  app.post("/api/career/jobs/:id/resume-tailoring/export", async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const parsed = resumeTailoringPlanSchema.safeParse(
+      (request.body as { plan?: unknown } | undefined)?.plan,
+    );
+    if (!parsed.success) {
+      throw validationError("A résumé tailoring plan is required.");
+    }
+    const pdf = await service.exportTailoredResume(id, parsed.data);
+    return reply
+      .header("Content-Type", "application/pdf")
+      .header("Content-Disposition", "attachment; filename=\"tailored-resume.pdf\"")
+      .send(pdf);
   });
 
   app.delete("/api/career/jobs/:id", async (request) => {

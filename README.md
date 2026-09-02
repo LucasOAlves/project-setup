@@ -59,6 +59,12 @@ score — overall plus a technical/seniority/architecture/leadership breakdown, 
 strengths, and concrete gaps. No AI call is involved; see
 [`.skills/job-fit-analysis`](.skills/job-fit-analysis/SKILL.md) for the scoring rules.
 
+Résumé tailoring is available on each tracked job: "Tailor résumé" asks the model which of
+your *existing* experiences and skills to lead with for that specific job, then "Download
+tailored résumé" renders a PDF from that ordering. The model never writes new resume prose —
+it only re-ranks real profile content, and anything it invents or omits is corrected
+deterministically before export (see `apps/api/src/modules/career/resume-tailoring.ts`).
+
 Without Docker:
 
 ```bash

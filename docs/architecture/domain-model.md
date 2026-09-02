@@ -142,6 +142,19 @@ rules (technical, seniority, architecture, leadership) and why no AI call is inv
 the overall number is persisted; the full breakdown (strengths, gaps, per-dimension scores)
 is cheap to recompute and is not stored as its own row.
 
+## ResumeTailoringPlan (Career domain, ephemeral)
+
+Not persisted. `CareerService.generateResumeTailoringPlan()` asks the model to rank a job's
+`profile.experiences` (by id) and `topSkills`/`technologies` (by string) for relevance to one
+job — never to write new prose. `resume-tailoring.ts`'s `groundTailoringPlan()` then
+deterministically drops any id/string the model returned that doesn't exist in the real
+profile, and appends anything real the model left out, so the plan can only ever be a
+reordering of true content (same "draft, grounded before use" posture as ADR-010).
+`applyTailoringPlan()` + the existing `buildResumePdf()` (no new PDF code) render the export —
+the tailored PDF is generated on demand and not stored; only the plan is round-tripped from
+client back to server for export, and the server re-grounds it against the current profile
+rather than trusting the client's copy.
+
 ## Ephemeral
 
 - token streams

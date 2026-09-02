@@ -16,6 +16,7 @@ import type {
   JobPublic,
   JobStatus,
   OpportunitySetPublic,
+  ResumeTailoringPlan,
   PersonaPublic,
   PostHistoryPublic,
   PostHistoryQuery,
@@ -576,6 +577,43 @@ export async function computeJobFit(id: string): Promise<JobFitResult> {
   }
   const body = (await response.json()) as { fit: JobFitResult };
   return body.fit;
+}
+
+export async function generateResumeTailoringPlan(
+  id: string,
+  provider?: TextProviderName,
+): Promise<ResumeTailoringPlan> {
+  const response = await fetch(`/api/career/jobs/${id}/resume-tailoring`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ provider }),
+  });
+  if (!response.ok) {
+    throw await parseError(response);
+  }
+  const body = (await response.json()) as { plan: ResumeTailoringPlan };
+  return body.plan;
+}
+
+export async function downloadTailoredResume(
+  jobId: string,
+  plan: ResumeTailoringPlan,
+): Promise<void> {
+  const response = await fetch(`/api/career/jobs/${jobId}/resume-tailoring/export`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ plan }),
+  });
+  if (!response.ok) {
+    throw await parseError(response);
+  }
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = "tailored-resume.pdf";
+  link.click();
+  URL.revokeObjectURL(url);
 }
 
 export async function deleteJob(id: string): Promise<JobPublic[]> {

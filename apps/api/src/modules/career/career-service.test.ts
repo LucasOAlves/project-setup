@@ -1,6 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import type { TextGenerationProvider } from "../ai/text-generation-provider.ts";
 import { CareerService } from "./career-service.ts";
+
+const textMap = (text: TextGenerationProvider) => ({ openai: text, anthropic: text }) as const;
+const noTextCalls: TextGenerationProvider = {
+  async generateText() {
+    assert.fail("must not call the model");
+  },
+};
 
 function fakeCompany(overrides: Partial<Record<string, unknown>> = {}) {
   return {
@@ -58,7 +66,7 @@ test("createJob rejects a job for a company that does not exist", async () => {
     async createJob() {
       assert.fail("must not insert a job for a missing company");
     },
-  } as never, {} as never);
+  } as never, {} as never, textMap(noTextCalls), "openai");
 
   await assert.rejects(() =>
     service.createJob({
@@ -92,7 +100,7 @@ test("createJob persists a job once the company exists", async () => {
       inserted = input;
       return fakeJob();
     },
-  } as never, {} as never);
+  } as never, {} as never, textMap(noTextCalls), "openai");
 
   const job = await service.createJob({
     companyId: "00000000-0000-4000-8000-000000000001",
@@ -129,7 +137,7 @@ test("updateJobStatus stamps appliedAt the first time status reaches APPLIED-or-
       patch = input;
       return fakeJob({ status: "APPLIED", appliedAt: new Date() });
     },
-  } as never, {} as never);
+  } as never, {} as never, textMap(noTextCalls), "openai");
 
   const job = await service.updateJobStatus("job-1", "APPLIED");
 
@@ -148,7 +156,7 @@ test("updateJobStatus does not restamp appliedAt if already set", async () => {
       patch = input;
       return fakeJob({ status: "SCREENING", appliedAt: existingAppliedAt });
     },
-  } as never, {} as never);
+  } as never, {} as never, textMap(noTextCalls), "openai");
 
   await service.updateJobStatus("job-1", "SCREENING");
 
@@ -165,7 +173,7 @@ test("updateJobStatus clears appliedAt when moved back to a pre-application stag
       patch = input;
       return fakeJob({ status: "SHORTLISTED", appliedAt: null });
     },
-  } as never, {} as never);
+  } as never, {} as never, textMap(noTextCalls), "openai");
 
   await service.updateJobStatus("job-1", "SHORTLISTED");
 
@@ -177,7 +185,7 @@ test("updateJobStatus rejects an unknown job id", async () => {
     async getJob() {
       return null;
     },
-  } as never, {} as never);
+  } as never, {} as never, textMap(noTextCalls), "openai");
 
   await assert.rejects(() => service.updateJobStatus("missing", "APPLIED"));
 });
@@ -194,6 +202,8 @@ test("computeFit requires a saved profile", async () => {
         return null;
       },
     } as never,
+    textMap(noTextCalls),
+    "openai",
   );
 
   await assert.rejects(() => service.computeFit("job-1"));
@@ -223,6 +233,8 @@ test("computeFit persists the overall score and returns the full breakdown", asy
         } as never;
       },
     } as never,
+    textMap(noTextCalls),
+    "openai",
   );
 
   const fit = await service.computeFit("job-1");
@@ -231,4 +243,81 @@ test("computeFit persists the overall score and returns the full breakdown", asy
   assert.deepEqual(fit.strengths, ["Node.js"]);
   assert.deepEqual(fit.gaps, ["Kubernetes"]);
   assert.equal(persistedScore, fit.overall);
+});
+
+const fakeProfileForTailoring = () => ({
+  topSkills: ["Kubernetes", "Node.js"],
+  technologies: ["Kubernetes", "Node.js", "PostgreSQL"],
+  experiences: [
+    { id: "00000000-0000-4000-8000-000000000010", role: "A" },
+    { id: "00000000-0000-4000-8000-000000000011", role: "B" },
+  ],
+});
+
+test("generateResumeTailoringPlan grounds the model's plan against the real profile", async () => {
+  const service = new CareerService(
+    {
+      async getJob() {
+        return fakeJob();
+      },
+    } as never,
+    {
+      async getProfile() {
+        return fakeProfileForTailoring() as never;
+      },
+    } as never,
+    textMap({
+      async generateText() {
+        return {
+          text: JSON.stringify({
+            rationale: "Leads with Kubernetes since the job asks for it.",
+            // Includes a fabricated id and a fabricated skill the model should not have
+            // invented — the grounding step must drop both rather than trust them.
+            experienceOrder: [
+              "00000000-0000-4000-8000-000000000011",
+              "not-a-real-id",
+            ],
+            topSkillsOrder: ["Kubernetes", "Terraform"],
+            technologiesOrder: ["Kubernetes"],
+          }),
+          model: "test-model",
+        };
+      },
+    }),
+    "openai",
+  );
+
+  const plan = await service.generateResumeTailoringPlan("job-1");
+
+  // The fabricated id is dropped; the real, unmentioned experience is appended, not dropped.
+  assert.deepEqual(plan.experienceOrder, [
+    "00000000-0000-4000-8000-000000000011",
+    "00000000-0000-4000-8000-000000000010",
+  ]);
+  // "Terraform" was never in the profile and is dropped; "Node.js" was real but unmentioned
+  // and is appended.
+  assert.deepEqual(plan.topSkillsOrder, ["Kubernetes", "Node.js"]);
+});
+
+test("generateResumeTailoringPlan rejects a model response that fails the schema", async () => {
+  const service = new CareerService(
+    {
+      async getJob() {
+        return fakeJob();
+      },
+    } as never,
+    {
+      async getProfile() {
+        return fakeProfileForTailoring() as never;
+      },
+    } as never,
+    textMap({
+      async generateText() {
+        return { text: JSON.stringify({ rationale: 123 }), model: "test-model" };
+      },
+    }),
+    "openai",
+  );
+
+  await assert.rejects(() => service.generateResumeTailoringPlan("job-1"));
 });
