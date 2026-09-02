@@ -11,7 +11,7 @@ import {
 } from "@studio/shared";
 import { CareerView } from "./CareerView";
 import { ContentPlanView } from "./ContentPlanView";
-import { CustomTopicsView } from "./CustomTopicsView";
+import { CustomTopicsView, type CustomTopicDraft } from "./CustomTopicsView";
 import { DiscoverView } from "./DiscoverView";
 import { DocsView } from "./DocsView";
 import { PersonaView } from "./PersonaView";
@@ -60,6 +60,7 @@ export function App() {
   const [resumeProvider, setResumeProvider] = useState<TextProviderName | "">("");
   const [resumeStatus, setResumeStatus] = useState<"idle" | "extracting">("idle");
   const resumeInputRef = useRef<HTMLInputElement | null>(null);
+  const [topicDraft, setTopicDraft] = useState<CustomTopicDraft | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -312,6 +313,8 @@ export function App() {
                 setEditingPostId(null);
                 setStep("post");
               }}
+              initialDraft={topicDraft}
+              onDraftApplied={() => setTopicDraft(null)}
             />
           ) : null}
           {step === "discover" ? (
@@ -342,7 +345,14 @@ export function App() {
               }}
             />
           ) : null}
-          {step === "career" ? <CareerView /> : null}
+          {step === "career" ? (
+            <CareerView
+              onDraftTopic={(draft) => {
+                setTopicDraft(draft);
+                setStep("custom");
+              }}
+            />
+          ) : null}
 
           {step !== "persona" &&
           step !== "plan" &&

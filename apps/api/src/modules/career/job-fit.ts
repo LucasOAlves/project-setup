@@ -21,7 +21,7 @@ function normalize(value: string): string {
   return value.trim().toLowerCase();
 }
 
-function skillsMatch(a: string, b: string): boolean {
+export function skillsMatch(a: string, b: string): boolean {
   const left = normalize(a);
   const right = normalize(b);
   if (!left || !right) return false;

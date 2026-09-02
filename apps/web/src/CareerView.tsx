@@ -11,6 +11,7 @@ import {
   type JobFitResult,
   type JobPublic,
   type CareerAnalytics,
+  type ContentTopicSuggestion,
   type JobStatus,
   type JobWorkplaceType,
   type OutreachMessage,
@@ -29,6 +30,7 @@ import {
   downloadTailoredResume,
   fetchCareerAnalytics,
   fetchCompanies,
+  fetchContentSuggestions,
   fetchJobs,
   fetchRecruiters,
   generateOutreachMessage,
@@ -86,7 +88,11 @@ const emptyRecruiterForm = () => ({
   linkedinUrl: "",
 });
 
-export function CareerView() {
+export function CareerView({
+  onDraftTopic,
+}: {
+  onDraftTopic: (draft: { hook: string; pillar: string; keyPoint: string }) => void;
+}) {
   const [companies, setCompanies] = useState<CompanyPublic[]>([]);
   const [jobs, setJobs] = useState<JobPublic[]>([]);
   const [status, setStatus] = useState<"loading" | "idle" | "saving">("loading");
@@ -107,16 +113,24 @@ export function CareerView() {
   const [analytics, setAnalytics] = useState<CareerAnalytics | null>(null);
   const [importingCompanyId, setImportingCompanyId] = useState<string | null>(null);
   const [importResults, setImportResults] = useState<Record<string, { imported: number; skipped: number }>>({});
+  const [contentSuggestions, setContentSuggestions] = useState<ContentTopicSuggestion[]>([]);
 
   useEffect(() => {
     let cancelled = false;
-    Promise.all([fetchCompanies(), fetchJobs(), fetchRecruiters(), fetchCareerAnalytics()])
-      .then(([existingCompanies, existingJobs, existingRecruiters, existingAnalytics]) => {
+    Promise.all([
+      fetchCompanies(),
+      fetchJobs(),
+      fetchRecruiters(),
+      fetchCareerAnalytics(),
+      fetchContentSuggestions(),
+    ])
+      .then(([existingCompanies, existingJobs, existingRecruiters, existingAnalytics, existingSuggestions]) => {
         if (cancelled) return;
         setCompanies(existingCompanies);
         setJobs(existingJobs);
         setRecruiters(existingRecruiters);
         setAnalytics(existingAnalytics);
+        setContentSuggestions(existingSuggestions);
         setStatus("idle");
       })
       .catch((err: ApiError) => {
@@ -131,7 +145,12 @@ export function CareerView() {
 
   async function refreshAnalytics() {
     try {
-      setAnalytics(await fetchCareerAnalytics());
+      const [nextAnalytics, nextSuggestions] = await Promise.all([
+        fetchCareerAnalytics(),
+        fetchContentSuggestions(),
+      ]);
+      setAnalytics(nextAnalytics);
+      setContentSuggestions(nextSuggestions);
     } catch {
       // Analytics are a summary, not the primary action the user is taking — fail quietly and
       // let the next natural refresh (or a manual reload) pick it up rather than surfacing a
@@ -395,6 +414,43 @@ export function CareerView() {
       {error ? <div className="error">{error}</div> : null}
 
       {analytics ? <AnalyticsPanel analytics={analytics} /> : null}
+
+      {contentSuggestions.length > 0 ? (
+        <section>
+          <h3>Content ideas from your job search</h3>
+          <p className="lede">
+            Technologies your tracked jobs actually ask for, matched against real evidence
+            already in your profile — never a technology you have no proof for.
+          </p>
+          <div className="article-list">
+            {contentSuggestions.map((suggestion) => (
+              <article className="article-card" key={suggestion.technology}>
+                <p className="eyebrow">
+                  {suggestion.jobCount} of {suggestion.totalJobs} jobs · {suggestion.demandPercent}
+                  % demand
+                </p>
+                <h3>{suggestion.technology}</h3>
+                <p>{suggestion.evidence}</p>
+                <div className="actions">
+                  <button
+                    className="btn ghost"
+                    type="button"
+                    onClick={() =>
+                      onDraftTopic({
+                        hook: suggestion.hook,
+                        pillar: suggestion.technology,
+                        keyPoint: suggestion.evidence,
+                      })
+                    }
+                  >
+                    Draft this as a topic
+                  </button>
+                </div>
+              </article>
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       <h3>Companies</h3>
       <div className="grid-2">

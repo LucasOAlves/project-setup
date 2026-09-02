@@ -81,6 +81,16 @@ external id); nothing is re-created or overwritten. See
 [ADR-011](docs/decisions/ADR-011-career-domain-boundaries.md)'s update note for why Greenhouse,
 not LinkedIn, is this project's first real job provider.
 
+Content ideas from your job search close the Content↔Career loop, one direction of it: the
+Career step surfaces which technologies your tracked jobs actually request, kept only when
+your profile has real, matchable evidence for them — never a technology you can't prove.
+"Draft this as a topic" hands the grounded hook straight into a pre-filled My Topics draft,
+which you review and confirm exactly like any other custom topic. The reverse direction
+(post engagement informing networking suggestions) is deliberately not built — this app has
+no real engagement data to build it from; see
+[ADR-013](docs/decisions/ADR-013-content-career-loop.md) for why faking that signal was
+rejected rather than shipped.
+
 Career Analytics is the "Overview" panel at the top of the Career step: jobs tracked,
 applications, interviews reached, offers, application→interview rate, rejection rate,
 average fit score, companies targeted, recruiter contacts, most requested technologies, and

@@ -41,7 +41,7 @@ Controllers stay thin. Domain rules do not live in routes or React components.
 | images | creative brief, prompt, generation, association with post |
 | uploads | photo validation and storage identifiers |
 | ai | prompt templates, structured-output validation, provider clients |
-| career | companies, jobs, job-pursuit status, job fit scoring, résumé tailoring, recruiter/outreach tracking, career analytics, and Greenhouse job import — additive domain, shares `Profile` as its only cross-domain aggregate (ADR-011); `JobProvider` port with one real adapter (Greenhouse — public, unauthenticated); no LinkedIn integration, no external write ever happens automatically (ADR-012) |
+| career | companies, jobs, job-pursuit status, job fit scoring, résumé tailoring, recruiter/outreach tracking, career analytics, Greenhouse job import, and Career→Content topic suggestions — additive domain, shares `Profile` as its only cross-domain aggregate (ADR-011); `JobProvider` port with one real adapter (Greenhouse — public, unauthenticated); no LinkedIn integration, no external write ever happens automatically (ADR-012); the Content↔Career loop is one direction only, by design (ADR-013) |
 
 Modules may call use cases across boundaries. They must not import OpenAI SDK types, NewsAPI types, or filesystem paths.
 

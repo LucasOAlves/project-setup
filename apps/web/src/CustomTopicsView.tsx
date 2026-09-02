@@ -36,11 +36,35 @@ const emptyForm = () => ({
   sourceUrl: "",
 });
 
-export function CustomTopicsView({ onSelected }: { onSelected: () => void }) {
+export type CustomTopicDraft = { hook: string; pillar: string; keyPoint: string };
+
+export function CustomTopicsView({
+  onSelected,
+  initialDraft,
+  onDraftApplied,
+}: {
+  onSelected: () => void;
+  initialDraft?: CustomTopicDraft | null;
+  onDraftApplied?: () => void;
+}) {
   const [topics, setTopics] = useState<CustomTopicPublic[]>([]);
   const [status, setStatus] = useState<"loading" | "idle" | "saving" | "selecting">("loading");
   const [error, setError] = useState<string | null>(null);
   const [form, setForm] = useState(emptyForm());
+
+  useEffect(() => {
+    if (!initialDraft) return;
+    setForm((current) => ({
+      ...current,
+      hook: initialDraft.hook,
+      pillar: initialDraft.pillar,
+      keyPoints: [initialDraft.keyPoint],
+    }));
+    onDraftApplied?.();
+    // Only ever apply a draft when the object identity actually changes — App.tsx clears it
+    // to null right after handing it off, so this cannot re-apply on unrelated re-renders.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialDraft]);
 
   useEffect(() => {
     let cancelled = false;

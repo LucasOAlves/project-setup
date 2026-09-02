@@ -209,6 +209,22 @@ export const careerAnalyticsSchema = z.object({
 });
 export type CareerAnalytics = z.infer<typeof careerAnalyticsSchema>;
 
+// Content <-> Career intelligence loop (Slice 7), Career -> Content direction only — see
+// ADR-013 for why the reverse direction (post engagement -> networking suggestions) is
+// deliberately deferred rather than faked. Fully deterministic: a technology is only ever
+// suggested when the profile has real, matchable evidence for it (career-analytics.ts's
+// tally combined with job-fit.ts's skillsMatch), so this can't nudge toward fabricated
+// content the way an ungrounded model call could.
+export const contentTopicSuggestionSchema = z.object({
+  technology: z.string(),
+  jobCount: z.number().int(),
+  totalJobs: z.number().int(),
+  demandPercent: z.number().min(0).max(100),
+  evidence: z.string(),
+  hook: z.string(),
+});
+export type ContentTopicSuggestion = z.infer<typeof contentTopicSuggestionSchema>;
+
 // Outreach message drafting (PREPARE level per ADR-012 — always a draft the user copies out
 // and sends themselves; this codebase has no channel to send it through even if it wanted to).
 export const outreachMessageSchema = z.object({

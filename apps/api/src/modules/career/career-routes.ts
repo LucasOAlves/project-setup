@@ -23,6 +23,11 @@ export async function registerCareerRoutes(
     return { analytics };
   });
 
+  app.get("/api/career/content-suggestions", async () => {
+    const suggestions = await service.getContentSuggestions();
+    return { suggestions };
+  });
+
   app.get("/api/career/companies", async () => {
     const companies = await service.listCompanies();
     return { companies };

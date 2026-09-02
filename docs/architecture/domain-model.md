@@ -196,6 +196,17 @@ zero applications to compute them from. `topGaps` is recomputed from `job-fit.ts
 for every scored job rather than persisted, the same "cheap to recompute, not worth storing"
 choice already made for the Job Fit breakdown itself.
 
+## ContentTopicSuggestion (Career → Content, computed)
+
+Not persisted — `CareerService.getContentSuggestions()` (`content-suggestions.ts`) recomputes
+on every request, the same "cheap to recompute, not worth storing" choice as Job Fit and
+Career Analytics. Deterministic: a technology only appears if it's requested by at least one
+tracked job *and* the profile has real, matchable evidence for it (`job-fit.ts`'s
+`skillsMatch`) — there's no code path that can suggest content about something the profile
+doesn't evidence. See [ADR-013](../decisions/ADR-013-content-career-loop.md) for why this is
+the Career→Content direction only; the reverse (post engagement → networking suggestions) is
+deliberately not built, since this app has no real engagement data to build it from.
+
 ## Ephemeral
 
 - token streams

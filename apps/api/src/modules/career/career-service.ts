@@ -1,6 +1,7 @@
 import type {
   CareerAnalytics,
   CompanyInput,
+  ContentTopicSuggestion,
   CompanyPublic,
   JobFitResult,
   JobInput,
@@ -32,6 +33,7 @@ import type { TextGenerationProvider } from "../ai/text-generation-provider.js";
 import { buildResumePdf } from "../profile/resume-pdf.js";
 import type { ProfileService } from "../profile/profile-service.js";
 import { computeCareerAnalytics } from "./career-analytics.js";
+import { computeContentTopicSuggestions } from "./content-suggestions.js";
 import type { CareerRepository, CompanyRow, JobRow, RecruiterRow } from "./career-repository.js";
 import type { JobProvider } from "./job-provider.js";
 import { computeJobFit } from "./job-fit.js";
@@ -348,6 +350,16 @@ export class CareerService {
     }
 
     return computeCareerAnalytics({ jobs, recruiters, statusEventsByJobId, gapsByJobId });
+  }
+
+  async getContentSuggestions(): Promise<ContentTopicSuggestion[]> {
+    const profile = await this.profiles.getProfile();
+    if (!profile) {
+      return [];
+    }
+    const jobRows = await this.repo.listJobs();
+    const jobs = jobRows.map((row) => this.jobToPublic(row));
+    return computeContentTopicSuggestions(jobs, profile);
   }
 
   private recruiterToPublic(row: RecruiterRow): RecruiterPublic {

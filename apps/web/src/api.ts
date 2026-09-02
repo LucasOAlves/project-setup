@@ -9,6 +9,7 @@ import type {
   CustomTopicPublic,
   ExperienceInput,
   CareerAnalytics,
+  ContentTopicSuggestion,
   ImageProviderName,
   ImagePublic,
   JobFitResult,
@@ -513,6 +514,15 @@ export async function fetchCareerAnalytics(): Promise<CareerAnalytics> {
   }
   const body = (await response.json()) as { analytics: CareerAnalytics };
   return body.analytics;
+}
+
+export async function fetchContentSuggestions(): Promise<ContentTopicSuggestion[]> {
+  const response = await fetch("/api/career/content-suggestions");
+  if (!response.ok) {
+    throw await parseError(response);
+  }
+  const body = (await response.json()) as { suggestions: ContentTopicSuggestion[] };
+  return body.suggestions;
 }
 
 export async function fetchCompanies(): Promise<CompanyPublic[]> {

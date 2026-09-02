@@ -609,3 +609,50 @@ test("importFromGreenhouse skips postings already imported and only creates the 
   assert.equal(created.length, 1);
   assert.equal((created[0] as { externalId: string }).externalId, "2");
 });
+
+test("getContentSuggestions returns nothing without a saved profile", async () => {
+  const service = new CareerService(
+    {
+      async listJobs() {
+        assert.fail("must not need jobs when there is no profile to ground against");
+      },
+    } as never,
+    {
+      async getProfile() {
+        return null;
+      },
+    } as never,
+    textMap(noTextCalls),
+    "openai",
+    { async listJobs() { assert.fail("must not call the job provider"); } } as never,
+  );
+
+  const suggestions = await service.getContentSuggestions();
+  assert.deepEqual(suggestions, []);
+});
+
+test("getContentSuggestions grounds market demand against the real saved profile", async () => {
+  const service = new CareerService(
+    {
+      async listJobs() {
+        return [fakeJob({ technologies: ["Kubernetes"] })];
+      },
+    } as never,
+    {
+      async getProfile() {
+        return {
+          topSkills: ["Kubernetes"],
+          technologies: [],
+          experiences: [],
+        } as never;
+      },
+    } as never,
+    textMap(noTextCalls),
+    "openai",
+    { async listJobs() { assert.fail("must not call the job provider"); } } as never,
+  );
+
+  const suggestions = await service.getContentSuggestions();
+  assert.equal(suggestions.length, 1);
+  assert.equal(suggestions[0]?.technology, "Kubernetes");
+});
