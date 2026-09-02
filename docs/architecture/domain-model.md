@@ -134,8 +134,13 @@ Deliberately **not** split into a separate `Application` entity in Slice 1 — s
 (Greenhouse, Lever, LinkedIn) can populate `Job` rows without a schema change, even though
 Slice 1's only source is a person typing the data in (`source: "manual"`).
 
-`fitScore` is a nullable column reserved for the Job Fit engine (a later slice); nothing
-computes it yet.
+`fitScore` (the overall Job Fit score, 0-100) is computed deterministically by
+`computeJobFit()` (`apps/api/src/modules/career/job-fit.ts`) against the saved `Profile` and
+persisted on demand ("Score fit" / "Rescore fit" in the UI) — see
+[`.skills/job-fit-analysis`](../../.skills/job-fit-analysis/SKILL.md) for the per-dimension
+rules (technical, seniority, architecture, leadership) and why no AI call is involved. Only
+the overall number is persisted; the full breakdown (strengths, gaps, per-dimension scores)
+is cheap to recompute and is not stored as its own row.
 
 ## Ephemeral
 

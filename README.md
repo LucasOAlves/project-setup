@@ -53,6 +53,12 @@ local tracking only; nothing talks to LinkedIn, a job board, or any external API
 [ADR-012](docs/decisions/ADR-012-external-action-approval.md) for the human-approval policy
 that will govern any future capability that writes to an external system.
 
+Job Fit scoring is available on each tracked job: "Score fit" compares the job's technologies
+and seniority against your saved profile and produces an explainable, deterministic
+score — overall plus a technical/seniority/architecture/leadership breakdown, concrete
+strengths, and concrete gaps. No AI call is involved; see
+[`.skills/job-fit-analysis`](.skills/job-fit-analysis/SKILL.md) for the scoring rules.
+
 Without Docker:
 
 ```bash

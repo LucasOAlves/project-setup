@@ -60,6 +60,12 @@ export async function registerCareerRoutes(
     return { job };
   });
 
+  app.post("/api/career/jobs/:id/fit", async (request) => {
+    const { id } = request.params as { id: string };
+    const fit = await service.computeFit(id);
+    return { fit };
+  });
+
   app.delete("/api/career/jobs/:id", async (request) => {
     const { id } = request.params as { id: string };
     await service.removeJob(id);

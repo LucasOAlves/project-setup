@@ -1,6 +1,15 @@
-import type { CompanyInput, CompanyPublic, JobInput, JobPatchInput, JobPublic } from "@studio/shared";
+import type {
+  CompanyInput,
+  CompanyPublic,
+  JobFitResult,
+  JobInput,
+  JobPatchInput,
+  JobPublic,
+} from "@studio/shared";
 import { notFound, validationError } from "../../app-error.js";
+import type { ProfileService } from "../profile/profile-service.js";
 import type { CareerRepository, CompanyRow, JobRow } from "./career-repository.js";
+import { computeJobFit } from "./job-fit.js";
 
 const APPLIED_OR_LATER = new Set<string>([
   "APPLIED",
@@ -13,7 +22,10 @@ const APPLIED_OR_LATER = new Set<string>([
 ]);
 
 export class CareerService {
-  constructor(private readonly repo: CareerRepository) {}
+  constructor(
+    private readonly repo: CareerRepository,
+    private readonly profiles: ProfileService,
+  ) {}
 
   async listCompanies(): Promise<CompanyPublic[]> {
     const rows = await this.repo.listCompanies();
@@ -69,6 +81,21 @@ export class CareerService {
 
   async removeJob(id: string): Promise<void> {
     await this.repo.deleteJob(id);
+  }
+
+  async computeFit(id: string): Promise<JobFitResult> {
+    const jobRow = await this.repo.getJob(id);
+    if (!jobRow) {
+      throw notFound("That job does not exist.");
+    }
+    const profile = await this.profiles.getProfile();
+    if (!profile) {
+      throw notFound("Save a professional profile before scoring job fit.");
+    }
+
+    const result = computeJobFit(this.jobToPublic(jobRow), profile);
+    await this.repo.setFitScore(id, result.overall);
+    return result;
   }
 
   private companyToPublic(row: CompanyRow): CompanyPublic {

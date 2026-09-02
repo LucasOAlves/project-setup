@@ -58,7 +58,7 @@ test("createJob rejects a job for a company that does not exist", async () => {
     async createJob() {
       assert.fail("must not insert a job for a missing company");
     },
-  } as never);
+  } as never, {} as never);
 
   await assert.rejects(() =>
     service.createJob({
@@ -92,7 +92,7 @@ test("createJob persists a job once the company exists", async () => {
       inserted = input;
       return fakeJob();
     },
-  } as never);
+  } as never, {} as never);
 
   const job = await service.createJob({
     companyId: "00000000-0000-4000-8000-000000000001",
@@ -129,7 +129,7 @@ test("updateJobStatus stamps appliedAt the first time status reaches APPLIED-or-
       patch = input;
       return fakeJob({ status: "APPLIED", appliedAt: new Date() });
     },
-  } as never);
+  } as never, {} as never);
 
   const job = await service.updateJobStatus("job-1", "APPLIED");
 
@@ -148,7 +148,7 @@ test("updateJobStatus does not restamp appliedAt if already set", async () => {
       patch = input;
       return fakeJob({ status: "SCREENING", appliedAt: existingAppliedAt });
     },
-  } as never);
+  } as never, {} as never);
 
   await service.updateJobStatus("job-1", "SCREENING");
 
@@ -165,7 +165,7 @@ test("updateJobStatus clears appliedAt when moved back to a pre-application stag
       patch = input;
       return fakeJob({ status: "SHORTLISTED", appliedAt: null });
     },
-  } as never);
+  } as never, {} as never);
 
   await service.updateJobStatus("job-1", "SHORTLISTED");
 
@@ -177,7 +177,58 @@ test("updateJobStatus rejects an unknown job id", async () => {
     async getJob() {
       return null;
     },
-  } as never);
+  } as never, {} as never);
 
   await assert.rejects(() => service.updateJobStatus("missing", "APPLIED"));
+});
+
+test("computeFit requires a saved profile", async () => {
+  const service = new CareerService(
+    {
+      async getJob() {
+        return fakeJob({ technologies: ["Kubernetes"] });
+      },
+    } as never,
+    {
+      async getProfile() {
+        return null;
+      },
+    } as never,
+  );
+
+  await assert.rejects(() => service.computeFit("job-1"));
+});
+
+test("computeFit persists the overall score and returns the full breakdown", async () => {
+  let persistedScore: number | undefined;
+  const service = new CareerService(
+    {
+      async getJob() {
+        return fakeJob({ technologies: ["Kubernetes", "Node.js"] });
+      },
+      async setFitScore(_id: string, score: number) {
+        persistedScore = score;
+        return fakeJob({ fitScore: score });
+      },
+    } as never,
+    {
+      async getProfile() {
+        return {
+          technologies: ["Node.js"],
+          topSkills: [],
+          experiences: [],
+          yearsOfExperience: null,
+          architectureExperience: "",
+          leadershipExperience: "",
+        } as never;
+      },
+    } as never,
+  );
+
+  const fit = await service.computeFit("job-1");
+
+  assert.equal(fit.dimensions.technical, 50); // 1 of 2 required technologies matched
+  assert.deepEqual(fit.strengths, ["Node.js"]);
+  assert.deepEqual(fit.gaps, ["Kubernetes"]);
+  assert.equal(persistedScore, fit.overall);
 });

@@ -5,11 +5,13 @@ import {
   JOB_WORKPLACE_TYPES,
   type CompanyPublic,
   type JobEmploymentType,
+  type JobFitResult,
   type JobPublic,
   type JobStatus,
   type JobWorkplaceType,
 } from "@studio/shared";
 import {
+  computeJobFit,
   createCompany,
   createJob,
   deleteJob,
@@ -56,6 +58,8 @@ export function CareerView() {
   const [error, setError] = useState<string | null>(null);
   const [companyForm, setCompanyForm] = useState(emptyCompanyForm());
   const [jobForm, setJobForm] = useState(emptyJobForm());
+  const [fitResults, setFitResults] = useState<Record<string, JobFitResult>>({});
+  const [scoringJobId, setScoringJobId] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -156,6 +160,22 @@ export function CareerView() {
       setJobs((current) => current.map((item) => (item.id === id ? job : item)));
     } catch (err) {
       setError((err as ApiError).message);
+    }
+  }
+
+  async function scoreFit(id: string) {
+    setError(null);
+    setScoringJobId(id);
+    try {
+      const fit = await computeJobFit(id);
+      setFitResults((current) => ({ ...current, [id]: fit }));
+      setJobs((current) =>
+        current.map((item) => (item.id === id ? { ...item, fitScore: fit.overall } : item)),
+      );
+    } catch (err) {
+      setError((err as ApiError).message);
+    } finally {
+      setScoringJobId(null);
     }
   }
 
@@ -352,9 +372,12 @@ export function CareerView() {
               key={job.id}
               job={job}
               companyName={companyName(job.companyId)}
+              fit={fitResults[job.id] ?? null}
+              scoring={scoringJobId === job.id}
               onStatusChange={(next) => void markStatus(job.id, next)}
               onSaveNotes={(notes, nextAction) => void saveNotes(job.id, notes, nextAction)}
               onDelete={() => void removeJob(job.id)}
+              onScoreFit={() => void scoreFit(job.id)}
             />
           ))}
         </div>
@@ -363,18 +386,31 @@ export function CareerView() {
   );
 }
 
+const RECOMMENDATION_LABELS: Record<JobFitResult["recommendation"], string> = {
+  STRONG_APPLY: "Strong apply",
+  APPLY: "Apply",
+  STRETCH: "Stretch",
+  WEAK_FIT: "Weak fit",
+};
+
 function JobCard({
   job,
   companyName,
+  fit,
+  scoring,
   onStatusChange,
   onSaveNotes,
   onDelete,
+  onScoreFit,
 }: {
   job: JobPublic;
   companyName: string;
+  fit: JobFitResult | null;
+  scoring: boolean;
   onStatusChange: (next: JobStatus) => void;
   onSaveNotes: (notes: string, nextAction: string) => void;
   onDelete: () => void;
+  onScoreFit: () => void;
 }) {
   const [notes, setNotes] = useState(job.notes);
   const [nextAction, setNextAction] = useState(job.nextAction);
@@ -389,6 +425,33 @@ function JobCard({
       </p>
       <h3>{job.title}</h3>
       {job.technologies.length > 0 ? <p>{job.technologies.join(" · ")}</p> : null}
+
+      <div className="actions" style={{ justifyContent: "flex-start" }}>
+        <button className="btn ghost" type="button" disabled={scoring} onClick={onScoreFit}>
+          {scoring ? "Scoring…" : job.fitScore !== null ? "Rescore fit" : "Score fit"}
+        </button>
+      </div>
+
+      {fit ? (
+        <div className="notice">
+          <p>
+            <strong>{RECOMMENDATION_LABELS[fit.recommendation]}</strong> — overall {fit.overall}
+            /100 (technical {fit.dimensions.technical}, seniority {fit.dimensions.seniority},
+            architecture {fit.dimensions.architecture}, leadership {fit.dimensions.leadership})
+          </p>
+          {fit.strengths.length > 0 ? (
+            <p>
+              <strong>Strengths.</strong> {fit.strengths.join(" · ")}
+            </p>
+          ) : null}
+          {fit.gaps.length > 0 ? (
+            <p>
+              <strong>Gaps.</strong> {fit.gaps.join(" · ")}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+
       <label className="field full">
         Notes
         <textarea value={notes} onChange={(event) => setNotes(event.target.value)} />

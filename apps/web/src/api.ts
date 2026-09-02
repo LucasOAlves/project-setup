@@ -10,6 +10,7 @@ import type {
   ExperienceInput,
   ImageProviderName,
   ImagePublic,
+  JobFitResult,
   JobInput,
   JobPatchInput,
   JobPublic,
@@ -566,6 +567,15 @@ export async function patchJob(id: string, patch: JobPatchInput): Promise<JobPub
   }
   const body = (await response.json()) as { job: JobPublic };
   return body.job;
+}
+
+export async function computeJobFit(id: string): Promise<JobFitResult> {
+  const response = await fetch(`/api/career/jobs/${id}/fit`, { method: "POST" });
+  if (!response.ok) {
+    throw await parseError(response);
+  }
+  const body = (await response.json()) as { fit: JobFitResult };
+  return body.fit;
 }
 
 export async function deleteJob(id: string): Promise<JobPublic[]> {

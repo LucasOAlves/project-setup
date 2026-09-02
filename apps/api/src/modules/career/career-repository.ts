@@ -111,4 +111,13 @@ export class CareerRepository {
   async deleteJob(id: string): Promise<void> {
     await this.db.delete(jobs).where(eq(jobs.id, id));
   }
+
+  async setFitScore(id: string, fitScore: number): Promise<JobRow | null> {
+    const [row] = await this.db
+      .update(jobs)
+      .set({ fitScore, updatedAt: new Date() })
+      .where(eq(jobs.id, id))
+      .returning();
+    return row ?? null;
+  }
 }

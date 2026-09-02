@@ -99,3 +99,27 @@ export const jobPatchInputSchema = z.object({
   nextAction: z.string().trim().max(300).optional(),
 });
 export type JobPatchInput = z.infer<typeof jobPatchInputSchema>;
+
+// Job Fit: deterministic, explainable scoring (see .skills/ai-vs-deterministic and the
+// content-relevance-scoring precedent). No AI call is involved — every dimension is a rule
+// over two structured records (Job, Profile), so the result is exact and reproducible rather
+// than a model's opinion.
+export const JOB_FIT_RECOMMENDATIONS = ["STRONG_APPLY", "APPLY", "STRETCH", "WEAK_FIT"] as const;
+export type JobFitRecommendation = (typeof JOB_FIT_RECOMMENDATIONS)[number];
+
+export const jobFitDimensionsSchema = z.object({
+  technical: z.number().int().min(0).max(100),
+  seniority: z.number().int().min(0).max(100),
+  architecture: z.number().int().min(0).max(100),
+  leadership: z.number().int().min(0).max(100),
+});
+export type JobFitDimensions = z.infer<typeof jobFitDimensionsSchema>;
+
+export const jobFitResultSchema = z.object({
+  overall: z.number().int().min(0).max(100),
+  dimensions: jobFitDimensionsSchema,
+  strengths: z.array(z.string()),
+  gaps: z.array(z.string()),
+  recommendation: z.enum(JOB_FIT_RECOMMENDATIONS),
+});
+export type JobFitResult = z.infer<typeof jobFitResultSchema>;
