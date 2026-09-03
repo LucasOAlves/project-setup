@@ -21,6 +21,17 @@ export class CareerRepository {
     return row ?? null;
   }
 
+  // Case-insensitive match, in application code rather than SQL — the company list is small
+  // (one workspace's own tracked companies), and this avoids depending on a dialect-specific
+  // operator this drizzle-orm version doesn't export, the same pragmatic tradeoff
+  // hasActiveJobAtCompany already makes just below.
+  async findCompanyByName(name: string): Promise<CompanyRow | null> {
+    const normalized = name.trim().toLowerCase();
+    if (!normalized) return null;
+    const rows = await this.db.select().from(companies);
+    return rows.find((row) => row.name.trim().toLowerCase() === normalized) ?? null;
+  }
+
   async createCompany(input: CompanyInput): Promise<CompanyRow> {
     const [row] = await this.db
       .insert(companies)

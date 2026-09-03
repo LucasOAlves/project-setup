@@ -41,7 +41,7 @@ Controllers stay thin. Domain rules do not live in routes or React components.
 | images | creative brief, prompt, generation, association with post |
 | uploads | photo validation and storage identifiers |
 | ai | prompt templates, structured-output validation, provider clients |
-| career | companies, jobs, job-pursuit status, job fit scoring, résumé tailoring, recruiter/outreach tracking, career analytics, Greenhouse job import, and Career→Content topic suggestions — additive domain, shares `Profile` as its only cross-domain aggregate (ADR-011); `JobProvider` port with one real adapter (Greenhouse — public, unauthenticated); no LinkedIn integration, no external write ever happens automatically (ADR-012); the Content↔Career loop is one direction only, by design (ADR-013) |
+| career | companies, jobs, job-pursuit status, job fit scoring, résumé tailoring, recruiter/outreach tracking, career analytics, job board import + job search, and Career→Content topic suggestions — additive domain, shares `Profile` as its only cross-domain aggregate (ADR-011); `JobProvider` port (per-company board import — Greenhouse, Lever, Ashby) and `JobSearchProvider` port (keyword search across companies — RemoteOK, Arbeitnow, Adzuna), all public/unauthenticated except Adzuna's free self-serve key; no LinkedIn integration, no external write ever happens automatically (ADR-012); the Content↔Career loop is one direction only, by design (ADR-013) |
 
 Modules may call use cases across boundaries. They must not import OpenAI SDK types, NewsAPI types, or filesystem paths.
 
@@ -64,8 +64,17 @@ NewsProvider
 StorageProvider
 └── LocalStorageProvider
 
-JobProvider                         (Career domain, ADR-011)
-└── GreenhouseJobProvider           (public, unauthenticated; no LinkedIn adapter exists)
+JobProvider                         (Career domain, board import, ADR-011)
+├── GreenhouseJobProvider           (public, unauthenticated)
+├── LeverJobProvider                (public, unauthenticated)
+└── AshbyJobProvider                (public, unauthenticated)
+
+JobSearchProvider                   (Career domain, keyword search, ADR-011)
+├── RemoteOkJobSearchProvider       (public, unauthenticated)
+├── ArbeitnowJobSearchProvider      (public, unauthenticated)
+└── AdzunaJobSearchProvider         (free self-serve ADZUNA_APP_ID/ADZUNA_APP_KEY)
+
+(no LinkedIn adapter exists for either port)
 ```
 
 There is no `OpenAIService` god object. Text and image generation are separate

@@ -16,6 +16,8 @@ const envSchema = z.object({
   ANTHROPIC_TEXT_MODEL: z.string().min(1).default("claude-opus-5"),
   NEWS_API_KEY: z.string().optional().default(""),
   NEWS_LOOKBACK_DAYS: z.coerce.number().int().positive().max(30).default(21),
+  ADZUNA_APP_ID: z.string().optional().default(""),
+  ADZUNA_APP_KEY: z.string().optional().default(""),
 });
 
 export type Env = z.infer<typeof envSchema>;

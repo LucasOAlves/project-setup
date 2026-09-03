@@ -1,4 +1,10 @@
-import { ERROR_CODES, type ImageProviderName, type TextProviderName } from "@studio/shared";
+import {
+  ERROR_CODES,
+  type ImageProviderName,
+  type JobBoardSource,
+  type JobSearchSource,
+  type TextProviderName,
+} from "@studio/shared";
 import cors from "@fastify/cors";
 import multipart from "@fastify/multipart";
 import Fastify from "fastify";
@@ -12,6 +18,13 @@ import { registerCareerRoutes } from "./modules/career/career-routes.js";
 import { CareerRepository } from "./modules/career/career-repository.js";
 import { CareerService } from "./modules/career/career-service.js";
 import { GreenhouseJobProvider } from "./modules/career/greenhouse-job-provider.js";
+import { LeverJobProvider } from "./modules/career/lever-job-provider.js";
+import { AshbyJobProvider } from "./modules/career/ashby-job-provider.js";
+import type { JobProvider } from "./modules/career/job-provider.js";
+import { RemoteOkJobSearchProvider } from "./modules/career/remoteok-job-search-provider.js";
+import { ArbeitnowJobSearchProvider } from "./modules/career/arbeitnow-job-search-provider.js";
+import { AdzunaJobSearchProvider } from "./modules/career/adzuna-job-search-provider.js";
+import type { JobSearchProvider } from "./modules/career/job-search-provider.js";
 import { registerContentPlanRoutes } from "./modules/content-plan/content-plan-routes.js";
 import { ContentPlanRepository } from "./modules/content-plan/content-plan-repository.js";
 import { ContentPlanService } from "./modules/content-plan/content-plan-service.js";
@@ -119,12 +132,23 @@ export async function buildApp(env: Env, db: Database) {
     opportunities,
     new CustomTopicRepository(db),
   );
+  const boardProviders: Record<JobBoardSource, JobProvider> = {
+    greenhouse: new GreenhouseJobProvider(),
+    lever: new LeverJobProvider(),
+    ashby: new AshbyJobProvider(),
+  };
+  const searchProviders: Record<JobSearchSource, JobSearchProvider> = {
+    remoteok: new RemoteOkJobSearchProvider(),
+    arbeitnow: new ArbeitnowJobSearchProvider(),
+    adzuna: new AdzunaJobSearchProvider(env.ADZUNA_APP_ID, env.ADZUNA_APP_KEY),
+  };
   const career = new CareerService(
     new CareerRepository(db),
     profiles,
     textProviders,
     defaultTextProvider,
-    new GreenhouseJobProvider(),
+    boardProviders,
+    searchProviders,
   );
   const images = new ImageService(
     profiles,

@@ -1,15 +1,20 @@
 import { useEffect, useState } from "react";
 import {
+  JOB_BOARD_SOURCES,
   JOB_EMPLOYMENT_TYPES,
+  JOB_SEARCH_SOURCES,
   JOB_STATUSES,
   JOB_WORKPLACE_TYPES,
   RECRUITER_CONNECTION_STATUSES,
   TEXT_PROVIDERS,
   TEXT_PROVIDER_LABELS,
   type CompanyPublic,
+  type JobBoardSource,
   type JobEmploymentType,
   type JobFitResult,
   type JobPublic,
+  type JobSearchResult,
+  type JobSearchSource,
   type CareerAnalytics,
   type ContentTopicSuggestion,
   type JobStatus,
@@ -35,16 +40,30 @@ import {
   fetchRecruiters,
   generateOutreachMessage,
   generateResumeTailoringPlan,
-  importFromGreenhouse,
+  importFromBoard,
+  importSearchResult,
   patchJob,
   patchRecruiter,
   scoreRecruiter,
+  searchJobs,
   updateJobStatus,
   updateRecruiterConnectionStatus,
   type ApiError,
 } from "./api";
 import { ProviderSelect } from "./ProviderSelect";
 import { TagInput } from "./TagInput";
+
+const BOARD_SOURCE_LABELS: Record<JobBoardSource, string> = {
+  greenhouse: "Greenhouse",
+  lever: "Lever",
+  ashby: "Ashby",
+};
+
+const SEARCH_SOURCE_LABELS: Record<JobSearchSource, string> = {
+  remoteok: "RemoteOK",
+  arbeitnow: "Arbeitnow",
+  adzuna: "Adzuna",
+};
 
 const CONNECTION_STATUS_LABELS: Record<RecruiterConnectionStatus, string> = {
   NOT_CONNECTED: "Not connected",
@@ -114,6 +133,13 @@ export function CareerView({
   const [importingCompanyId, setImportingCompanyId] = useState<string | null>(null);
   const [importResults, setImportResults] = useState<Record<string, { imported: number; skipped: number }>>({});
   const [contentSuggestions, setContentSuggestions] = useState<ContentTopicSuggestion[]>([]);
+  const [searchSource, setSearchSource] = useState<JobSearchSource>("remoteok");
+  const [searchKeywords, setSearchKeywords] = useState("");
+  const [searchLocation, setSearchLocation] = useState("");
+  const [searching, setSearching] = useState(false);
+  const [searchResults, setSearchResults] = useState<JobSearchResult[]>([]);
+  const [addingResultId, setAddingResultId] = useState<string | null>(null);
+  const [addedResultIds, setAddedResultIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     let cancelled = false;
@@ -186,11 +212,11 @@ export function CareerView({
     }
   }
 
-  async function importGreenhouse(companyId: string, boardToken: string) {
+  async function importBoard(companyId: string, source: JobBoardSource, boardToken: string) {
     setError(null);
     setImportingCompanyId(companyId);
     try {
-      const result = await importFromGreenhouse(companyId, boardToken);
+      const result = await importFromBoard(companyId, source, boardToken);
       setJobs((current) => [...result.imported, ...current]);
       setImportResults((current) => ({
         ...current,
@@ -201,6 +227,39 @@ export function CareerView({
       setError((err as ApiError).message);
     } finally {
       setImportingCompanyId(null);
+    }
+  }
+
+  async function runJobSearch() {
+    setError(null);
+    if (!searchKeywords.trim()) {
+      setError("Give the search some keywords.");
+      return;
+    }
+    setSearching(true);
+    try {
+      const results = await searchJobs(searchSource, searchKeywords.trim(), searchLocation.trim() || undefined);
+      setSearchResults(results);
+      setAddedResultIds(new Set());
+    } catch (err) {
+      setError((err as ApiError).message);
+    } finally {
+      setSearching(false);
+    }
+  }
+
+  async function addSearchResult(posting: JobSearchResult) {
+    setError(null);
+    setAddingResultId(posting.externalId);
+    try {
+      const job = await importSearchResult(searchSource, posting);
+      setJobs((current) => [job, ...current]);
+      setAddedResultIds((current) => new Set(current).add(posting.externalId));
+      void refreshAnalytics();
+    } catch (err) {
+      setError((err as ApiError).message);
+    } finally {
+      setAddingResultId(null);
     }
   }
 
@@ -501,11 +560,83 @@ export function CareerView({
               company={company}
               importing={importingCompanyId === company.id}
               importResult={importResults[company.id] ?? null}
-              onImport={(boardToken) => void importGreenhouse(company.id, boardToken)}
+              onImport={(source, boardToken) => void importBoard(company.id, source, boardToken)}
             />
           ))}
         </div>
       )}
+
+      <h3>Search for jobs</h3>
+      <p className="lede">
+        Query a job aggregator by keyword instead of importing one company's board at a time.
+        Adding a result creates the company automatically if it isn't tracked yet.
+      </p>
+      <div className="grid-2">
+        <label className="field">
+          Source
+          <select
+            value={searchSource}
+            onChange={(event) => setSearchSource(event.target.value as JobSearchSource)}
+          >
+            {JOB_SEARCH_SOURCES.map((source) => (
+              <option key={source} value={source}>
+                {SEARCH_SOURCE_LABELS[source]}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="field">
+          Keywords
+          <input
+            value={searchKeywords}
+            onChange={(event) => setSearchKeywords(event.target.value)}
+            placeholder="e.g. platform engineer"
+          />
+        </label>
+        <label className="field">
+          Location (optional)
+          <input
+            value={searchLocation}
+            onChange={(event) => setSearchLocation(event.target.value)}
+            placeholder="e.g. remote, São Paulo"
+          />
+        </label>
+      </div>
+      <div className="actions">
+        <button className="btn ghost" type="button" disabled={searching} onClick={() => void runJobSearch()}>
+          {searching ? "Searching…" : "Search"}
+        </button>
+      </div>
+
+      {searchResults.length > 0 ? (
+        <div className="article-list">
+          {searchResults.map((posting) => (
+            <article className="article-card" key={posting.externalId}>
+              <p className="eyebrow">
+                {posting.companyName || "Unknown company"}
+                {posting.location ? ` · ${posting.location}` : ""}
+              </p>
+              <h3>{posting.title}</h3>
+              <div className="actions" style={{ justifyContent: "flex-start" }}>
+                <button
+                  className="btn ghost"
+                  type="button"
+                  disabled={addingResultId === posting.externalId || addedResultIds.has(posting.externalId)}
+                  onClick={() => void addSearchResult(posting)}
+                >
+                  {addedResultIds.has(posting.externalId)
+                    ? "Added"
+                    : addingResultId === posting.externalId
+                      ? "Adding…"
+                      : "Add to tracker"}
+                </button>
+              </div>
+            </article>
+          ))}
+        </div>
+      ) : null}
+
+      <JobSourceGuide />
 
       <h3>Jobs</h3>
       <div className="grid-2">
@@ -1060,8 +1191,9 @@ function CompanyCard({
   company: CompanyPublic;
   importing: boolean;
   importResult: { imported: number; skipped: number } | null;
-  onImport: (boardToken: string) => void;
+  onImport: (source: JobBoardSource, boardToken: string) => void;
 }) {
+  const [source, setSource] = useState<JobBoardSource>("greenhouse");
   const [boardToken, setBoardToken] = useState("");
 
   return (
@@ -1069,22 +1201,34 @@ function CompanyCard({
       <h3>{company.name}</h3>
       {company.website ? <p>{company.website}</p> : null}
 
-      <label className="field">
-        Greenhouse board token
-        <input
-          value={boardToken}
-          onChange={(event) => setBoardToken(event.target.value)}
-          placeholder="e.g. nimbus (from boards.greenhouse.io/nimbus)"
-        />
-      </label>
+      <div className="grid-2">
+        <label className="field">
+          Board source
+          <select value={source} onChange={(event) => setSource(event.target.value as JobBoardSource)}>
+            {JOB_BOARD_SOURCES.map((option) => (
+              <option key={option} value={option}>
+                {BOARD_SOURCE_LABELS[option]}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="field">
+          Board token
+          <input
+            value={boardToken}
+            onChange={(event) => setBoardToken(event.target.value)}
+            placeholder="e.g. nimbus"
+          />
+        </label>
+      </div>
       <div className="actions" style={{ justifyContent: "flex-start" }}>
         <button
           className="btn ghost"
           type="button"
           disabled={importing || !boardToken.trim()}
-          onClick={() => onImport(boardToken.trim())}
+          onClick={() => onImport(source, boardToken.trim())}
         >
-          {importing ? "Importing…" : "Import from Greenhouse"}
+          {importing ? "Importing…" : `Import from ${BOARD_SOURCE_LABELS[source]}`}
         </button>
       </div>
       {importResult ? (
@@ -1094,5 +1238,65 @@ function CompanyCard({
         </p>
       ) : null}
     </article>
+  );
+}
+
+function JobSourceGuide() {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <section className="notice">
+      <div className="actions" style={{ justifyContent: "space-between" }}>
+        <p>
+          <strong>New to these sites?</strong> A short guide to what each one is and how to use it.
+        </p>
+        <button className="btn ghost" type="button" onClick={() => setOpen((value) => !value)}>
+          {open ? "Hide guide" : "Show guide"}
+        </button>
+      </div>
+      {open ? (
+        <div className="grid-2">
+          <div>
+            <p className="eyebrow">Board sources — import one company at a time</p>
+            <p>
+              <strong>Greenhouse.</strong> A hiring platform many companies use for their careers
+              page. If a company's job listings live at{" "}
+              <code>boards.greenhouse.io/&lt;token&gt;</code>, that last part is the board token —
+              use it above.
+            </p>
+            <p>
+              <strong>Lever.</strong> Same idea, different platform. Job listings at{" "}
+              <code>jobs.lever.co/&lt;token&gt;</code> — the token is the company's slug in that
+              URL.
+            </p>
+            <p>
+              <strong>Ashby.</strong> Job listings at <code>jobs.ashbyhq.com/&lt;token&gt;</code>{" "}
+              — same pattern, the token is the slug.
+            </p>
+            <p>
+              To find a company's token: open their careers page, look for a "powered by
+              Greenhouse/Lever/Ashby" link, or check if their job URLs already match one of the
+              patterns above.
+            </p>
+          </div>
+          <div>
+            <p className="eyebrow">Search sources — query across many companies at once</p>
+            <p>
+              <strong>RemoteOK.</strong> A remote-jobs board. No signup needed — search runs
+              directly.
+            </p>
+            <p>
+              <strong>Arbeitnow.</strong> A general job board, strong in Europe. No signup needed.
+            </p>
+            <p>
+              <strong>Adzuna.</strong> A broader job search engine with real keyword + location
+              search, but it needs a free API key. Get one instantly at{" "}
+              <code>developer.adzuna.com</code>, then set <code>ADZUNA_APP_ID</code> and{" "}
+              <code>ADZUNA_APP_KEY</code> in this workspace's environment.
+            </p>
+          </div>
+        </div>
+      ) : null}
+    </section>
   );
 }

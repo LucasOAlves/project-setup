@@ -3,10 +3,13 @@ import type {
   CompanyInput,
   ContentTopicSuggestion,
   CompanyPublic,
+  JobBoardSource,
   JobFitResult,
   JobInput,
   JobPatchInput,
   JobPublic,
+  JobSearchResult,
+  JobSearchSource,
   JobStatus,
   OutreachMessage,
   RecruiterInput,
@@ -36,6 +39,7 @@ import { computeCareerAnalytics } from "./career-analytics.js";
 import { computeContentTopicSuggestions } from "./content-suggestions.js";
 import type { CareerRepository, CompanyRow, JobRow, RecruiterRow } from "./career-repository.js";
 import type { JobProvider } from "./job-provider.js";
+import type { JobSearchProvider } from "./job-search-provider.js";
 import { computeJobFit } from "./job-fit.js";
 import { scoreRecruiterRelevance } from "./recruiter-scoring.js";
 import { applyTailoringPlan, groundTailoringPlan } from "./resume-tailoring.js";
@@ -56,7 +60,8 @@ export class CareerService {
     private readonly profiles: ProfileService,
     private readonly textProviders: Record<TextProviderName, TextGenerationProvider>,
     private readonly defaultTextProvider: TextProviderName,
-    private readonly greenhouseProvider: JobProvider,
+    private readonly boardProviders: Record<JobBoardSource, JobProvider>,
+    private readonly searchProviders: Record<JobSearchSource, JobSearchProvider>,
   ) {}
 
   async listCompanies(): Promise<CompanyPublic[]> {
@@ -87,8 +92,9 @@ export class CareerService {
   // so it runs automatically, no approval step. Postings already imported (matched by
   // source + externalId) are skipped, never re-created or overwritten — a re-sync only adds
   // what's new.
-  async importFromGreenhouse(
+  async importFromBoard(
     companyId: string,
+    source: JobBoardSource,
     boardToken: string,
   ): Promise<{ imported: JobPublic[]; skipped: number }> {
     const company = await this.repo.getCompany(companyId);
@@ -96,18 +102,18 @@ export class CareerService {
       throw notFound("That company does not exist.");
     }
 
-    const postings = await this.greenhouseProvider.listJobs(boardToken);
+    const postings = await this.boardProviders[source].listJobs(boardToken);
     const imported: JobPublic[] = [];
     let skipped = 0;
     for (const posting of postings) {
-      const existing = await this.repo.getJobByExternalId("greenhouse", posting.externalId);
+      const existing = await this.repo.getJobByExternalId(source, posting.externalId);
       if (existing) {
         skipped += 1;
         continue;
       }
       const row = await this.repo.createImportedJob({
         companyId,
-        source: "greenhouse",
+        source,
         externalId: posting.externalId,
         title: posting.title,
         url: posting.url,
@@ -117,6 +123,58 @@ export class CareerService {
       imported.push(this.jobToPublic(row));
     }
     return { imported, skipped };
+  }
+
+  // SEARCH-level per ADR-012: a keyword search across an aggregator is read-only, returns a
+  // draft the user picks from — nothing is saved until importSearchResult() is called for a
+  // specific result (ADR-010's draft posture, same as every other search/extract feature).
+  async searchJobs(
+    source: JobSearchSource,
+    keywords: string,
+    location?: string,
+  ): Promise<JobSearchResult[]> {
+    const postings = await this.searchProviders[source].searchJobs({ keywords, location });
+    return postings.map((posting) => ({
+      externalId: posting.externalId,
+      title: posting.title,
+      url: posting.url,
+      location: posting.location,
+      description: posting.description,
+      companyName: posting.companyNameFromSource,
+    }));
+  }
+
+  async importSearchResult(source: JobSearchSource, posting: JobSearchResult): Promise<JobPublic> {
+    const existing = await this.repo.getJobByExternalId(source, posting.externalId);
+    if (existing) {
+      return this.jobToPublic(existing);
+    }
+
+    const companyName = posting.companyName.trim() || "Unknown company";
+    let company = await this.repo.findCompanyByName(companyName);
+    if (!company) {
+      company = await this.repo.createCompany({
+        name: companyName,
+        website: "",
+        linkedinUrl: "",
+        industry: "",
+        size: "",
+        locations: [],
+        careerPageUrl: "",
+        notes: "",
+      });
+    }
+
+    const row = await this.repo.createImportedJob({
+      companyId: company.id,
+      source,
+      externalId: posting.externalId,
+      title: posting.title,
+      url: posting.url,
+      location: posting.location,
+      description: posting.description,
+    });
+    return this.jobToPublic(row);
   }
 
   async updateJobStatus(id: string, status: string): Promise<JobPublic> {

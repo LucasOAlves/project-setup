@@ -12,10 +12,13 @@ import type {
   ContentTopicSuggestion,
   ImageProviderName,
   ImagePublic,
+  JobBoardSource,
   JobFitResult,
   JobInput,
   JobPatchInput,
   JobPublic,
+  JobSearchResult,
+  JobSearchSource,
   JobStatus,
   OpportunitySetPublic,
   OutreachMessage,
@@ -534,19 +537,53 @@ export async function fetchCompanies(): Promise<CompanyPublic[]> {
   return body.companies;
 }
 
-export async function importFromGreenhouse(
+export async function importFromBoard(
   companyId: string,
+  source: JobBoardSource,
   boardToken: string,
 ): Promise<{ imported: JobPublic[]; skipped: number }> {
-  const response = await fetch(`/api/career/companies/${companyId}/import/greenhouse`, {
+  const response = await fetch(`/api/career/companies/${companyId}/import`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ boardToken }),
+    body: JSON.stringify({ source, boardToken }),
   });
   if (!response.ok) {
     throw await parseError(response);
   }
   return (await response.json()) as { imported: JobPublic[]; skipped: number };
+}
+
+export async function searchJobs(
+  source: JobSearchSource,
+  keywords: string,
+  location?: string,
+): Promise<JobSearchResult[]> {
+  const response = await fetch("/api/career/jobs/search", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ source, keywords, location }),
+  });
+  if (!response.ok) {
+    throw await parseError(response);
+  }
+  const body = (await response.json()) as { postings: JobSearchResult[] };
+  return body.postings;
+}
+
+export async function importSearchResult(
+  source: JobSearchSource,
+  posting: JobSearchResult,
+): Promise<JobPublic> {
+  const response = await fetch("/api/career/jobs/search/import", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ source, posting }),
+  });
+  if (!response.ok) {
+    throw await parseError(response);
+  }
+  const body = (await response.json()) as { job: JobPublic };
+  return body.job;
 }
 
 export async function createCompany(input: CompanyInput): Promise<CompanyPublic> {

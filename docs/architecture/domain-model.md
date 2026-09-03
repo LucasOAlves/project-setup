@@ -131,11 +131,14 @@ if moved back below it — same pattern as `GeneratedPost.publishedAt`), `notes`
 
 Deliberately **not** split into a separate `Application` entity in Slice 1 — see ADR-011's
 "Deferred" section. `source`/`externalId` exist since Slice 1 specifically so a `JobProvider`
-adapter could populate `Job` rows without a schema change — that's now real:
-`GreenhouseJobProvider` sets `source: "greenhouse"` and `externalId` to Greenhouse's own job
-id, and `CareerRepository.getJobByExternalId()` makes re-importing the same board idempotent
-(already-tracked postings are skipped, never duplicated or overwritten). Manually-added jobs
-keep `source: "manual"`.
+adapter could populate `Job` rows without a schema change — that's now real: each `JobProvider`
+board adapter (`GreenhouseJobProvider`, `LeverJobProvider`, `AshbyJobProvider`) sets `source` to
+its own vendor name and `externalId` to that vendor's own job id, and each `JobSearchProvider`
+adapter (`RemoteOkJobSearchProvider`, `ArbeitnowJobSearchProvider`, `AdzunaJobSearchProvider`)
+does the same for search results. `CareerRepository.getJobByExternalId()` makes re-importing
+the same board — or re-adding the same search result — idempotent (already-tracked postings are
+skipped, never duplicated or overwritten). Manually-added jobs keep `source: "manual"`. See
+ADR-011's second update note for why board import and keyword search are two separate ports.
 
 `fitScore` (the overall Job Fit score, 0-100) is computed deterministically by
 `computeJobFit()` (`apps/api/src/modules/career/job-fit.ts`) against the saved `Profile` and

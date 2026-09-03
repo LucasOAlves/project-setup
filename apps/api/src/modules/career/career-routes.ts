@@ -1,8 +1,10 @@
 import {
+  boardImportInputSchema,
   companyInputSchema,
-  greenhouseImportInputSchema,
   jobInputSchema,
   jobPatchInputSchema,
+  jobSearchImportInputSchema,
+  jobSearchInputSchema,
   jobStatusInputSchema,
   recruiterConnectionStatusInputSchema,
   recruiterInputSchema,
@@ -42,14 +44,36 @@ export async function registerCareerRoutes(
     return reply.code(201).send({ company });
   });
 
-  app.post("/api/career/companies/:id/import/greenhouse", async (request) => {
+  app.post("/api/career/companies/:id/import", async (request) => {
     const { id } = request.params as { id: string };
-    const parsed = greenhouseImportInputSchema.safeParse(request.body);
+    const parsed = boardImportInputSchema.safeParse(request.body);
     if (!parsed.success) {
-      throw validationError("A Greenhouse board token is required.");
+      throw validationError("A board source and token are required.");
     }
-    const result = await service.importFromGreenhouse(id, parsed.data.boardToken);
+    const result = await service.importFromBoard(id, parsed.data.source, parsed.data.boardToken);
     return result;
+  });
+
+  app.post("/api/career/jobs/search", async (request) => {
+    const parsed = jobSearchInputSchema.safeParse(request.body);
+    if (!parsed.success) {
+      throw validationError("A search source and keywords are required.");
+    }
+    const postings = await service.searchJobs(
+      parsed.data.source,
+      parsed.data.keywords,
+      parsed.data.location,
+    );
+    return { postings };
+  });
+
+  app.post("/api/career/jobs/search/import", async (request, reply) => {
+    const parsed = jobSearchImportInputSchema.safeParse(request.body);
+    if (!parsed.success) {
+      throw validationError("A search source and posting are required.");
+    }
+    const job = await service.importSearchResult(parsed.data.source, parsed.data.posting);
+    return reply.code(201).send({ job });
   });
 
   app.get("/api/career/jobs", async () => {

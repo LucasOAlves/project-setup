@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import type { JobBoardSource, JobSearchSource } from "@studio/shared";
 import type { TextGenerationProvider } from "../ai/text-generation-provider.ts";
+import type { JobProvider } from "./job-provider.ts";
+import type { JobSearchProvider } from "./job-search-provider.ts";
 import { CareerService } from "./career-service.ts";
 
 const textMap = (text: TextGenerationProvider) => ({ openai: text, anthropic: text }) as const;
@@ -9,6 +12,24 @@ const noTextCalls: TextGenerationProvider = {
     assert.fail("must not call the model");
   },
 };
+
+function noBoardProviders(message = "must not call the job provider"): Record<JobBoardSource, JobProvider> {
+  const fail: JobProvider = {
+    async listJobs() {
+      assert.fail(message);
+    },
+  };
+  return { greenhouse: fail, lever: fail, ashby: fail };
+}
+
+function noSearchProviders(message = "must not call the search provider"): Record<JobSearchSource, JobSearchProvider> {
+  const fail: JobSearchProvider = {
+    async searchJobs() {
+      assert.fail(message);
+    },
+  };
+  return { remoteok: fail, arbeitnow: fail, adzuna: fail };
+}
 
 function fakeCompany(overrides: Partial<Record<string, unknown>> = {}) {
   return {
@@ -78,14 +99,21 @@ function fakeJob(overrides: Partial<Record<string, unknown>> = {}) {
 }
 
 test("createJob rejects a job for a company that does not exist", async () => {
-  const service = new CareerService({
-    async getCompany() {
-      return null;
-    },
-    async createJob() {
-      assert.fail("must not insert a job for a missing company");
-    },
-  } as never, {} as never, textMap(noTextCalls), "openai", { async listJobs() { assert.fail("must not call the job provider"); } });
+  const service = new CareerService(
+    {
+      async getCompany() {
+        return null;
+      },
+      async createJob() {
+        assert.fail("must not insert a job for a missing company");
+      },
+    } as never,
+    {} as never,
+    textMap(noTextCalls),
+    "openai",
+    noBoardProviders(),
+    noSearchProviders(),
+  );
 
   await assert.rejects(() =>
     service.createJob({
@@ -111,15 +139,22 @@ test("createJob rejects a job for a company that does not exist", async () => {
 
 test("createJob persists a job once the company exists", async () => {
   let inserted: unknown;
-  const service = new CareerService({
-    async getCompany() {
-      return fakeCompany();
-    },
-    async createJob(input: unknown) {
-      inserted = input;
-      return fakeJob();
-    },
-  } as never, {} as never, textMap(noTextCalls), "openai", { async listJobs() { assert.fail("must not call the job provider"); } });
+  const service = new CareerService(
+    {
+      async getCompany() {
+        return fakeCompany();
+      },
+      async createJob(input: unknown) {
+        inserted = input;
+        return fakeJob();
+      },
+    } as never,
+    {} as never,
+    textMap(noTextCalls),
+    "openai",
+    noBoardProviders(),
+    noSearchProviders(),
+  );
 
   const job = await service.createJob({
     companyId: "00000000-0000-4000-8000-000000000001",
@@ -148,15 +183,22 @@ test("createJob persists a job once the company exists", async () => {
 
 test("updateJobStatus stamps appliedAt the first time status reaches APPLIED-or-later", async () => {
   let patch: unknown;
-  const service = new CareerService({
-    async getJob() {
-      return fakeJob({ status: "SHORTLISTED", appliedAt: null });
-    },
-    async updateJobStatus(_id: string, input: unknown) {
-      patch = input;
-      return fakeJob({ status: "APPLIED", appliedAt: new Date() });
-    },
-  } as never, {} as never, textMap(noTextCalls), "openai", { async listJobs() { assert.fail("must not call the job provider"); } });
+  const service = new CareerService(
+    {
+      async getJob() {
+        return fakeJob({ status: "SHORTLISTED", appliedAt: null });
+      },
+      async updateJobStatus(_id: string, input: unknown) {
+        patch = input;
+        return fakeJob({ status: "APPLIED", appliedAt: new Date() });
+      },
+    } as never,
+    {} as never,
+    textMap(noTextCalls),
+    "openai",
+    noBoardProviders(),
+    noSearchProviders(),
+  );
 
   const job = await service.updateJobStatus("job-1", "APPLIED");
 
@@ -167,15 +209,22 @@ test("updateJobStatus stamps appliedAt the first time status reaches APPLIED-or-
 test("updateJobStatus does not restamp appliedAt if already set", async () => {
   const existingAppliedAt = new Date("2026-01-01T00:00:00Z");
   let patch: unknown;
-  const service = new CareerService({
-    async getJob() {
-      return fakeJob({ status: "APPLIED", appliedAt: existingAppliedAt });
-    },
-    async updateJobStatus(_id: string, input: unknown) {
-      patch = input;
-      return fakeJob({ status: "SCREENING", appliedAt: existingAppliedAt });
-    },
-  } as never, {} as never, textMap(noTextCalls), "openai", { async listJobs() { assert.fail("must not call the job provider"); } });
+  const service = new CareerService(
+    {
+      async getJob() {
+        return fakeJob({ status: "APPLIED", appliedAt: existingAppliedAt });
+      },
+      async updateJobStatus(_id: string, input: unknown) {
+        patch = input;
+        return fakeJob({ status: "SCREENING", appliedAt: existingAppliedAt });
+      },
+    } as never,
+    {} as never,
+    textMap(noTextCalls),
+    "openai",
+    noBoardProviders(),
+    noSearchProviders(),
+  );
 
   await service.updateJobStatus("job-1", "SCREENING");
 
@@ -184,15 +233,22 @@ test("updateJobStatus does not restamp appliedAt if already set", async () => {
 
 test("updateJobStatus clears appliedAt when moved back to a pre-application stage", async () => {
   let patch: unknown;
-  const service = new CareerService({
-    async getJob() {
-      return fakeJob({ status: "APPLIED", appliedAt: new Date() });
-    },
-    async updateJobStatus(_id: string, input: unknown) {
-      patch = input;
-      return fakeJob({ status: "SHORTLISTED", appliedAt: null });
-    },
-  } as never, {} as never, textMap(noTextCalls), "openai", { async listJobs() { assert.fail("must not call the job provider"); } });
+  const service = new CareerService(
+    {
+      async getJob() {
+        return fakeJob({ status: "APPLIED", appliedAt: new Date() });
+      },
+      async updateJobStatus(_id: string, input: unknown) {
+        patch = input;
+        return fakeJob({ status: "SHORTLISTED", appliedAt: null });
+      },
+    } as never,
+    {} as never,
+    textMap(noTextCalls),
+    "openai",
+    noBoardProviders(),
+    noSearchProviders(),
+  );
 
   await service.updateJobStatus("job-1", "SHORTLISTED");
 
@@ -200,11 +256,18 @@ test("updateJobStatus clears appliedAt when moved back to a pre-application stag
 });
 
 test("updateJobStatus rejects an unknown job id", async () => {
-  const service = new CareerService({
-    async getJob() {
-      return null;
-    },
-  } as never, {} as never, textMap(noTextCalls), "openai", { async listJobs() { assert.fail("must not call the job provider"); } });
+  const service = new CareerService(
+    {
+      async getJob() {
+        return null;
+      },
+    } as never,
+    {} as never,
+    textMap(noTextCalls),
+    "openai",
+    noBoardProviders(),
+    noSearchProviders(),
+  );
 
   await assert.rejects(() => service.updateJobStatus("missing", "APPLIED"));
 });
@@ -223,7 +286,8 @@ test("computeFit requires a saved profile", async () => {
     } as never,
     textMap(noTextCalls),
     "openai",
-    { async listJobs() { assert.fail("must not call the job provider"); } } as never,
+    noBoardProviders(),
+    noSearchProviders(),
   );
 
   await assert.rejects(() => service.computeFit("job-1"));
@@ -255,7 +319,8 @@ test("computeFit persists the overall score and returns the full breakdown", asy
     } as never,
     textMap(noTextCalls),
     "openai",
-    { async listJobs() { assert.fail("must not call the job provider"); } } as never,
+    noBoardProviders(),
+    noSearchProviders(),
   );
 
   const fit = await service.computeFit("job-1");
@@ -306,7 +371,8 @@ test("generateResumeTailoringPlan grounds the model's plan against the real prof
       },
     }),
     "openai",
-    { async listJobs() { assert.fail("must not call the job provider"); } } as never,
+    noBoardProviders(),
+    noSearchProviders(),
   );
 
   const plan = await service.generateResumeTailoringPlan("job-1");
@@ -339,7 +405,8 @@ test("generateResumeTailoringPlan rejects a model response that fails the schema
       },
     }),
     "openai",
-    { async listJobs() { assert.fail("must not call the job provider"); } } as never,
+    noBoardProviders(),
+    noSearchProviders(),
   );
 
   await assert.rejects(() => service.generateResumeTailoringPlan("job-1"));
@@ -358,7 +425,8 @@ test("createRecruiter rejects a recruiter for a company that does not exist", as
     {} as never,
     textMap(noTextCalls),
     "openai",
-    { async listJobs() { assert.fail("must not call the job provider"); } } as never,
+    noBoardProviders(),
+    noSearchProviders(),
   );
 
   await assert.rejects(() =>
@@ -390,7 +458,8 @@ test("createRecruiter rejects a relatedJobId that does not exist", async () => {
     {} as never,
     textMap(noTextCalls),
     "openai",
-    { async listJobs() { assert.fail("must not call the job provider"); } } as never,
+    noBoardProviders(),
+    noSearchProviders(),
   );
 
   await assert.rejects(() =>
@@ -424,7 +493,8 @@ test("scoreRecruiter combines role, company, and job-link signals and persists t
     {} as never,
     textMap(noTextCalls),
     "openai",
-    { async listJobs() { assert.fail("must not call the job provider"); } } as never,
+    noBoardProviders(),
+    noSearchProviders(),
   );
 
   const recruiter = await service.scoreRecruiter("recruiter-1");
@@ -445,7 +515,8 @@ test("patchRecruiter stamps lastInteractionAt when notes are saved", async () =>
     {} as never,
     textMap(noTextCalls),
     "openai",
-    { async listJobs() { assert.fail("must not call the job provider"); } } as never,
+    noBoardProviders(),
+    noSearchProviders(),
   );
 
   await service.patchRecruiter("recruiter-1", { notes: "Talked on the phone." });
@@ -470,7 +541,8 @@ test("generateOutreachMessage requires a saved profile", async () => {
     } as never,
     textMap(noTextCalls),
     "openai",
-    { async listJobs() { assert.fail("must not call the job provider"); } } as never,
+    noBoardProviders(),
+    noSearchProviders(),
   );
 
   await assert.rejects(() => service.generateOutreachMessage("recruiter-1"));
@@ -503,7 +575,8 @@ test("generateOutreachMessage returns the model's structured draft", async () =>
       },
     }),
     "openai",
-    { async listJobs() { assert.fail("must not call the job provider"); } } as never,
+    noBoardProviders(),
+    noSearchProviders(),
   );
 
   const message = await service.generateOutreachMessage("recruiter-1");
@@ -532,7 +605,8 @@ test("getAnalytics composes jobs, recruiters, and status history into one report
     } as never,
     textMap(noTextCalls),
     "openai",
-    { async listJobs() { assert.fail("must not call the job provider"); } } as never,
+    noBoardProviders(),
+    noSearchProviders(),
   );
 
   const analytics = await service.getAnalytics();
@@ -542,7 +616,7 @@ test("getAnalytics composes jobs, recruiters, and status history into one report
   assert.equal(analytics.recruiterContacts, 1);
 });
 
-test("importFromGreenhouse rejects an unknown company without calling the provider", async () => {
+test("importFromBoard rejects an unknown company without calling the provider", async () => {
   const service = new CareerService(
     {
       async getCompany() {
@@ -552,14 +626,40 @@ test("importFromGreenhouse rejects an unknown company without calling the provid
     {} as never,
     textMap(noTextCalls),
     "openai",
-    { async listJobs() { assert.fail("must not call the job provider for a missing company"); } } as never,
+    noBoardProviders("must not call the job provider for a missing company"),
+    noSearchProviders(),
   );
 
-  await assert.rejects(() => service.importFromGreenhouse("company-1", "nimbus"));
+  await assert.rejects(() => service.importFromBoard("company-1", "greenhouse", "nimbus"));
 });
 
-test("importFromGreenhouse skips postings already imported and only creates the new ones", async () => {
+test("importFromBoard skips postings already imported and only creates the new ones", async () => {
   const created: unknown[] = [];
+  const boardProviders = noBoardProviders();
+  boardProviders.greenhouse = {
+    async listJobs() {
+      return [
+        {
+          externalId: "1",
+          title: "Already imported",
+          url: "https://x/1",
+          location: "",
+          description: "",
+          companyNameFromSource: "Nimbus",
+          updatedAt: new Date(),
+        },
+        {
+          externalId: "2",
+          title: "New posting",
+          url: "https://x/2",
+          location: "",
+          description: "",
+          companyNameFromSource: "Nimbus",
+          updatedAt: new Date(),
+        },
+      ];
+    },
+  };
   const service = new CareerService(
     {
       async getCompany() {
@@ -576,38 +676,153 @@ test("importFromGreenhouse skips postings already imported and only creates the 
     {} as never,
     textMap(noTextCalls),
     "openai",
-    {
-      async listJobs() {
-        return [
-          {
-            externalId: "1",
-            title: "Already imported",
-            url: "https://x/1",
-            location: "",
-            description: "",
-            companyNameFromSource: "Nimbus",
-            updatedAt: new Date(),
-          },
-          {
-            externalId: "2",
-            title: "New posting",
-            url: "https://x/2",
-            location: "",
-            description: "",
-            companyNameFromSource: "Nimbus",
-            updatedAt: new Date(),
-          },
-        ];
-      },
-    } as never,
+    boardProviders,
+    noSearchProviders(),
   );
 
-  const result = await service.importFromGreenhouse("company-1", "nimbus");
+  const result = await service.importFromBoard("company-1", "greenhouse", "nimbus");
 
   assert.equal(result.skipped, 1);
   assert.equal(result.imported.length, 1);
   assert.equal(created.length, 1);
   assert.equal((created[0] as { externalId: string }).externalId, "2");
+});
+
+test("searchJobs returns normalized postings from the chosen search provider", async () => {
+  const searchProviders = noSearchProviders();
+  searchProviders.remoteok = {
+    async searchJobs() {
+      return [
+        {
+          externalId: "42",
+          title: "Backend Engineer",
+          url: "https://x/42",
+          location: "Remote",
+          description: "Build things.",
+          companyNameFromSource: "Nimbus",
+          updatedAt: new Date(),
+        },
+      ];
+    },
+  };
+  const service = new CareerService(
+    {} as never,
+    {} as never,
+    textMap(noTextCalls),
+    "openai",
+    noBoardProviders(),
+    searchProviders,
+  );
+
+  const results = await service.searchJobs("remoteok", "backend");
+
+  assert.equal(results.length, 1);
+  assert.equal(results[0]?.companyName, "Nimbus");
+});
+
+test("importSearchResult reuses an existing company matched case-insensitively", async () => {
+  let createCompanyCalled = false;
+  const service = new CareerService(
+    {
+      async getJobByExternalId() {
+        return null;
+      },
+      async findCompanyByName(name: string) {
+        return name.toLowerCase() === "nimbus" ? fakeCompany() : null;
+      },
+      async createCompany() {
+        createCompanyCalled = true;
+        return fakeCompany();
+      },
+      async createImportedJob(input: unknown) {
+        return fakeJob({ ...(input as Record<string, unknown>) });
+      },
+    } as never,
+    {} as never,
+    textMap(noTextCalls),
+    "openai",
+    noBoardProviders(),
+    noSearchProviders(),
+  );
+
+  await service.importSearchResult("remoteok", {
+    externalId: "42",
+    title: "Backend Engineer",
+    url: "https://x/42",
+    location: "Remote",
+    description: "Build things.",
+    companyName: "NIMBUS",
+  });
+
+  assert.equal(createCompanyCalled, false);
+});
+
+test("importSearchResult creates a new company when none matches", async () => {
+  let createdCompanyName: string | undefined;
+  const service = new CareerService(
+    {
+      async getJobByExternalId() {
+        return null;
+      },
+      async findCompanyByName() {
+        return null;
+      },
+      async createCompany(input: { name: string }) {
+        createdCompanyName = input.name;
+        return fakeCompany({ name: input.name });
+      },
+      async createImportedJob(input: unknown) {
+        return fakeJob({ ...(input as Record<string, unknown>) });
+      },
+    } as never,
+    {} as never,
+    textMap(noTextCalls),
+    "openai",
+    noBoardProviders(),
+    noSearchProviders(),
+  );
+
+  await service.importSearchResult("arbeitnow", {
+    externalId: "7",
+    title: "Platform Engineer",
+    url: "https://x/7",
+    location: "Berlin",
+    description: "",
+    companyName: "Acme GmbH",
+  });
+
+  assert.equal(createdCompanyName, "Acme GmbH");
+});
+
+test("importSearchResult is idempotent on re-import", async () => {
+  let createImportedJobCalls = 0;
+  const service = new CareerService(
+    {
+      async getJobByExternalId() {
+        return fakeJob({ externalId: "42", source: "remoteok" });
+      },
+      async createImportedJob(input: unknown) {
+        createImportedJobCalls += 1;
+        return fakeJob({ ...(input as Record<string, unknown>) });
+      },
+    } as never,
+    {} as never,
+    textMap(noTextCalls),
+    "openai",
+    noBoardProviders(),
+    noSearchProviders(),
+  );
+
+  await service.importSearchResult("remoteok", {
+    externalId: "42",
+    title: "Backend Engineer",
+    url: "https://x/42",
+    location: "Remote",
+    description: "",
+    companyName: "Nimbus",
+  });
+
+  assert.equal(createImportedJobCalls, 0);
 });
 
 test("getContentSuggestions returns nothing without a saved profile", async () => {
@@ -624,7 +839,8 @@ test("getContentSuggestions returns nothing without a saved profile", async () =
     } as never,
     textMap(noTextCalls),
     "openai",
-    { async listJobs() { assert.fail("must not call the job provider"); } } as never,
+    noBoardProviders(),
+    noSearchProviders(),
   );
 
   const suggestions = await service.getContentSuggestions();
@@ -649,7 +865,8 @@ test("getContentSuggestions grounds market demand against the real saved profile
     } as never,
     textMap(noTextCalls),
     "openai",
-    { async listJobs() { assert.fail("must not call the job provider"); } } as never,
+    noBoardProviders(),
+    noSearchProviders(),
   );
 
   const suggestions = await service.getContentSuggestions();

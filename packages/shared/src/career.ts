@@ -32,7 +32,22 @@ export const JOB_STATUSES = [
 ] as const;
 export type JobStatus = (typeof JOB_STATUSES)[number];
 
-export const JOB_SOURCES = ["manual", "linkedin", "greenhouse", "lever"] as const;
+// Board sources: a per-company job board you import from by giving the company's own board
+// token/slug (see ADR-011's update note, and the follow-up note below for the newer three).
+export const JOB_BOARD_SOURCES = ["greenhouse", "lever", "ashby"] as const;
+export type JobBoardSource = (typeof JOB_BOARD_SOURCES)[number];
+
+// Search sources: an aggregator you query by keyword — results span many companies, so
+// importing one may need to create a new Company on the fly (see CareerService.importSearchResult).
+export const JOB_SEARCH_SOURCES = ["remoteok", "arbeitnow", "adzuna"] as const;
+export type JobSearchSource = (typeof JOB_SEARCH_SOURCES)[number];
+
+export const JOB_SOURCES = [
+  "manual",
+  "linkedin",
+  ...JOB_BOARD_SOURCES,
+  ...JOB_SEARCH_SOURCES,
+] as const;
 export type JobSource = (typeof JOB_SOURCES)[number];
 
 const stringList = (maxItems: number, maxLength: number) =>
@@ -90,10 +105,38 @@ export const jobPublicSchema = jobInputSchema.extend({
 });
 export type JobPublic = z.infer<typeof jobPublicSchema>;
 
-export const greenhouseImportInputSchema = z.object({
+export const boardImportInputSchema = z.object({
+  source: z.enum(JOB_BOARD_SOURCES),
   boardToken: z.string().trim().min(1).max(100),
 });
-export type GreenhouseImportInput = z.infer<typeof greenhouseImportInputSchema>;
+export type BoardImportInput = z.infer<typeof boardImportInputSchema>;
+
+export const jobSearchInputSchema = z.object({
+  source: z.enum(JOB_SEARCH_SOURCES),
+  keywords: z.string().trim().min(1).max(200),
+  location: z.string().trim().max(120).optional(),
+});
+export type JobSearchInput = z.infer<typeof jobSearchInputSchema>;
+
+// A search result is shown to the user before anything is saved — the same draft-review
+// posture as everywhere else (ADR-010) — then round-tripped back via jobSearchImportInputSchema
+// once they pick one to track, the same "client hands back what it was given, server re-derives
+// the rest" shape as the résumé tailoring plan.
+export const jobSearchResultSchema = z.object({
+  externalId: z.string(),
+  title: z.string(),
+  url: z.string(),
+  location: z.string(),
+  description: z.string(),
+  companyName: z.string(),
+});
+export type JobSearchResult = z.infer<typeof jobSearchResultSchema>;
+
+export const jobSearchImportInputSchema = z.object({
+  source: z.enum(JOB_SEARCH_SOURCES),
+  posting: jobSearchResultSchema,
+});
+export type JobSearchImportInput = z.infer<typeof jobSearchImportInputSchema>;
 
 export const jobStatusInputSchema = z.object({
   status: z.enum(JOB_STATUSES),

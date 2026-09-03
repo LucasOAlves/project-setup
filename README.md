@@ -73,13 +73,22 @@ grounded only in real profile facts. Both outreach fields are always a draft you
 send yourself — this app never sends a message, a connection request, or anything else on
 your behalf (see [ADR-012](docs/decisions/ADR-012-external-action-approval.md)).
 
-Greenhouse import is available on each tracked company: enter that company's Greenhouse board
-token (the slug in `boards.greenhouse.io/<token>`) and "Import from Greenhouse" pulls every
-open posting from that board's real, public, unauthenticated Job Board API — no OAuth, no
-LinkedIn. Re-running an import only adds postings not already tracked (matched by source +
-external id); nothing is re-created or overwritten. See
-[ADR-011](docs/decisions/ADR-011-career-domain-boundaries.md)'s update note for why Greenhouse,
-not LinkedIn, is this project's first real job provider.
+Job board import is available on each tracked company: pick a board source (Greenhouse, Lever,
+or Ashby), enter that company's board token (the slug in `boards.greenhouse.io/<token>`,
+`jobs.lever.co/<token>`, or `jobs.ashbyhq.com/<token>`), and "Import from…" pulls every open
+posting from that board's real, public, unauthenticated Job Board API — no OAuth, no LinkedIn.
+Re-running an import only adds postings not already tracked (matched by source + external id);
+nothing is re-created or overwritten. See
+[ADR-011](docs/decisions/ADR-011-career-domain-boundaries.md)'s update notes for why Greenhouse,
+not LinkedIn, is this project's first real job provider, and for the later board/search split.
+
+Job search is available above the company list: pick a search source (RemoteOK, Arbeitnow, or
+Adzuna — Adzuna needs a free `ADZUNA_APP_ID`/`ADZUNA_APP_KEY` from developer.adzuna.com; the
+other two need no key), enter keywords and an optional location, and "Add to tracker" imports
+one result — creating its company automatically (matched case-insensitively, or created new) if
+it isn't tracked yet. Unlike board import, search spans many companies at once instead of one
+company's own board. A collapsible "New to these sites?" guide next to the search panel explains
+each of the five sources and how to find a company's board token.
 
 Content ideas from your job search close the Content↔Career loop, one direction of it: the
 Career step surfaces which technologies your tracked jobs actually request, kept only when

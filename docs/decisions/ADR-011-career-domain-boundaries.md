@@ -129,6 +129,35 @@ genuinely new. Verified against GitLab's real, live Greenhouse board (231 real p
 first import created all 231; a second import against the same board created zero and
 reported all 231 as already tracked.
 
+## Update — board import and keyword search are separate ports (Lever, Ashby, RemoteOK, Arbeitnow, Adzuna)
+
+Greenhouse, Lever, and Ashby all share the same shape: given one company's own board token,
+list that board's open postings. But a second, genuinely different shape exists in the same
+market — job aggregators (RemoteOK, Arbeitnow, Adzuna) that you query by *keyword*, and whose
+results span many companies at once rather than one known board. Forcing both shapes through
+the single `JobProvider.listJobs(boardToken)` interface would have meant a fake "board token"
+for aggregators that don't have one, so the Career domain now has two ports instead of one:
+
+- `JobProvider` (`job-provider.ts`) — unchanged shape, `listJobs(boardToken)` — now with three
+  adapters: `GreenhouseJobProvider`, `LeverJobProvider`, `AshbyJobProvider`.
+- `JobSearchProvider` (`job-search-provider.ts`) — new, `searchJobs({ keywords, location? })` —
+  three adapters: `RemoteOkJobSearchProvider`, `ArbeitnowJobSearchProvider`,
+  `AdzunaJobSearchProvider`. All return the same shared `NormalizedJobPosting` shape as
+  `JobProvider`, so `CareerService` and the rest of the domain never need to know which port a
+  posting came from.
+
+All five follow the same posture as Greenhouse: public, unauthenticated, no LinkedIn, no
+ToS-violating scraping. The one exception is Adzuna, which needs a free, instant, self-serve
+`ADZUNA_APP_ID`/`ADZUNA_APP_KEY` (developer.adzuna.com) — still no OAuth, no business
+relationship, no approval workflow; just a key, the same posture
+[ADR-003](./ADR-003-unauthenticated-workspace.md) already accepts for `NEWS_API_KEY`. Search
+import reuses the same idempotency guarantee as board import
+(`CareerRepository.getJobByExternalId`), and additionally introduces a find-or-create path for
+`Company` (`CareerRepository.findCompanyByName`, matched case-insensitively) — a search result
+can legitimately reference a company nobody has added to the tracker yet, unlike board import
+where the company is always the one the user picked before importing. Both new ports stay
+`SEARCH`-level `CareerAction`s (ADR-012): read-only, run automatically, no approval needed.
+
 ## Related
 
 [ADR-002](./ADR-002-provider-isolation.md) (provider isolation pattern reused for the deferred
