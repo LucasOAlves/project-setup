@@ -18,6 +18,7 @@ import {
 } from "@studio/shared";
 import {
   addExperience,
+  applyImprovements,
   applySectionComments,
   changePostAngle,
   changePostTone,
@@ -377,11 +378,26 @@ export function PostView({
             <div className="band">
               <p className="eyebrow">To raise the score</p>
               {post.quality.improvements.length > 0 ? (
-                <ul className="promise-list">
-                  {post.quality.improvements.map((item) => (
-                    <li key={item}>{item}</li>
-                  ))}
-                </ul>
+                <>
+                  <ul className="promise-list">
+                    {post.quality.improvements.map((item) => (
+                      <li key={item}>{item}</li>
+                    ))}
+                  </ul>
+                  <div className="actions">
+                    <button
+                      className="btn ghost"
+                      type="button"
+                      onClick={() =>
+                        void run(() =>
+                          applyImprovements(activePostId ?? undefined, textProvider || undefined),
+                        )
+                      }
+                    >
+                      Apply suggested improvements
+                    </button>
+                  </div>
+                </>
               ) : (
                 <p className="empty">No specific improvements flagged — comment on a paragraph if you want to push it further.</p>
               )}

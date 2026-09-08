@@ -3,6 +3,7 @@ import {
   postGenerateInputSchema,
   postHistoryQuerySchema,
   postHookInputSchema,
+  postImproveInputSchema,
   postRewriteInputSchema,
   postToneInputSchema,
   postTrackingInputSchema,
@@ -94,6 +95,19 @@ export async function registerPostRoutes(
     const post = await service.edit({
       action: "ANGLE",
       angle: parsed.data.angle,
+      postId: parsed.data.postId,
+      provider: parsed.data.provider,
+    });
+    return reply.code(201).send({ post });
+  });
+
+  app.post("/api/posts/improve", async (request, reply) => {
+    const parsed = postImproveInputSchema.safeParse(request.body ?? {});
+    if (!parsed.success) {
+      throw validationError("Invalid improve request.");
+    }
+    const post = await service.edit({
+      action: "IMPROVE",
       postId: parsed.data.postId,
       provider: parsed.data.provider,
     });

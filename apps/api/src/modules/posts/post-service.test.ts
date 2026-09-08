@@ -338,6 +338,84 @@ test("edit with a postId grounds the write context on that post's own opportunit
   assert.equal(requestedOpportunityId, historicalOpportunity.id);
 });
 
+test("edit with action IMPROVE lists every quality improvement in the edit request", async () => {
+  const post = buildRow({
+    id: "post-with-improvements",
+    quality: {
+      score: 70,
+      explanation: "e",
+      strengths: [],
+      improvements: ["Fix the CTA to ask a specific question.", "Make the MCP paragraph concrete."],
+    },
+  });
+
+  let editRequestUser: string | undefined;
+  const service = new PostService(
+    { async getProfile() { return profile(); } } as never,
+    { async getPersona() { return persona(); } } as never,
+    {
+      async getById() { return opportunity(); },
+      async getSelected() { return opportunity(); },
+    } as never,
+    {
+      async getById(id: string) { return id === post.id ? post : null; },
+      async create(input: unknown) {
+        return { ...post, ...(input as Record<string, unknown>), id: "new-revision" };
+      },
+    } as never,
+    textMap({
+      async generateText(request: { system: string; user: string }) {
+        if (request.system.includes("editor")) {
+          return {
+            text: JSON.stringify({
+              hook: "New hook",
+              body: "New body",
+              writingReview: { summary: "s", revisedSections: [], remainingRisks: [] },
+              factReview: { summary: "s", claims: [], unsupportedClaims: [] },
+              seoReview: { summary: "s", keywordsUsed: [], stuffingRisk: "low" },
+              quality: { score: 85, explanation: "e", strengths: [], improvements: [] },
+            }),
+            model: "fake",
+          };
+        }
+        editRequestUser = request.user;
+        return { text: JSON.stringify({ hook: "New hook", body: "New body" }), model: "fake" };
+      },
+    }),
+    "openai",
+  );
+
+  await service.edit({ action: "IMPROVE", postId: post.id });
+
+  assert.match(editRequestUser ?? "", /Fix the CTA to ask a specific question\./);
+  assert.match(editRequestUser ?? "", /Make the MCP paragraph concrete\./);
+});
+
+test("edit rejects action IMPROVE when the post has no flagged improvements", async () => {
+  const post = buildRow({ id: "post-without-improvements" });
+
+  const service = new PostService(
+    {
+      async getProfile() {
+        assert.fail("must not need the profile when rejected before the write context is built");
+      },
+    } as never,
+    {} as never,
+    { async getById() { return opportunity(); } } as never,
+    {
+      async getById(id: string) { return id === post.id ? post : null; },
+    } as never,
+    textMap({
+      async generateText() {
+        assert.fail("must not call the model when there are no improvements to apply");
+      },
+    }),
+    "openai",
+  );
+
+  await assert.rejects(() => service.edit({ action: "IMPROVE", postId: post.id }));
+});
+
 function buildRow(overrides?: Partial<Record<string, unknown>>) {
   return {
     id: "ccccccccc-cccc-4ccc-8ccc-cccccccccccc",

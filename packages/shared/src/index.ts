@@ -71,6 +71,7 @@ export {
   postHistoryPublicSchema,
   postHistoryQuerySchema,
   postHookInputSchema,
+  postImproveInputSchema,
   postPublicSchema,
   postRewriteInputSchema,
   postSectionCommentSchema,

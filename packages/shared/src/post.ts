@@ -7,7 +7,7 @@ import { textProviderSchema } from "./provider.js";
 export const POST_PROMPT_VERSION = "post.v1";
 export const POST_EDIT_PROMPT_VERSION = "post.edit.v1";
 
-export const POST_EDIT_ACTIONS = ["HOOK", "TONE", "ANGLE", "REWRITE"] as const;
+export const POST_EDIT_ACTIONS = ["HOOK", "TONE", "ANGLE", "REWRITE", "IMPROVE"] as const;
 export type PostEditAction = (typeof POST_EDIT_ACTIONS)[number];
 
 export const storyStrategySchema = z.object({
@@ -132,6 +132,11 @@ export const sectionCommentReviewInputSchema = z.object({
 });
 
 export const postHookInputSchema = z.object({
+  postId: z.string().uuid().optional(),
+  provider: textProviderSchema.optional(),
+});
+
+export const postImproveInputSchema = z.object({
   postId: z.string().uuid().optional(),
   provider: textProviderSchema.optional(),
 });

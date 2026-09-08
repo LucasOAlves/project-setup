@@ -162,6 +162,9 @@ export class PostService {
     if (!current) {
       throw notFound("Write a post before editing it.");
     }
+    if (input.action === "IMPROVE" && current.quality.improvements.length === 0) {
+      throw validationError("No improvements are flagged on this post.");
+    }
     const context = await this.requireWriteContext(current.opportunityId);
     const text = resolveTextProvider(this.textProviders, this.defaultTextProvider, input.provider);
     const generated = await text.generateText({

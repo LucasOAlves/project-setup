@@ -260,6 +260,13 @@ export function generateAlternativeHook(
   return postAction("/api/posts/hook", { postId, provider });
 }
 
+export function applyImprovements(
+  postId?: string,
+  provider?: TextProviderName,
+): Promise<PostPublic> {
+  return postAction("/api/posts/improve", { postId, provider });
+}
+
 export function changePostTone(
   tone: WritingTone,
   postId?: string,

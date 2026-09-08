@@ -33,16 +33,24 @@ export function buildPostEditUserPrompt(input: {
         ? `Rewrite the post in this tone: ${input.tone ?? input.post.tone}. Keep facts.`
         : input.action === "ANGLE"
           ? `Rewrite using this angle: ${input.angle ?? input.post.angle}. Same event and evidence.`
-          : [
-              "Apply these paragraph-specific revisions. Keep every other paragraph's",
-              "meaning unchanged — you may smooth a transition where a revised paragraph",
-              "now sits differently, but do not rewrite paragraphs with no comment below.",
-              "",
-              ...(input.sectionComments ?? []).map(
-                (item, index) =>
-                  `${index + 1}. Paragraph: "${item.excerpt}"\n   Comment: ${item.comment}`,
-              ),
-            ].join("\n");
+          : input.action === "IMPROVE"
+            ? [
+                "Apply every one of these reviewer suggestions to improve the post. Keep the",
+                "same event, evidence, and overall structure — these are targeted fixes, not a",
+                "rewrite from scratch.",
+                "",
+                ...input.post.quality.improvements.map((item, index) => `${index + 1}. ${item}`),
+              ].join("\n")
+            : [
+                "Apply these paragraph-specific revisions. Keep every other paragraph's",
+                "meaning unchanged — you may smooth a transition where a revised paragraph",
+                "now sits differently, but do not rewrite paragraphs with no comment below.",
+                "",
+                ...(input.sectionComments ?? []).map(
+                  (item, index) =>
+                    `${index + 1}. Paragraph: "${item.excerpt}"\n   Comment: ${item.comment}`,
+                ),
+              ].join("\n");
 
   return [
     `Prompt version: ${POST_EDIT_PROMPT_VERSION}`,
