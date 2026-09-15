@@ -33,6 +33,15 @@ import {
   type ApiError,
 } from "./api";
 import { ProviderSelect } from "./ProviderSelect";
+import { applyStyleToRange, type TextStyle } from "./text-format";
+
+type ActiveSelection = {
+  paragraphIndex: number;
+  start: number;
+  end: number;
+  top: number;
+  left: number;
+};
 
 type PendingExperienceReview = {
   index: number;
@@ -90,6 +99,17 @@ export function PostView({
   const [pendingExperienceReviews, setPendingExperienceReviews] = useState<
     PendingExperienceReview[] | null
   >(null);
+  const [formattedBody, setFormattedBody] = useState("");
+  const [activeSelection, setActiveSelection] = useState<ActiveSelection | null>(null);
+
+  // A copy-time overlay on top of post.body, built by selecting text and
+  // clicking Bold/Italic — never sent back to the server, never seen by
+  // comments/regeneration/fact review, and reset whenever a different post
+  // loads (a new draft, a regeneration, switching history entries).
+  useEffect(() => {
+    setFormattedBody(post?.body ?? "");
+    setActiveSelection(null);
+  }, [post]);
 
   useEffect(() => {
     let cancelled = false;
@@ -298,8 +318,58 @@ export function PostView({
     if (!post) {
       return;
     }
-    await navigator.clipboard.writeText(post.body);
+    await navigator.clipboard.writeText(formattedBody);
     setCopied(true);
+  }
+
+  function handleBodyMouseUp() {
+    const selection = window.getSelection();
+    if (!selection || selection.isCollapsed || selection.rangeCount === 0) {
+      setActiveSelection(null);
+      return;
+    }
+    const range = selection.getRangeAt(0);
+    const container = range.startContainer;
+    // Scoped to a single paragraph's own text node — a selection dragged
+    // across paragraphs has no single, unambiguous target and is ignored.
+    if (container !== range.endContainer || container.nodeType !== Node.TEXT_NODE) {
+      setActiveSelection(null);
+      return;
+    }
+    const paragraphEl = container.parentElement?.closest<HTMLElement>("[data-paragraph-index]");
+    if (!paragraphEl) {
+      setActiveSelection(null);
+      return;
+    }
+    const rect = range.getBoundingClientRect();
+    setActiveSelection({
+      paragraphIndex: Number(paragraphEl.dataset.paragraphIndex),
+      start: range.startOffset,
+      end: range.endOffset,
+      top: rect.top,
+      left: rect.left,
+    });
+  }
+
+  function applyFormatting(style: TextStyle) {
+    if (!activeSelection) {
+      return;
+    }
+    const paragraphs = splitParagraphs(formattedBody);
+    const target = paragraphs[activeSelection.paragraphIndex];
+    if (target === undefined) {
+      setActiveSelection(null);
+      return;
+    }
+    paragraphs[activeSelection.paragraphIndex] = applyStyleToRange(
+      target,
+      activeSelection.start,
+      activeSelection.end,
+      style,
+    );
+    setFormattedBody(paragraphs.join("\n\n"));
+    setActiveSelection(null);
+    window.getSelection()?.removeAllRanges();
   }
 
   if (status === "loading") {
@@ -330,10 +400,10 @@ export function PostView({
           <p className="eyebrow">
             {ANGLE_LABELS[post.angle]} · {post.tone} · score {post.quality.score}
           </p>
-          <div className="post-body">
-            {splitParagraphs(post.body).map((paragraph, index) => (
+          <div className="post-body" onMouseUp={handleBodyMouseUp}>
+            {splitParagraphs(formattedBody).map((paragraph, index) => (
               <div className="post-paragraph" key={index}>
-                <p>{paragraph}</p>
+                <p data-paragraph-index={index}>{paragraph}</p>
                 <button
                   className="btn ghost paragraph-comment-toggle"
                   type="button"
@@ -354,6 +424,29 @@ export function PostView({
               </div>
             ))}
           </div>
+          {activeSelection ? (
+            <div
+              className="format-toolbar"
+              style={{ top: Math.max(8, activeSelection.top - 44), left: activeSelection.left }}
+            >
+              <button
+                type="button"
+                className="btn ghost"
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => applyFormatting("bold")}
+              >
+                <strong>B</strong>
+              </button>
+              <button
+                type="button"
+                className="btn ghost"
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => applyFormatting("italic")}
+              >
+                <em>I</em>
+              </button>
+            </div>
+          ) : null}
           <p>
             Source:{" "}
             <a href={post.sourceUrl} target="_blank" rel="noreferrer">

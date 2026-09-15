@@ -435,6 +435,23 @@ textarea {
   min-height: 70px;
 }
 
+.format-toolbar {
+  position: fixed;
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  background: var(--paper-strong);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+  z-index: 20;
+}
+
+.format-toolbar .btn {
+  padding: 4px 12px;
+  min-width: 32px;
+}
+
 .score {
   font-family: Fraunces, Georgia, serif;
   font-size: 2.4rem;
