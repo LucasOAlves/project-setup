@@ -15,6 +15,9 @@ CONSTRAINTS
 - Keep the same source event.
 - Return a complete hook and body.
 - Body must include the hook as the first line.
+- Never use Markdown syntax (**bold**, _italic_, backtick code spans, # headings, etc.) — LinkedIn
+  does not render Markdown, so it would publish as literal asterisks/underscores.
+  Write plain text only, even if the current post already contains some.
 
 OUTPUT FORMAT
 JSON object: { "hook": "...", "body": "..." }`;

@@ -19,6 +19,9 @@ CONSTRAINTS
 - Avoid AI cliches, engagement bait, hashtag stuffing, and generic motivational endings.
 - Match requested length and tone as far as evidence allows.
 - The hook must earn the next sentence. It must not be a question piled on a question.
+- Never use Markdown syntax (**bold**, _italic_, backtick code spans, # headings, etc.) — LinkedIn
+  does not render Markdown, so it would publish as literal asterisks/underscores. Write
+  plain text only; use line breaks and word choice for emphasis instead.
 
 PROCESS
 1. Pick a story structure the evidence can support.

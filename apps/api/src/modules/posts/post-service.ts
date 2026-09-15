@@ -47,6 +47,7 @@ import type { OpportunityService } from "../opportunities/opportunity-service.js
 import type { PersonaService } from "../persona/persona-service.js";
 import type { ProfileService } from "../profile/profile-service.js";
 import { groundReviewedPost, groundStoryStrategy } from "./ground-post.js";
+import { stripMarkdownEmphasis } from "./sanitize-markdown.js";
 import type { PostRepository } from "./post-repository.js";
 
 export function buildPostDraftPrompt(input: {
@@ -232,12 +233,20 @@ export class PostService {
     if (!parsed.success) {
       throw malformedAiOutput("The model returned a review that did not match the required structure.");
     }
+    // Belt-and-suspenders: the prompt says not to use Markdown (LinkedIn
+    // doesn't render it), but a model can still slip a marker in — strip it
+    // deterministically before grounding sees the text.
+    const sanitizedReview = {
+      ...parsed.data,
+      hook: stripMarkdownEmphasis(parsed.data.hook),
+      body: stripMarkdownEmphasis(parsed.data.body),
+    };
     return {
       model: [previousModel, reviewed.model].filter(Boolean).join("+"),
       draft,
       review: groundReviewedPost({
         draft,
-        review: parsed.data,
+        review: sanitizedReview,
         profile: context.profile,
         opportunity: context.opportunity,
       }),

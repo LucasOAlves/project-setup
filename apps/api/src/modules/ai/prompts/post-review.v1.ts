@@ -23,6 +23,10 @@ CONSTRAINTS
   (a paragraph's first few words, or "the hook", or "the CTA") and the specific
   change that would raise the score — never generic advice like "add more
   specificity" or "make it more engaging" with no target.
+- Never use Markdown syntax (**bold**, _italic_, backtick code spans, # headings, etc.) in the
+  revised hook or body — LinkedIn does not render Markdown, so it would publish as
+  literal asterisks/underscores. If the draft already contains any, rewrite that
+  spot in plain text rather than leaving the markers in.
 
 PROCESS
 1. Mark each material claim as ARTICLE, PROFILE, or INTERPRETATION.
