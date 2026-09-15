@@ -7,12 +7,21 @@ that touches architecture) follows this sequence:
 
 1. **Plan first.** Enter plan mode for anything that touches more than a couple
    of files or involves a design decision. Get the plan approved before writing
-   code.
-2. **Implement, then validate.** `npm run typecheck` and `npm run test` at the
-   root must be green. For anything with a UI or an observable runtime effect,
-   verify it manually in the running dev app (`npm run dev`) — passing tests is
-   not the same as the feature working.
-3. **Re-check the documentation.** Before considering the feature done, check
+   code. If the plan introduces a new deterministic/pure-logic module (a
+   scoring algorithm, a text/data transform, a parser, a matching/grounding
+   check — code whose correctness depends on enumerating cases correctly, not
+   on wiring an already-established pattern), flag it as a **test-first**
+   candidate — see [ADR-014](docs/decisions/ADR-014-selective-test-first-development.md).
+2. **Implement.** For a module flagged test-first, write its test file before
+   the implementation, run it once to confirm it fails for the intended
+   reason (not a typo or a missing export), then implement until it's green.
+   Everything else — routes, services that validate-and-forward, UI wiring —
+   keeps the existing after-the-fact testing convention.
+3. **Validate.** `npm run typecheck` and `npm run test` at the root must be
+   green. For anything with a UI or an observable runtime effect, verify it
+   manually in the running dev app (`npm run dev`) — passing tests is not the
+   same as the feature working.
+4. **Re-check the documentation.** Before considering the feature done, check
    whether it made any of the following stale or incomplete, and update what's
    actually affected:
    - `README.md` — does the feature list / setup instructions still match reality?
@@ -27,7 +36,7 @@ that touches architecture) follows this sequence:
      inaccurate.
    - Not every change needs a new ADR — routine bug fixes and small additions
      usually don't. A new ADR is for a genuine fork-in-the-road decision.
-4. **Once docs are current (or confirmed to need no changes), suggest — don't
+5. **Once docs are current (or confirmed to need no changes), suggest — don't
    assume — a commit and a PR for that feature.** State clearly what's staged
    and propose a commit message and PR description; wait for explicit
    confirmation before running `git commit`, `git push`, or `gh pr create`, per
