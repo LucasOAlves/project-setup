@@ -128,6 +128,18 @@ export async function registerCareerRoutes(
     return { job };
   });
 
+  // Spec §8 POST /jobs/:id/evaluate. Today this runs the hard eligibility rules (JOB-007);
+  // scoring and the explanation join the same evaluation in later tickets.
+  app.post("/api/career/jobs/:id/evaluate", async (request) => {
+    const { id } = request.params as { id: string };
+    return { evaluation: await service.evaluateEligibility(id) };
+  });
+
+  app.get("/api/career/jobs/:id/evaluation", async (request) => {
+    const { id } = request.params as { id: string };
+    return { evaluation: await service.getLatestEvaluation(id) };
+  });
+
   app.post("/api/career/jobs/:id/fit", async (request) => {
     const { id } = request.params as { id: string };
     const fit = await service.computeFit(id);

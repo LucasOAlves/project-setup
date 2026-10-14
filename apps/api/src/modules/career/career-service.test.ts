@@ -1008,3 +1008,54 @@ test("getContentSuggestions grounds market demand against the real saved profile
   assert.equal(suggestions.length, 1);
   assert.equal(suggestions[0]?.technology, "Kubernetes");
 });
+
+test("evaluateEligibility judges the source text and stores the verdict with its evidence", async () => {
+  let stored: Record<string, unknown> = {};
+  const service = new CareerService(
+    {
+      async getJob() {
+        return fakeJob({
+          id: "job-9",
+          location: "Remote",
+          description: "Edited by the user.",
+          rawDescription: "Great team. You must be based in the United States.",
+        });
+      },
+      async getProfileVersion() {
+        return 4;
+      },
+      async insertJobEvaluation(input: Record<string, unknown>) {
+        stored = input;
+        return { id: "eval-1", createdAt: new Date("2026-10-14T00:00:00Z"), ...input };
+      },
+    } as never,
+    {} as never,
+    textMap(noTextCalls),
+    "openai",
+    noBoardProviders(),
+    noSearchProviders(),
+  );
+
+  const evaluation = await service.evaluateEligibility("job-9");
+
+  assert.equal(evaluation.eligibility, "EXCLUDED");
+  assert.equal(evaluation.profileVersion, 4);
+  assert.equal(evaluation.eligibilityReasons[0]?.quote, "You must be based in the United States.");
+  assert.equal(stored.modelVersion, "eligibility-rules@1");
+});
+
+test("evaluateEligibility rejects an unknown job", async () => {
+  const service = new CareerService(
+    {
+      async getJob() {
+        return null;
+      },
+    } as never,
+    {} as never,
+    textMap(noTextCalls),
+    "openai",
+    noBoardProviders(),
+    noSearchProviders(),
+  );
+  await assert.rejects(() => service.evaluateEligibility("missing"), /does not exist/);
+});

@@ -189,7 +189,16 @@ reviewed. Every source starts `MANUAL`.
 Insert-only: one row per evaluation of a `Job` against a `Profile.version`. Holds eligibility
 (`ELIGIBLE` / `EXCLUDED` / `UNKNOWN` plus the quoted reasons), the score, its breakdown and
 confidence, the structured explanation and its evidence, and the model/prompt version and
-token counts behind it. Re-evaluating adds a row; nothing writes it yet (tickets 6, 8, 9).
+token counts behind it. Re-evaluating adds a row.
+
+Today `POST /api/career/jobs/:id/evaluate` writes the eligibility part: `job-eligibility.ts`
+(JOB-007) reads the job's title, location and `rawDescription` and returns `EXCLUDED` (US
+residency or citizenship, work authorization in a country the candidate lacks, location limited
+to regions outside LATAM/Americas/Brazil/worldwide, on-site or hybrid abroad), `ELIGIBLE` (an
+accepted region in the location, or wording like "from anywhere in the world"), or `UNKNOWN`.
+Each reason quotes the exact text that decided it; an exclusion always wins over a
+confirmation, and `UNKNOWN` is never shown as eligible. `modelVersion` is
+`eligibility-rules@1`; score and explanation stay empty until tickets 8 and 9.
 
 ## AuditEvent (Job Hunter)
 

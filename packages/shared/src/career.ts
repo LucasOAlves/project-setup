@@ -308,3 +308,26 @@ export type SourcePublic = z.infer<typeof sourcePublicSchema>;
 
 export const sourcePatchInputSchema = z.object({ enabled: z.boolean() });
 export type SourcePatchInput = z.infer<typeof sourcePatchInputSchema>;
+
+// Hard eligibility (Job Hunter, spec A03). UNKNOWN is never presented as ELIGIBLE.
+export const JOB_ELIGIBILITY_STATUSES = ["ELIGIBLE", "EXCLUDED", "UNKNOWN"] as const;
+export type JobEligibilityStatus = (typeof JOB_ELIGIBILITY_STATUSES)[number];
+
+export const eligibilityReasonSchema = z.object({
+  rule: z.string(),
+  effect: z.enum(["EXCLUDES", "CONFIRMS"]),
+  field: z.enum(["title", "location", "description"]),
+  quote: z.string(),
+});
+export type EligibilityReasonPublic = z.infer<typeof eligibilityReasonSchema>;
+
+export const jobEvaluationPublicSchema = z.object({
+  id: z.string(),
+  jobId: z.string(),
+  profileVersion: z.number(),
+  eligibility: z.enum(JOB_ELIGIBILITY_STATUSES),
+  eligibilityReasons: z.array(eligibilityReasonSchema),
+  modelVersion: z.string(),
+  createdAt: z.string(),
+});
+export type JobEvaluationPublic = z.infer<typeof jobEvaluationPublicSchema>;

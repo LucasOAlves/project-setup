@@ -3,10 +3,11 @@ import { and, desc, eq, or } from "drizzle-orm";
 import type { CompanyInput, JobInput, JobPatchInput, RecruiterInput, RecruiterPatchInput } from "@studio/shared";
 import type { Database } from "../../db/client.js";
 import type { DedupeKeys, ImportedJobFields } from "./job-import.js";
-import { companies, jobStatusEvents, jobs, recruiters } from "../../db/schema.js";
+import { companies, jobEvaluations, jobStatusEvents, jobs, profiles, recruiters } from "../../db/schema.js";
 
 export type CompanyRow = typeof companies.$inferSelect;
 export type JobRow = typeof jobs.$inferSelect;
+export type JobEvaluationRow = typeof jobEvaluations.$inferSelect;
 export type RecruiterRow = typeof recruiters.$inferSelect;
 export type JobStatusEventRow = typeof jobStatusEvents.$inferSelect;
 
@@ -150,6 +151,39 @@ export class CareerRepository {
     }
     await this.recordJobStatusEvent(row.id, row.status);
     return row;
+  }
+
+  // The single workspace profile's version (JOB-010); 1 before any profile is saved.
+  async getProfileVersion(): Promise<number> {
+    const [row] = await this.db.select({ version: profiles.version }).from(profiles).limit(1);
+    return row?.version ?? 1;
+  }
+
+  async insertJobEvaluation(input: {
+    jobId: string;
+    profileVersion: number;
+    eligibility: string;
+    eligibilityReasons: unknown[];
+    modelVersion: string;
+  }): Promise<JobEvaluationRow> {
+    const [row] = await this.db
+      .insert(jobEvaluations)
+      .values({ id: randomUUID(), ...input })
+      .returning();
+    if (!row) {
+      throw new Error("job evaluation insert failed");
+    }
+    return row;
+  }
+
+  async getLatestJobEvaluation(jobId: string): Promise<JobEvaluationRow | null> {
+    const [row] = await this.db
+      .select()
+      .from(jobEvaluations)
+      .where(eq(jobEvaluations.jobId, jobId))
+      .orderBy(desc(jobEvaluations.createdAt))
+      .limit(1);
+    return row ?? null;
   }
 
   private async recordJobStatusEvent(jobId: string, status: string): Promise<void> {

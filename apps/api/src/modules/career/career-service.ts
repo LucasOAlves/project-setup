@@ -7,6 +7,7 @@ import type {
   JobFitResult,
   JobInput,
   JobPatchInput,
+  JobEvaluationPublic,
   JobPublic,
   JobSearchResult,
   JobSearchSource,
@@ -37,12 +38,19 @@ import { buildResumePdf } from "../profile/resume-pdf.js";
 import type { ProfileService } from "../profile/profile-service.js";
 import { computeCareerAnalytics } from "./career-analytics.js";
 import { computeContentTopicSuggestions } from "./content-suggestions.js";
-import type { CareerRepository, CompanyRow, JobRow, RecruiterRow } from "./career-repository.js";
+import type {
+  CareerRepository,
+  CompanyRow,
+  JobEvaluationRow,
+  JobRow,
+  RecruiterRow,
+} from "./career-repository.js";
 import type { JobProvider } from "./job-provider.js";
 import type { JobSearchProvider } from "./job-search-provider.js";
 import { ALLOW_ALL_SOURCES, type SourceGate } from "./source-registry.js";
 import { computeJobFit } from "./job-fit.js";
 import { prepareImportedJob } from "./job-import.js";
+import { BRAZIL_REMOTE_CANDIDATE, evaluateEligibility } from "./job-eligibility.js";
 import { scoreRecruiterRelevance } from "./recruiter-scoring.js";
 import { applyTailoringPlan, groundTailoringPlan } from "./resume-tailoring.js";
 
@@ -274,6 +282,33 @@ export class CareerService {
     return buildResumePdf(tailoredProfile);
   }
 
+  // ANALYZE-level per ADR-012: deterministic rules, no model call. Each run appends a
+  // job_evaluations row, so earlier verdicts stay inspectable. Rules read the source's own
+  // text (rawDescription) when present, not a description the user may have edited.
+  async evaluateEligibility(id: string): Promise<JobEvaluationPublic> {
+    const job = await this.repo.getJob(id);
+    if (!job) {
+      throw notFound("That job does not exist.");
+    }
+    const result = evaluateEligibility(
+      { title: job.title, location: job.location, description: job.rawDescription || job.description },
+      BRAZIL_REMOTE_CANDIDATE,
+    );
+    const row = await this.repo.insertJobEvaluation({
+      jobId: job.id,
+      profileVersion: await this.repo.getProfileVersion(),
+      eligibility: result.status,
+      eligibilityReasons: result.reasons,
+      modelVersion: ELIGIBILITY_RULES_VERSION,
+    });
+    return evaluationToPublic(row);
+  }
+
+  async getLatestEvaluation(id: string): Promise<JobEvaluationPublic | null> {
+    const row = await this.repo.getLatestJobEvaluation(id);
+    return row ? evaluationToPublic(row) : null;
+  }
+
   async computeFit(id: string): Promise<JobFitResult> {
     const jobRow = await this.repo.getJob(id);
     if (!jobRow) {
@@ -494,4 +529,19 @@ export class CareerService {
       updatedAt: row.updatedAt.toISOString(),
     };
   }
+}
+
+// Recorded on each evaluation so a verdict can be traced to the rule set that produced it.
+const ELIGIBILITY_RULES_VERSION = "eligibility-rules@1";
+
+function evaluationToPublic(row: JobEvaluationRow): JobEvaluationPublic {
+  return {
+    id: row.id,
+    jobId: row.jobId,
+    profileVersion: row.profileVersion,
+    eligibility: row.eligibility as JobEvaluationPublic["eligibility"],
+    eligibilityReasons: row.eligibilityReasons as JobEvaluationPublic["eligibilityReasons"],
+    modelVersion: row.modelVersion,
+    createdAt: row.createdAt.toISOString(),
+  };
 }

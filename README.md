@@ -98,6 +98,11 @@ terms that were reviewed), and `PATCH /api/career/sources/:id` with `{ "enabled"
 stops every search or board import against it. Search results show "via <source>" linking back
 to the original posting, which Remotive's and Himalayas's terms require.
 
+Eligibility rules (Job Hunter) run with `POST /api/career/jobs/:id/evaluate`: a job comes back
+`ELIGIBLE`, `EXCLUDED` or `UNKNOWN` for a Brazil-based remote candidate, with the exact sentence
+or location text behind each verdict. `GET /api/career/jobs/:id/evaluation` returns the latest.
+There is no UI for it yet; the ranked job feed (ticket 10) will show it.
+
 Content ideas from your job search close the Content↔Career loop, one direction of it: the
 Career step surfaces which technologies your tracked jobs actually request, kept only when
 your profile has real, matchable evidence for them — never a technology you can't prove.
