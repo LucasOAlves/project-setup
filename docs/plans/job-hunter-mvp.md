@@ -41,5 +41,25 @@ comparing the pipeline with a job-hunting guide. Full analysis in the project do
 | 8 | Catalog of every listed site by kind (automatic, talent platform, link-out, freelance) | no |
 | 9 | Ghost-job and freshness signals; prefer the ATS record in dedupe | yes |
 
-Milestones 2 to 5 (materials, Playwright preparation, approval and submission, monitoring)
-are broken down once Milestone 1 ships.
+## Milestone 2 — tailored application materials
+
+Proposed on 2026-10-14, awaiting approval. Done when spec acceptance criterion 4 passes:
+generated documents contain only verified candidate facts. Builds on the existing résumé
+tailoring (`resume-tailoring.ts`), which today only reorders profile content and stores nothing.
+Nothing is submitted in this milestone.
+
+| # | Spec ticket | Scope | Depends on | Test-first |
+| --- | --- | --- | --- | --- |
+| 1 | JOB-010 | Profile fields applications ask for: email, phone, city/country, links, education, certifications, spoken languages with level, work authorization, notice period, salary expectation. Kept out of every model prompt | — | no |
+| 2 | JOB-015 | `documents` table (job, profile version, type, content, file hash, storage key), immutable versions, list and download | 1 | content hash only |
+| 3 | JOB-015 | Tailored CV v2: pick and order experiences and bullets for one job, a short summary whose every sentence is backed by a profile quote, gaps listed instead of added; ATS-friendly PDF saved as a version | 2 | yes (summary grounding) |
+| 4 | — | Optional cover letter: model draft, each sentence checked against the profile and the posting, unsupported sentences removed; editable before saving a version | 2, 3 | yes (sentence grounding) |
+| 5 | JOB-016 | Answers to common application questions: fixed bank (authorization, notice, salary, English level, time zone, years with a technology, why this company); deterministic from profile fields where possible, grounded model text for open ones, missing data marked "needs your input" | 1, 2 | yes (answer mapper) |
+| 6 | JOB-015, JOB-016 | "Materials" panel on each job: generate, review the gaps, edit, download, version history | 3, 4, 5 | no |
+
+Defaults: materials in English only; the cover letter is generated only on request; the
+question bank is fixed in code for now. A new ADR covers storing generated documents as
+immutable versions tied to a profile version.
+
+Milestones 3 to 5 (Playwright preparation, approval and submission, monitoring) are broken
+down once Milestone 2 ships.
