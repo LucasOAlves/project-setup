@@ -41,7 +41,7 @@ Controllers stay thin. Domain rules do not live in routes or React components.
 | images | creative brief, prompt, generation, association with post |
 | uploads | photo validation and storage identifiers |
 | ai | prompt templates, structured-output validation, provider clients |
-| career | companies, jobs, job-pursuit status, job fit scoring, résumé tailoring, recruiter/outreach tracking, career analytics, job board import + job search, and Career→Content topic suggestions — additive domain, shares `Profile` as its only cross-domain aggregate (ADR-011); `JobProvider` port (per-company board import — Greenhouse, Lever, Ashby) and `JobSearchProvider` port (keyword search across companies — RemoteOK, Arbeitnow, Adzuna), all public/unauthenticated except Adzuna's free self-serve key; no LinkedIn integration, no external write ever happens automatically (ADR-012); the Content↔Career loop is one direction only, by design (ADR-013). Job Hunter (ADR-015) adds the source registry, normalization and dedupe, eligibility rules, daily discovery, matching v2, the evidence-checked explanation agent (ADR-016) the ranked job feed (`GET /api/career/feed`, `job-feed.ts`; web step "Job feed") and relevance feedback with a calibration summary (`job_feedback`, `job-feedback.ts`) |
+| career | companies, jobs, job-pursuit status, job fit scoring, résumé tailoring, recruiter/outreach tracking, career analytics, job board import + job search, and Career→Content topic suggestions — additive domain, shares `Profile` as its only cross-domain aggregate (ADR-011); `JobProvider` port (per-company board import — Greenhouse, Lever, Ashby, Workable, SmartRecruiters) and `JobSearchProvider` port (keyword search across companies — RemoteOK, Arbeitnow, Adzuna), all public/unauthenticated except Adzuna's free self-serve key; no LinkedIn integration, no external write ever happens automatically (ADR-012); the Content↔Career loop is one direction only, by design (ADR-013). Job Hunter (ADR-015) adds the source registry, normalization and dedupe, eligibility rules, daily discovery, matching v2, the evidence-checked explanation agent (ADR-016) the ranked job feed (`GET /api/career/feed`, `job-feed.ts`; web step "Job feed") and relevance feedback with a calibration summary (`job_feedback`, `job-feedback.ts`) |
 
 Modules may call use cases across boundaries. They must not import OpenAI SDK types, NewsAPI types, or filesystem paths.
 
@@ -67,7 +67,9 @@ StorageProvider
 JobProvider                         (Career domain, board import, ADR-011)
 ├── GreenhouseJobProvider           (public, unauthenticated)
 ├── LeverJobProvider                (public, unauthenticated)
-└── AshbyJobProvider                (public, unauthenticated)
+├── AshbyJobProvider                (public, unauthenticated, includes pay ranges)
+├── WorkableJobProvider             (public careers widget, unauthenticated)
+└── SmartRecruitersJobProvider      (public Posting API, list + one detail call per posting)
 
 JobSearchProvider                   (Career domain, keyword search, ADR-011)
 ├── RemoteOkJobSearchProvider       (public, unauthenticated)

@@ -33,6 +33,21 @@ test("recognizes Lever and Ashby posting and board URLs", () => {
   });
 });
 
+test("recognizes Workable and SmartRecruiters board and posting URLs", () => {
+  assert.deepEqual(detectBoardReference("https://apply.workable.com/acme/j/ABC123DEF/"), { source: "workable", token: "acme" });
+  assert.deepEqual(detectBoardReference("https://acme.workable.com/jobs/123456"), { source: "workable", token: "acme" });
+  assert.deepEqual(detectBoardReference("https://jobs.smartrecruiters.com/AcmeInc/744000012345678-senior-engineer"), {
+    source: "smartrecruiters",
+    token: "AcmeInc",
+  });
+  assert.deepEqual(detectBoardReference("https://careers.smartrecruiters.com/AcmeInc"), {
+    source: "smartrecruiters",
+    token: "AcmeInc",
+  });
+  assert.equal(detectBoardReference("https://www.workable.com/pricing"), null);
+  assert.equal(detectBoardReference("https://apply.workable.com/"), null);
+});
+
 test("accepts a URL pasted without the scheme, with www or in another case", () => {
   assert.deepEqual(detectBoardReference("  jobs.lever.co/acme  "), { source: "lever", token: "acme" });
   assert.deepEqual(detectBoardReference("HTTPS://Boards.Greenhouse.io/acme/"), { source: "greenhouse", token: "acme" });

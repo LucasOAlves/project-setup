@@ -58,6 +58,8 @@ const BOARD_SOURCE_LABELS: Record<JobBoardSource, string> = {
   greenhouse: "Greenhouse",
   lever: "Lever",
   ashby: "Ashby",
+  workable: "Workable",
+  smartrecruiters: "SmartRecruiters",
 };
 
 const SEARCH_SOURCE_LABELS: Record<JobSearchSource, string> = {
@@ -1302,8 +1304,16 @@ function JobSourceGuide() {
               — same pattern, the token is the slug.
             </p>
             <p>
+              <strong>Workable.</strong> Job listings at <code>apply.workable.com/&lt;token&gt;</code>{" "}
+              (or <code>&lt;token&gt;.workable.com</code>) — the token is the account name.
+            </p>
+            <p>
+              <strong>SmartRecruiters.</strong> Job listings at{" "}
+              <code>jobs.smartrecruiters.com/&lt;token&gt;</code> — the token is the company identifier.
+            </p>
+            <p>
               To find a company's token: open their careers page, look for a "powered by
-              Greenhouse/Lever/Ashby" link, or check if their job URLs already match one of the
+              Greenhouse/Lever/Ashby/Workable/SmartRecruiters" link, or check if their job URLs already match one of the
               patterns above. You can also paste a board or job URL into the token field and the
               source and token are worked out for you.
             </p>

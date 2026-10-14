@@ -34,7 +34,7 @@ export type JobStatus = (typeof JOB_STATUSES)[number];
 
 // Board sources: a per-company job board you import from by giving the company's own board
 // token/slug (see ADR-011's update note, and the follow-up note below for the newer three).
-export const JOB_BOARD_SOURCES = ["greenhouse", "lever", "ashby"] as const;
+export const JOB_BOARD_SOURCES = ["greenhouse", "lever", "ashby", "workable", "smartrecruiters"] as const;
 export type JobBoardSource = (typeof JOB_BOARD_SOURCES)[number];
 
 // Search sources: an aggregator you query by keyword — results span many companies, so

@@ -12,7 +12,13 @@ const BOARD_HOSTS: Record<string, JobBoardSource> = {
   "boards-api.greenhouse.io": "greenhouse",
   "jobs.lever.co": "lever",
   "jobs.ashbyhq.com": "ashby",
+  "apply.workable.com": "workable",
+  "jobs.smartrecruiters.com": "smartrecruiters",
+  "careers.smartrecruiters.com": "smartrecruiters",
 };
+
+// Older Workable careers pages live on <account>.workable.com; these subdomains are Workable's own.
+const WORKABLE_RESERVED = new Set(["www", "apply", "api", "help", "resources", "jobs"]);
 
 export function detectBoardReference(input: string): BoardReference | null {
   const trimmed = input.trim();
@@ -26,6 +32,10 @@ export function detectBoardReference(input: string): BoardReference | null {
   }
 
   const host = url.hostname.toLowerCase().replace(/^www\./, "");
+  const workableAccount = host.match(/^([a-z0-9-]+)\.workable\.com$/)?.[1];
+  if (workableAccount && !WORKABLE_RESERVED.has(workableAccount)) {
+    return { source: "workable", token: workableAccount };
+  }
   const source = BOARD_HOSTS[host];
   if (!source) return null;
 

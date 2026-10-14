@@ -136,7 +136,8 @@ if moved back below it — same pattern as `GeneratedPost.publishedAt`), `notes`
 Deliberately **not** split into a separate `Application` entity in Slice 1 — see ADR-011's
 "Deferred" section. `source`/`externalId` exist since Slice 1 specifically so a `JobProvider`
 adapter could populate `Job` rows without a schema change — that's now real: each `JobProvider`
-board adapter (`GreenhouseJobProvider`, `LeverJobProvider`, `AshbyJobProvider`) sets `source` to
+board adapter (`GreenhouseJobProvider`, `LeverJobProvider`, `AshbyJobProvider`,
+`WorkableJobProvider`, `SmartRecruitersJobProvider`) sets `source` to
 its own vendor name and `externalId` to that vendor's own job id, and each `JobSearchProvider`
 adapter (`RemoteOkJobSearchProvider`, `ArbeitnowJobSearchProvider`, `AdzunaJobSearchProvider`,
 `RemotiveJobSearchProvider`, `HimalayasJobSearchProvider`)
@@ -178,7 +179,7 @@ Rows imported before 0018 keep `{}`.
 
 One row per job-source adapter (`greenhouse`, `lever`, `ashby`, `remoteok`, `arbeitnow`,
 `adzuna` seeded by migration 0016, `remotive` and `himalayas` by 0017 with their reviewed terms
-in `notes`). `SourceRegistry` reads it: `CareerService` calls `assertDiscoveryAllowed()` before
+in `notes`, `workable` and `smartrecruiters` by 0020). `SourceRegistry` reads it: `CareerService` calls `assertDiscoveryAllowed()` before
 every board import or search, and `PATCH /api/career/sources/:id` toggles `enabled`. The per-source permission registry from the spec:
 `discoveryAllowed` gates scheduled discovery, `applicationMode` (`MANUAL` / `ASSISTED` /
 `AUTOMATED`) caps how far application automation may go, `termsUrl` records what was

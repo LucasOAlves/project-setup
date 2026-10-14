@@ -19,6 +19,8 @@ import { CareerService } from "./modules/career/career-service.js";
 import { GreenhouseJobProvider } from "./modules/career/greenhouse-job-provider.js";
 import { LeverJobProvider } from "./modules/career/lever-job-provider.js";
 import { AshbyJobProvider } from "./modules/career/ashby-job-provider.js";
+import { SmartRecruitersJobProvider } from "./modules/career/smartrecruiters-job-provider.js";
+import { WorkableJobProvider } from "./modules/career/workable-job-provider.js";
 import type { JobProvider } from "./modules/career/job-provider.js";
 import { SourceRegistry } from "./modules/career/source-registry.js";
 import { createSearchProviders } from "./modules/career/search-providers.js";
@@ -135,6 +137,8 @@ export async function buildApp(env: Env, db: Database) {
     greenhouse: new GreenhouseJobProvider(),
     lever: new LeverJobProvider(),
     ashby: new AshbyJobProvider(),
+    workable: new WorkableJobProvider(),
+    smartrecruiters: new SmartRecruitersJobProvider(),
   };
   const searchProviders = createSearchProviders(env);
   const sourceRegistry = new SourceRegistry(db);
