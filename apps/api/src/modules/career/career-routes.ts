@@ -17,12 +17,14 @@ import {
 import type { FastifyInstance } from "fastify";
 import { validationError } from "../../app-error.js";
 import type { CareerService } from "./career-service.js";
+import type { ApplicationDocumentService } from "./application-document-service.js";
 import type { SourceRegistry } from "./source-registry.js";
 
 export async function registerCareerRoutes(
   app: FastifyInstance,
   service: CareerService,
   sources: SourceRegistry,
+  documents?: Pick<ApplicationDocumentService, "deleteFilesForJob">,
 ): Promise<void> {
   // Source settings (spec §8 GET /settings/sources). Only `enabled` is user-editable here,
   // discovery permission and application mode change through reviewed migrations.
@@ -207,6 +209,8 @@ export async function registerCareerRoutes(
 
   app.delete("/api/career/jobs/:id", async (request) => {
     const { id } = request.params as { id: string };
+    // Generated documents' rows go with the job; their files (CVs carry contact details) first.
+    await documents?.deleteFilesForJob(id);
     await service.removeJob(id);
     const jobs = await service.listJobs();
     return { jobs };

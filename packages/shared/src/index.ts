@@ -124,6 +124,12 @@ export {
 } from "./custom-topic.js";
 export {
   JOB_BOARD_SOURCES,
+  APPLICATION_DOCUMENT_TYPES,
+  APPLICATION_DOCUMENT_ORIGINS,
+  applicationDocumentPublicSchema,
+  type ApplicationDocumentType,
+  type ApplicationDocumentOrigin,
+  type ApplicationDocumentPublic,
   JOB_FRESHNESS_SIGNALS,
   type JobFreshnessSignal,
   COMPANY_WATCH_STATUSES,

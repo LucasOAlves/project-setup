@@ -275,6 +275,16 @@ expectation (amount, currency, per month or year). `version` goes up on every sa
 of `Profile` on purpose: model prompts are built from the profile, so contact details cannot
 reach a text provider by accident. Validated by `applicationDetailsInputSchema` (shared).
 
+## ApplicationDocument (Job Hunter)
+
+A generated CV, cover letter or set of application answers for one `Job`
+(`application_documents`, migration 0026; spec §7 Document). Rows are never updated: each
+change is a new `version` for that job and type (ADR-018), recorded with its `origin`
+(`GENERATED` or `EDITED`), the `profileVersion` and `detailsVersion` it was built from, the
+structured `content`, its `contentHash` (key-order independent, `document-versioning.ts`) and,
+when a PDF was rendered, its `storageKey` and `fileHash`. Saving identical content returns the
+latest version. Deleting the job deletes the rows, and the job-delete route removes the files.
+
 ## TalentPlatformProfile (Job Hunter)
 
 One row per talent platform the user has touched (`talent_platform_profiles`, migration 0024),

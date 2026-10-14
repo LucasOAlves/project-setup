@@ -257,6 +257,24 @@ export const jobs = pgTable("jobs", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+// UNIQUE (job_id, type, version) is in migration 0026.
+export const applicationDocuments = pgTable("application_documents", {
+  id: uuid("id").primaryKey(),
+  jobId: uuid("job_id")
+    .notNull()
+    .references(() => jobs.id, { onDelete: "cascade" }),
+  type: text("type").notNull(),
+  version: integer("version").notNull(),
+  origin: text("origin").notNull(),
+  profileVersion: integer("profile_version").notNull(),
+  detailsVersion: integer("details_version"),
+  content: jsonb("content").$type<Record<string, unknown>>().notNull(),
+  contentHash: text("content_hash").notNull(),
+  storageKey: text("storage_key"),
+  fileHash: text("file_hash"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 export const recruiters = pgTable("recruiters", {
   id: uuid("id").primaryKey(),
   companyId: uuid("company_id")

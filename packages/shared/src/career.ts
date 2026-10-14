@@ -526,3 +526,26 @@ export const companyWatchPublicSchema = z.object({
   hiringFast: z.boolean(),
 });
 export type CompanyWatchPublic = z.infer<typeof companyWatchPublicSchema>;
+
+// Application documents (Milestone 2): immutable versions per job and type.
+export const APPLICATION_DOCUMENT_TYPES = ["CV", "COVER_LETTER", "APPLICATION_ANSWERS"] as const;
+export type ApplicationDocumentType = (typeof APPLICATION_DOCUMENT_TYPES)[number];
+// GENERATED: built by the app from the profile; EDITED: the user changed a generated version.
+export const APPLICATION_DOCUMENT_ORIGINS = ["GENERATED", "EDITED"] as const;
+export type ApplicationDocumentOrigin = (typeof APPLICATION_DOCUMENT_ORIGINS)[number];
+
+export const applicationDocumentPublicSchema = z.object({
+  id: z.string().uuid(),
+  jobId: z.string().uuid(),
+  type: z.enum(APPLICATION_DOCUMENT_TYPES),
+  version: z.number().int().positive(),
+  origin: z.enum(APPLICATION_DOCUMENT_ORIGINS),
+  profileVersion: z.number().int(),
+  detailsVersion: z.number().int().nullable(),
+  content: z.record(z.unknown()),
+  contentHash: z.string(),
+  hasFile: z.boolean(),
+  fileHash: z.string().nullable(),
+  createdAt: z.string(),
+});
+export type ApplicationDocumentPublic = z.infer<typeof applicationDocumentPublicSchema>;
