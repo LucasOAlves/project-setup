@@ -250,6 +250,14 @@ more than once an hour (`company-watch.ts`). Five or more roles posted in 30 day
 "Hiring fast". Deleting the company deletes its watch. Watching again with another board resets
 the poll history.
 
+## TalentPlatformProfile (Job Hunter)
+
+One row per talent platform the user has touched (`talent_platform_profiles`, migration 0024),
+keyed by the site id from the static catalog `JOB_SITES` (`packages/shared/src/job-sites.ts`):
+`status` (`NOT_STARTED` / `APPLIED` / `IN_REVIEW` / `APPROVED` / `REJECTED` / `NOT_INTERESTED`),
+a free-text `note` and `updatedAt`. Only sites of kind `TALENT_PLATFORM` accept one. The
+catalog itself is code, not data: adding a site is a change to that file.
+
 ## AuditEvent (Job Hunter)
 
 Insert-only trail of who (`USER` / `SYSTEM` / `WORKER`) did what to which entity, with a

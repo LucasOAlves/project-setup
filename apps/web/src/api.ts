@@ -47,6 +47,8 @@ import type {
   JobFeedbackInput,
   JobFeedbackPublic,
   JobFeedItem,
+  TalentProfileInput,
+  TalentProfilePublic,
 } from "@studio/shared";
 import { profileInputSchema } from "@studio/shared";
 
@@ -604,6 +606,26 @@ export async function checkWatchNow(companyId: string): Promise<"QUEUED" | "ALRE
     throw await parseError(response);
   }
   return ((await response.json()) as { status: "QUEUED" | "ALREADY_QUEUED_THIS_HOUR" }).status;
+}
+
+export async function fetchTalentProfiles(): Promise<TalentProfilePublic[]> {
+  const response = await fetch("/api/career/job-sites/profiles");
+  if (!response.ok) {
+    throw await parseError(response);
+  }
+  return ((await response.json()) as { profiles: TalentProfilePublic[] }).profiles;
+}
+
+export async function saveTalentProfile(siteId: string, input: TalentProfileInput): Promise<TalentProfilePublic> {
+  const response = await fetch(`/api/career/job-sites/${encodeURIComponent(siteId)}/profile`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!response.ok) {
+    throw await parseError(response);
+  }
+  return ((await response.json()) as { profile: TalentProfilePublic }).profile;
 }
 
 export async function searchJobs(

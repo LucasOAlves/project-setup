@@ -3,13 +3,14 @@ import { and, count, desc, eq, gte, inArray, isNotNull, or } from "drizzle-orm";
 import type { CompanyInput, JobInput, JobPatchInput, RecruiterInput, RecruiterPatchInput } from "@studio/shared";
 import type { Database } from "../../db/client.js";
 import type { DedupeKeys, ImportedJobFields } from "./job-import.js";
-import { companies, companyWatches, jobEvaluations, jobFeedback, jobStatusEvents, jobs, profiles, recruiters } from "../../db/schema.js";
+import { companies, companyWatches, talentPlatformProfiles, jobEvaluations, jobFeedback, jobStatusEvents, jobs, profiles, recruiters } from "../../db/schema.js";
 
 export type CompanyRow = typeof companies.$inferSelect;
 export type JobRow = typeof jobs.$inferSelect;
 export type JobEvaluationRow = typeof jobEvaluations.$inferSelect;
 export type JobFeedbackRow = typeof jobFeedback.$inferSelect;
 export type CompanyWatchRow = typeof companyWatches.$inferSelect;
+export type TalentPlatformProfileRow = typeof talentPlatformProfiles.$inferSelect;
 export type RecruiterRow = typeof recruiters.$inferSelect;
 export type JobStatusEventRow = typeof jobStatusEvents.$inferSelect;
 
@@ -298,6 +299,23 @@ export class CareerRepository {
       .where(eq(companyWatches.companyId, companyId))
       .returning();
     return row ?? null;
+  }
+
+  async listTalentPlatformProfiles(): Promise<TalentPlatformProfileRow[]> {
+    return this.db.select().from(talentPlatformProfiles);
+  }
+
+  async upsertTalentPlatformProfile(input: { siteId: string; status: string; note: string }): Promise<TalentPlatformProfileRow> {
+    const set = { status: input.status, note: input.note, updatedAt: new Date() };
+    const [row] = await this.db
+      .insert(talentPlatformProfiles)
+      .values({ siteId: input.siteId, ...set })
+      .onConflictDoUpdate({ target: talentPlatformProfiles.siteId, set })
+      .returning();
+    if (!row) {
+      throw new Error("talent platform profile upsert failed");
+    }
+    return row;
   }
 
   // The current verdict per job: its newest feedback row.

@@ -21,8 +21,11 @@ import type {
   JobFeedItem,
   FeedbackSummary,
   JobFeedbackPublic,
+  TalentProfileInput,
+  TalentProfilePublic,
 } from "@studio/shared";
 import {
+  isTalentPlatform,
   jobFeedbackInputSchema,
   jobFeedQuerySchema,
   outreachMessageSchema,
@@ -53,6 +56,7 @@ import type {
   JobFeedbackRow,
   JobRow,
   RecruiterRow,
+  TalentPlatformProfileRow,
 } from "./career-repository.js";
 import type { JobProvider } from "./job-provider.js";
 import type { JobSearchProvider } from "./job-search-provider.js";
@@ -89,6 +93,18 @@ export class CareerService {
 
   private get intake(): JobIntake {
     return new JobIntake(this.repo, this.evaluationSettings);
+  }
+
+  // Talent-platform checklist (Milestone 1.5): only platforms in the shared catalog.
+  async listTalentProfiles(): Promise<TalentProfilePublic[]> {
+    return (await this.repo.listTalentPlatformProfiles()).map(talentProfileToPublic);
+  }
+
+  async setTalentProfile(siteId: string, input: TalentProfileInput): Promise<TalentProfilePublic> {
+    if (!isTalentPlatform(siteId)) {
+      throw notFound("That talent platform is not in the catalog.");
+    }
+    return talentProfileToPublic(await this.repo.upsertTalentPlatformProfile({ siteId, ...input }));
   }
 
   async listCompanies(): Promise<CompanyPublic[]> {
@@ -588,5 +604,14 @@ function evaluationToPublic(row: JobEvaluationRow): JobEvaluationPublic {
     modelVersion: row.modelVersion,
     promptVersion: row.promptVersion,
     createdAt: row.createdAt.toISOString(),
+  };
+}
+
+function talentProfileToPublic(row: TalentPlatformProfileRow): TalentProfilePublic {
+  return {
+    siteId: row.siteId,
+    status: row.status as TalentProfilePublic["status"],
+    note: row.note,
+    updatedAt: row.updatedAt.toISOString(),
   };
 }

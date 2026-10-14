@@ -105,6 +105,13 @@ terms that were reviewed), and `PATCH /api/career/sources/:id` with `{ "enabled"
 stops every search or board import against it. Search results show "via <source>" linking back
 to the original posting, which the Remotive, Himalayas and We Work Remotely terms require.
 
+The "Job sites" step lists every site on the user's list grouped by how it takes part in the
+search (`JOB_SITES` in `packages/shared/src/job-sites.ts`): read automatically by discovery,
+talent platforms (with a per-platform status, note and last-updated date, saved through
+`GET /api/career/job-sites/profiles` and `PUT /api/career/job-sites/:id/profile`), sites to
+browse yourself (no feed, a login, or terms that do not allow reuse), freelance marketplaces
+and sites that are not job sources. Only the first group is ever read automatically.
+
 Eligibility rules (Job Hunter) run with `POST /api/career/jobs/:id/evaluate`: a job comes back
 `ELIGIBLE`, `EXCLUDED` or `UNKNOWN` for a Brazil-based remote candidate, with the exact sentence
 or location text behind each verdict. A requirement to live in a US time zone excludes; hiring

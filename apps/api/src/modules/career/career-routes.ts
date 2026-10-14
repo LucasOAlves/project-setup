@@ -11,6 +11,7 @@ import {
   recruiterPatchInputSchema,
   resumeTailoringPlanSchema,
   sourcePatchInputSchema,
+  talentProfileInputSchema,
   textProviderSchema,
 } from "@studio/shared";
 import type { FastifyInstance } from "fastify";
@@ -36,6 +37,21 @@ export async function registerCareerRoutes(
       throw validationError("Send enabled as true or false.");
     }
     return { source: await sources.setEnabled(id, parsed.data.enabled) };
+  });
+
+  // Talent-platform checklist for the job-site catalog (Milestone 1.5). The catalog itself is
+  // static and ships with @studio/shared.
+  app.get("/api/career/job-sites/profiles", async () => {
+    return { profiles: await service.listTalentProfiles() };
+  });
+
+  app.put("/api/career/job-sites/:id/profile", async (request) => {
+    const { id } = request.params as { id: string };
+    const parsed = talentProfileInputSchema.safeParse(request.body);
+    if (!parsed.success) {
+      throw validationError("Pick a status for this platform.");
+    }
+    return { profile: await service.setTalentProfile(id, parsed.data) };
   });
 
   app.get("/api/career/analytics", async () => {

@@ -242,3 +242,17 @@ export {
   type ContentPlanTopicPublic,
 } from "./content-plan.js";
 export { detectBoardReference, type BoardReference } from "./board-reference.js";
+export {
+  JOB_SITES,
+  JOB_SITE_KINDS,
+  TALENT_PROFILE_STATUSES,
+  talentProfileInputSchema,
+  talentProfilePublicSchema,
+  isTalentPlatform,
+  automaticSourcesAreKnown,
+  type JobSite,
+  type JobSiteKind,
+  type TalentProfileStatus,
+  type TalentProfileInput,
+  type TalentProfilePublic,
+} from "./job-sites.js";

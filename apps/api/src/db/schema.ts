@@ -199,6 +199,14 @@ export const companyWatches = pgTable("company_watches", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+// Talent-platform checklist (Milestone 1.5): the user's status on each platform in the catalog.
+export const talentPlatformProfiles = pgTable("talent_platform_profiles", {
+  siteId: text("site_id").primaryKey(),
+  status: text("status").notNull(),
+  note: text("note").notNull().default(""),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 export const jobs = pgTable("jobs", {
   id: uuid("id").primaryKey(),
   companyId: uuid("company_id")

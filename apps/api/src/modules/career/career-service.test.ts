@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { JobBoardSource, JobSearchSource } from "@studio/shared";
+import { ERROR_CODES, type JobBoardSource, type JobSearchSource } from "@studio/shared";
+import { AppError } from "../../app-error.ts";
 import type { TextGenerationProvider } from "../ai/text-generation-provider.ts";
 import type { JobProvider } from "./job-provider.ts";
 import type { JobSearchProvider } from "./job-search-provider.ts";
@@ -20,7 +21,7 @@ function noBoardProviders(message = "must not call the job provider"): Record<Jo
       assert.fail(message);
     },
   };
-  return { greenhouse: fail, lever: fail, ashby: fail };
+  return { greenhouse: fail, lever: fail, ashby: fail, workable: fail, smartrecruiters: fail };
 }
 
 function noSearchProviders(message = "must not call the search provider"): Record<JobSearchSource, JobSearchProvider> {
@@ -29,7 +30,7 @@ function noSearchProviders(message = "must not call the search provider"): Recor
       assert.fail(message);
     },
   };
-  return { remoteok: fail, arbeitnow: fail, adzuna: fail, remotive: fail, himalayas: fail };
+  return { remoteok: fail, arbeitnow: fail, adzuna: fail, remotive: fail, himalayas: fail, weworkremotely: fail };
 }
 
 function fakeCompany(overrides: Partial<Record<string, unknown>> = {}) {
@@ -1262,4 +1263,38 @@ test("submitFeedback rejects an unknown reason", async () => {
       }),
     /invalid/,
   );
+});
+
+// --- talent-platform checklist (Milestone 1.5) ---------------------------------------------
+
+function talentService(saved: Array<Record<string, unknown>>) {
+  return new CareerService(
+    {
+      async upsertTalentPlatformProfile(input: { siteId: string; status: string; note: string }) {
+        saved.push(input);
+        return { ...input, updatedAt: new Date("2026-10-14T12:00:00Z") };
+      },
+    } as never,
+    {} as never,
+    textMap(noTextCalls),
+    "openai",
+    noBoardProviders(),
+    noSearchProviders(),
+  );
+}
+
+test("setTalentProfile saves a status for a talent platform in the catalog", async () => {
+  const saved: Array<Record<string, unknown>> = [];
+  const profile = await talentService(saved).setTalentProfile("turing", { status: "APPLIED", note: "Took the test" });
+  assert.deepEqual(saved, [{ siteId: "turing", status: "APPLIED", note: "Took the test" }]);
+  assert.equal(profile.updatedAt, "2026-10-14T12:00:00.000Z");
+});
+
+test("setTalentProfile rejects a site that is not a talent platform", async () => {
+  const saved: Array<Record<string, unknown>> = [];
+  await assert.rejects(
+    () => talentService(saved).setTalentProfile("wellfound", { status: "APPLIED", note: "" }),
+    (error: unknown) => error instanceof AppError && error.code === ERROR_CODES.NOT_FOUND,
+  );
+  assert.equal(saved.length, 0);
 });
