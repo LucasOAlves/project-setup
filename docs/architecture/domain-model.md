@@ -178,7 +178,7 @@ token counts behind it. Re-evaluating adds a row; nothing writes it yet (tickets
 
 Insert-only trail of who (`USER` / `SYSTEM` / `WORKER`) did what to which entity, with a
 correlation id across a pipeline run. Payloads never carry credentials or raw personal data.
-Nothing writes it yet (ticket 3 onward).
+Written through `AuditRepository.record()` (payload redacted on the way in); today the worker writes `WORKER_JOB_COMPLETED` / `WORKER_JOB_FAILED` for pipeline queues.
 
 ## ResumeTailoringPlan (Career domain, ephemeral)
 

@@ -5,6 +5,7 @@ import postgres from "postgres";
 import { buildApp } from "./app.js";
 import { createDb } from "./db/client.js";
 import { migrate } from "./db/migrate.js";
+import { waitForDatabase } from "./db/wait.js";
 import { loadEnv } from "./env.js";
 
 loadDotenv({
@@ -20,20 +21,6 @@ async function main() {
 
   const app = await buildApp(env, createDb(sql));
   await app.listen({ port: env.API_PORT, host: "0.0.0.0" });
-}
-
-async function waitForDatabase(sql: postgres.Sql, attempts = 20): Promise<void> {
-  for (let attempt = 1; attempt <= attempts; attempt += 1) {
-    try {
-      await sql`SELECT 1`;
-      return;
-    } catch (error) {
-      if (attempt === attempts) {
-        throw error;
-      }
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-    }
-  }
 }
 
 main().catch((error) => {
