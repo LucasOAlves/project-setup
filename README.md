@@ -33,7 +33,7 @@ docker compose up --build
 
 Then open `http://localhost:5173`.
 
-Compose also starts Redis and a background `worker` (BullMQ, see [ADR-015](docs/decisions/ADR-015-job-hunter-worker-process.md)). It runs Job Hunter's daily discovery: every day at `DISCOVERY_CRON` (default 09:00 `America/Sao_Paulo`) it searches each source in `DISCOVERY_SOURCES` for each of `DISCOVERY_KEYWORDS`, spacing requests per source's rate limits, imports new postings (re-runs never duplicate a job), runs the eligibility rules on each new one and queues the non-excluded ones for evaluation. `POST /api/career/discovery/run` queues today's run on demand, once per source per day. To run the worker on the host instead: `npm run worker -w @studio/api` with `REDIS_URL` pointing at a local Redis.
+Compose also starts Redis and a background `worker` (BullMQ, see [ADR-015](docs/decisions/ADR-015-job-hunter-worker-process.md)). It runs Job Hunter's daily discovery: every day at `DISCOVERY_CRON` (default 09:00 `America/Sao_Paulo`) it searches each source in `DISCOVERY_SOURCES` for each of `DISCOVERY_KEYWORDS` (by default including "forward deployed engineer" and "ai engineer"), spacing requests per source's rate limits, imports new postings (re-runs never duplicate a job), runs the eligibility rules on each new one and queues the non-excluded ones for evaluation. `POST /api/career/discovery/run` queues today's run on demand, once per source per day. To run the worker on the host instead: `npm run worker -w @studio/api` with `REDIS_URL` pointing at a local Redis.
 
 Slice 1 is available: progressive professional profile, experiences, positioning, writing preferences, and up to three reference photos. On the Identity step, upload a resume PDF to pre-fill these forms (nothing is saved until you review and click Save and continue); on the Experience step, download a résumé PDF generated from the current saved profile, any time new information is added.
 
@@ -106,7 +106,9 @@ or location text behind each verdict. A requirement to live in a US time zone ex
 through an EOR such as Deel is shown as a supporting signal that never confirms eligibility on its
 own. Jobs that are not excluded also get a 0-100 match score
 over the spec's six weighted dimensions, a confidence (how much of the score the posting
-actually supports) and flags such as undisclosed compensation; the worker does the same for
+actually supports) and flags such as undisclosed compensation (the title counts toward the
+preferences dimension when it contains one of `MATCH_TARGET_ROLES`, by default seniority words
+plus Forward Deployed and AI Engineer variants); the worker does the same for
 every job discovery finds. Jobs scoring 60 or more are also explained by the configured text
 provider (why they fit, matched requirements, gaps, eligibility, pay, risks, what to stress
 in the CV), and every quote in the explanation is checked against the posting or your

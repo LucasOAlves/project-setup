@@ -309,3 +309,19 @@ test("an old posting and an off-target title lower the preferences score", () =>
   const stale = run({ title: "Software Engineer", postedAt: new Date("2026-07-01T00:00:00Z") });
   assert.ok(stale.dimensions.preferences.score < fresh.dimensions.preferences.score);
 });
+
+// --- target roles (Milestone 1.5) -----------------------------------------------------------
+
+test("the default target roles include Forward Deployed and AI Engineer titles and variants", () => {
+  for (const title of [
+    "Forward Deployed Engineer",
+    "AI Engineer",
+    "Applied AI Engineer",
+    "Solutions Engineer, LLM Platform",
+    "GenAI Engineer",
+  ]) {
+    const notes = run({ title }).dimensions.preferences.notes;
+    assert.ok(!notes.includes("The title is not one of the target roles."), title);
+  }
+  assert.ok(run({ title: "Software Engineer" }).dimensions.preferences.notes.includes("The title is not one of the target roles."));
+});

@@ -34,11 +34,17 @@ const envSchema = z.object({
     .default("remotive,himalayas,remoteok,arbeitnow")
     .transform(splitList)
     .pipe(z.array(z.enum(JOB_SEARCH_SOURCES))),
-  DISCOVERY_KEYWORDS: z.string().default("typescript,node.js,angular,tech lead").transform(splitList),
+  // Each keyword is one request per source per run, so synonyms belong in MATCH_TARGET_ROLES.
+  DISCOVERY_KEYWORDS: z
+    .string()
+    .default("typescript,node.js,angular,tech lead,forward deployed engineer,ai engineer")
+    .transform(splitList),
   DISCOVERY_CRON: z.string().min(1).default("0 9 * * *"),
   DISCOVERY_TZ: z.string().min(1).default("America/Sao_Paulo"),
   // Matching v2 compensation target, in USD per month (JOB-011).
   MATCH_TARGET_USD_MONTHLY: z.coerce.number().int().positive().default(6000),
+  // Words or phrases a wanted role title contains, synonyms included. Empty keeps the defaults.
+  MATCH_TARGET_ROLES: z.string().optional().default("").transform(splitList),
   // Explanation agent (JOB-012): shortlist threshold and the daily model-cost limit.
   EXPLANATION_MIN_SCORE: z.coerce.number().int().min(0).max(100).default(60),
   EXPLANATION_DAILY_LIMIT: z.coerce.number().int().min(0).default(25),

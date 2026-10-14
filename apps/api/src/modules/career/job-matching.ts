@@ -41,7 +41,22 @@ export type MatchPreferences = {
 
 export const DEFAULT_MATCH_PREFERENCES: MatchPreferences = {
   targetUsdMonthly: 6000,
-  targetRoleKeywords: ["senior", "staff", "lead", "principal", "architect"],
+  // Seniority words, plus the AI-facing roles a senior fullstack engineer moves into and their
+  // usual title variants (Forward Deployed Engineer, AI Engineer).
+  targetRoleKeywords: [
+    "senior",
+    "staff",
+    "lead",
+    "principal",
+    "architect",
+    "forward deployed",
+    "deployment engineer",
+    "solutions engineer",
+    "ai engineer",
+    "applied ai",
+    "llm engineer",
+    "genai engineer",
+  ],
   maxPostingAgeDays: 30,
 };
 

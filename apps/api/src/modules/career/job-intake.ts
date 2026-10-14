@@ -45,11 +45,17 @@ export const DEFAULT_EVALUATION_SETTINGS: EvaluationSettings = {
 
 export function evaluationSettingsFromEnv(env: {
   MATCH_TARGET_USD_MONTHLY: number;
+  MATCH_TARGET_ROLES?: string[];
   EXPLANATION_MIN_SCORE: number;
   EXPLANATION_DAILY_LIMIT: number;
 }): EvaluationSettings {
+  const roles = env.MATCH_TARGET_ROLES ?? [];
   return {
-    matchPreferences: { ...DEFAULT_MATCH_PREFERENCES, targetUsdMonthly: env.MATCH_TARGET_USD_MONTHLY },
+    matchPreferences: {
+      ...DEFAULT_MATCH_PREFERENCES,
+      targetUsdMonthly: env.MATCH_TARGET_USD_MONTHLY,
+      targetRoleKeywords: roles.length > 0 ? roles : DEFAULT_MATCH_PREFERENCES.targetRoleKeywords,
+    },
     explanationMinScore: env.EXPLANATION_MIN_SCORE,
     explanationDailyLimit: env.EXPLANATION_DAILY_LIMIT,
   };
