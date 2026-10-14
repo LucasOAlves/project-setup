@@ -10,6 +10,8 @@ import { CareerRepository } from "./modules/career/career-repository.js";
 import { DiscoveryService } from "./modules/career/discovery.js";
 import { CompanyWatchPoller } from "./modules/career/company-watch-service.js";
 import { createBoardProviders } from "./modules/career/board-providers.js";
+import { BraveSearchClient } from "./modules/career/brave-search-client.js";
+import { discoverySourceIds, WEB_SEARCH_SOURCE, WebDiscoveryService } from "./modules/career/web-discovery-service.js";
 import { JobIntake } from "./modules/career/job-intake.js";
 import { evaluationSettingsFromEnv } from "./modules/career/job-intake.js";
 import { JobExplainer } from "./modules/career/job-explanation.js";
@@ -100,6 +102,21 @@ async function main() {
     },
   });
 
+  const webDiscovery = env.BRAVE_SEARCH_API_KEY
+    ? new WebDiscoveryService({
+        search: new BraveSearchClient(env.BRAVE_SEARCH_API_KEY),
+        intake,
+        providers: createBoardProviders(),
+        sourceGate: new SourceRegistry(db),
+        queueEvaluation: async (jobId, profileVersion) => {
+          await enqueueEvaluation(evaluationQueue, { jobId, profileVersion, correlationId: "web-search" });
+        },
+      })
+    : null;
+  if (!webDiscovery) {
+    logger.warn("web search discovery disabled", { reason: "no BRAVE_SEARCH_API_KEY" });
+  }
+
   const processors: Partial<Record<QueueName, Processor>> = {
     [QUEUE_NAMES.discovery]: async (job) => {
       if (job.name === WATCH_JOBS.run) {
@@ -120,6 +137,10 @@ async function main() {
         return watchPoller.poll((job.data as WatchCompanyJobData).companyId);
       }
       const data = job.data as DiscoveryJobData;
+      if (data.sourceId === WEB_SEARCH_SOURCE) {
+        if (!webDiscovery) return { skipped: "NO_BRAVE_SEARCH_API_KEY" };
+        return webDiscovery.run(env.WEB_SEARCH_TITLES);
+      }
       return discovery.runSource(data.sourceId, env.DISCOVERY_KEYWORDS);
     },
     [QUEUE_NAMES.evaluation]: async (job) => {
@@ -197,17 +218,19 @@ async function loadMatchProfile(repo: ProfileRepository): Promise<MatchProfile |
   return { ...record.profile, experiences: record.experiences };
 }
 
-// One daily job scheduler per configured source (DISCOVERY_SOURCES, DISCOVERY_CRON in
-// DISCOVERY_TZ). Schedulers for sources no longer configured are removed, so editing the env
-// list and restarting the worker is the whole change.
+// One daily job scheduler per configured source (DISCOVERY_SOURCES, plus web search when
+// BRAVE_SEARCH_API_KEY is set; DISCOVERY_CRON in DISCOVERY_TZ). Schedulers for sources no
+// longer configured are removed, so editing the env list and restarting the worker is the
+// whole change.
 async function scheduleDiscovery(queue: Queue, env: Env, logger: Logger) {
-  const wanted = new Set(env.DISCOVERY_SOURCES.map((sourceId) => `discovery-${sourceId}`));
+  const sourceIds = discoverySourceIds(env);
+  const wanted = new Set(sourceIds.map((sourceId) => `discovery-${sourceId}`));
   for (const scheduler of await queue.getJobSchedulers()) {
     if (scheduler.key.startsWith("discovery-") && !wanted.has(scheduler.key)) {
       await queue.removeJobScheduler(scheduler.key);
     }
   }
-  for (const sourceId of env.DISCOVERY_SOURCES) {
+  for (const sourceId of sourceIds) {
     await queue.upsertJobScheduler(
       `discovery-${sourceId}`,
       { pattern: env.DISCOVERY_CRON, tz: env.DISCOVERY_TZ },
@@ -215,7 +238,7 @@ async function scheduleDiscovery(queue: Queue, env: Env, logger: Logger) {
     );
   }
   logger.info("discovery scheduled", {
-    sources: env.DISCOVERY_SOURCES,
+    sources: sourceIds,
     cron: env.DISCOVERY_CRON,
     tz: env.DISCOVERY_TZ,
   });

@@ -40,6 +40,13 @@ const envSchema = z.object({
     .default("typescript,node.js,angular,tech lead,forward deployed engineer,ai engineer")
     .transform(splitList),
   DISCOVERY_CRON: z.string().min(1).default("0 9 * * *"),
+  // Web search discovery (Brave Search API): off without a key. One search per ATS domain per
+  // day for these titles, so the daily count stays at six whatever the list holds.
+  BRAVE_SEARCH_API_KEY: z.string().optional().default(""),
+  WEB_SEARCH_TITLES: z
+    .string()
+    .default("senior software engineer,senior fullstack engineer,tech lead,forward deployed engineer,ai engineer")
+    .transform(splitList),
   DISCOVERY_TZ: z.string().min(1).default("America/Sao_Paulo"),
   // Matching v2 compensation target, in USD per month (JOB-011).
   MATCH_TARGET_USD_MONTHLY: z.coerce.number().int().positive().default(6000),

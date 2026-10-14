@@ -53,6 +53,8 @@ services:
       DISCOVERY_SOURCES: ${DISCOVERY_SOURCES:-remotive,himalayas,remoteok,arbeitnow}
       MATCH_TARGET_USD_MONTHLY: ${MATCH_TARGET_USD_MONTHLY:-6000}
       MATCH_TARGET_ROLES: ${MATCH_TARGET_ROLES:-}
+      BRAVE_SEARCH_API_KEY: ${BRAVE_SEARCH_API_KEY:-}
+      WEB_SEARCH_TITLES: ${WEB_SEARCH_TITLES:-senior software engineer,senior fullstack engineer,tech lead,forward deployed engineer,ai engineer}
       EXPLANATION_MIN_SCORE: ${EXPLANATION_MIN_SCORE:-60}
       EXPLANATION_DAILY_LIMIT: ${EXPLANATION_DAILY_LIMIT:-25}
     volumes:
@@ -85,6 +87,8 @@ services:
       DISCOVERY_SOURCES: ${DISCOVERY_SOURCES:-remotive,himalayas,remoteok,arbeitnow}
       MATCH_TARGET_USD_MONTHLY: ${MATCH_TARGET_USD_MONTHLY:-6000}
       MATCH_TARGET_ROLES: ${MATCH_TARGET_ROLES:-}
+      BRAVE_SEARCH_API_KEY: ${BRAVE_SEARCH_API_KEY:-}
+      WEB_SEARCH_TITLES: ${WEB_SEARCH_TITLES:-senior software engineer,senior fullstack engineer,tech lead,forward deployed engineer,ai engineer}
       EXPLANATION_MIN_SCORE: ${EXPLANATION_MIN_SCORE:-60}
       EXPLANATION_DAILY_LIMIT: ${EXPLANATION_DAILY_LIMIT:-25}
       DISCOVERY_KEYWORDS: ${DISCOVERY_KEYWORDS:-typescript,node.js,angular,tech lead,forward deployed engineer,ai engineer}

@@ -7,6 +7,7 @@ import type { Env } from "../../env.js";
 import { discoveryJobId, watchJobId } from "../../worker/job-ids.js";
 import { createQueue, enqueueDiscovery, enqueueWatchCompany, QUEUE_NAMES } from "../../worker/queues.js";
 import type { CompanyWatchService } from "./company-watch-service.js";
+import { discoverySourceIds } from "./web-discovery-service.js";
 
 export type DiscoveryTriggerResult = {
   sourceId: string;
@@ -43,7 +44,7 @@ export async function registerDiscoveryRoutes(
     const results: DiscoveryTriggerResult[] = [];
     try {
       const discoveryQueue = getQueue();
-      for (const sourceId of env.DISCOVERY_SOURCES) {
+      for (const sourceId of discoverySourceIds(env)) {
         if (await discoveryQueue.getJob(discoveryJobId(sourceId, now))) {
           results.push({ sourceId, status: "ALREADY_RAN_TODAY" });
           continue;
