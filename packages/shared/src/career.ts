@@ -39,7 +39,7 @@ export type JobBoardSource = (typeof JOB_BOARD_SOURCES)[number];
 
 // Search sources: an aggregator you query by keyword — results span many companies, so
 // importing one may need to create a new Company on the fly (see CareerService.importSearchResult).
-export const JOB_SEARCH_SOURCES = ["remoteok", "arbeitnow", "adzuna"] as const;
+export const JOB_SEARCH_SOURCES = ["remoteok", "arbeitnow", "adzuna", "remotive", "himalayas"] as const;
 export type JobSearchSource = (typeof JOB_SEARCH_SOURCES)[number];
 
 export const JOB_SOURCES = [
@@ -275,3 +275,23 @@ export const outreachMessageSchema = z.object({
   message: z.string().trim().max(2000),
 });
 export type OutreachMessage = z.infer<typeof outreachMessageSchema>;
+
+// Per-source permission registry (Job Hunter, spec §6). Mirrors the `sources` table: whether
+// the source may be queried at all, and how far application automation may go through it.
+export const SOURCE_APPLICATION_MODES = ["MANUAL", "ASSISTED", "AUTOMATED"] as const;
+export type SourceApplicationMode = (typeof SOURCE_APPLICATION_MODES)[number];
+
+export const sourcePublicSchema = z.object({
+  id: z.string(),
+  domain: z.string(),
+  adapterType: z.enum(["BOARD", "SEARCH"]),
+  discoveryAllowed: z.boolean(),
+  applicationMode: z.enum(SOURCE_APPLICATION_MODES),
+  termsUrl: z.string(),
+  enabled: z.boolean(),
+  notes: z.string(),
+});
+export type SourcePublic = z.infer<typeof sourcePublicSchema>;
+
+export const sourcePatchInputSchema = z.object({ enabled: z.boolean() });
+export type SourcePatchInput = z.infer<typeof sourcePatchInputSchema>;

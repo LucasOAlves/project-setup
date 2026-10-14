@@ -28,7 +28,7 @@ function noSearchProviders(message = "must not call the search provider"): Recor
       assert.fail(message);
     },
   };
-  return { remoteok: fail, arbeitnow: fail, adzuna: fail };
+  return { remoteok: fail, arbeitnow: fail, adzuna: fail, remotive: fail, himalayas: fail };
 }
 
 function fakeCompany(overrides: Partial<Record<string, unknown>> = {}) {
@@ -718,6 +718,49 @@ test("searchJobs returns normalized postings from the chosen search provider", a
 
   assert.equal(results.length, 1);
   assert.equal(results[0]?.companyName, "Nimbus");
+});
+
+test("searchJobs refuses a source the registry has turned off, without calling it", async () => {
+  const service = new CareerService(
+    {} as never,
+    {} as never,
+    textMap(noTextCalls),
+    "openai",
+    noBoardProviders(),
+    noSearchProviders(),
+    {
+      async assertDiscoveryAllowed(sourceId: string) {
+        throw new Error(`${sourceId} is turned off in source settings.`);
+      },
+    },
+  );
+
+  await assert.rejects(() => service.searchJobs("remotive", "angular"), /remotive is turned off/);
+});
+
+test("importFromBoard checks the registry before calling the board provider", async () => {
+  const checked: string[] = [];
+  const service = new CareerService(
+    {
+      async getCompany() {
+        return fakeCompany();
+      },
+    } as never,
+    {} as never,
+    textMap(noTextCalls),
+    "openai",
+    noBoardProviders(),
+    noSearchProviders(),
+    {
+      async assertDiscoveryAllowed(sourceId: string) {
+        checked.push(sourceId);
+        throw new Error("off");
+      },
+    },
+  );
+
+  await assert.rejects(() => service.importFromBoard("company-1", "lever", "acme"), /off/);
+  assert.deepEqual(checked, ["lever"]);
 });
 
 test("importSearchResult reuses an existing company matched case-insensitively", async () => {

@@ -25,6 +25,9 @@ import { RemoteOkJobSearchProvider } from "./modules/career/remoteok-job-search-
 import { ArbeitnowJobSearchProvider } from "./modules/career/arbeitnow-job-search-provider.js";
 import { AdzunaJobSearchProvider } from "./modules/career/adzuna-job-search-provider.js";
 import type { JobSearchProvider } from "./modules/career/job-search-provider.js";
+import { RemotiveJobSearchProvider } from "./modules/career/remotive-job-search-provider.js";
+import { HimalayasJobSearchProvider } from "./modules/career/himalayas-job-search-provider.js";
+import { SourceRegistry } from "./modules/career/source-registry.js";
 import { registerContentPlanRoutes } from "./modules/content-plan/content-plan-routes.js";
 import { ContentPlanRepository } from "./modules/content-plan/content-plan-repository.js";
 import { ContentPlanService } from "./modules/content-plan/content-plan-service.js";
@@ -141,7 +144,10 @@ export async function buildApp(env: Env, db: Database) {
     remoteok: new RemoteOkJobSearchProvider(),
     arbeitnow: new ArbeitnowJobSearchProvider(),
     adzuna: new AdzunaJobSearchProvider(env.ADZUNA_APP_ID, env.ADZUNA_APP_KEY),
+    remotive: new RemotiveJobSearchProvider(),
+    himalayas: new HimalayasJobSearchProvider(),
   };
+  const sourceRegistry = new SourceRegistry(db);
   const career = new CareerService(
     new CareerRepository(db),
     profiles,
@@ -149,6 +155,7 @@ export async function buildApp(env: Env, db: Database) {
     defaultTextProvider,
     boardProviders,
     searchProviders,
+    sourceRegistry,
   );
   const images = new ImageService(
     profiles,
@@ -172,7 +179,7 @@ export async function buildApp(env: Env, db: Database) {
   await registerContentPlanRoutes(app, contentPlan, env.MAX_DOCUMENT_BYTES);
   await registerCustomTopicRoutes(app, customTopics);
   await registerImageRoutes(app, images);
-  await registerCareerRoutes(app, career);
+  await registerCareerRoutes(app, career, sourceRegistry);
 
   app.setErrorHandler((error, _request, reply) => {
     if (error instanceof AppError) {

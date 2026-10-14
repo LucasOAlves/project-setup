@@ -138,7 +138,8 @@ Deliberately **not** split into a separate `Application` entity in Slice 1 — s
 adapter could populate `Job` rows without a schema change — that's now real: each `JobProvider`
 board adapter (`GreenhouseJobProvider`, `LeverJobProvider`, `AshbyJobProvider`) sets `source` to
 its own vendor name and `externalId` to that vendor's own job id, and each `JobSearchProvider`
-adapter (`RemoteOkJobSearchProvider`, `ArbeitnowJobSearchProvider`, `AdzunaJobSearchProvider`)
+adapter (`RemoteOkJobSearchProvider`, `ArbeitnowJobSearchProvider`, `AdzunaJobSearchProvider`,
+`RemotiveJobSearchProvider`, `HimalayasJobSearchProvider`)
 does the same for search results. `CareerRepository.getJobByExternalId()` makes re-importing
 the same board — or re-adding the same search result — idempotent (already-tracked postings are
 skipped, never duplicated or overwritten). Manually-added jobs keep `source: "manual"`. See
@@ -162,7 +163,9 @@ idempotency is still `source` + `externalId`.
 ## Source (Job Hunter)
 
 One row per job-source adapter (`greenhouse`, `lever`, `ashby`, `remoteok`, `arbeitnow`,
-`adzuna`), seeded by migration 0016. The per-source permission registry from the spec:
+`adzuna` seeded by migration 0016, `remotive` and `himalayas` by 0017 with their reviewed terms
+in `notes`). `SourceRegistry` reads it: `CareerService` calls `assertDiscoveryAllowed()` before
+every board import or search, and `PATCH /api/career/sources/:id` toggles `enabled`. The per-source permission registry from the spec:
 `discoveryAllowed` gates scheduled discovery, `applicationMode` (`MANUAL` / `ASSISTED` /
 `AUTOMATED`) caps how far application automation may go, `termsUrl` records what was
 reviewed. Every source starts `MANUAL`.

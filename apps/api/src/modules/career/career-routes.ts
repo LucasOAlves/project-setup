@@ -10,16 +10,34 @@ import {
   recruiterInputSchema,
   recruiterPatchInputSchema,
   resumeTailoringPlanSchema,
+  sourcePatchInputSchema,
   textProviderSchema,
 } from "@studio/shared";
 import type { FastifyInstance } from "fastify";
 import { validationError } from "../../app-error.js";
 import type { CareerService } from "./career-service.js";
+import type { SourceRegistry } from "./source-registry.js";
 
 export async function registerCareerRoutes(
   app: FastifyInstance,
   service: CareerService,
+  sources: SourceRegistry,
 ): Promise<void> {
+  // Source settings (spec §8 GET /settings/sources). Only `enabled` is user-editable here,
+  // discovery permission and application mode change through reviewed migrations.
+  app.get("/api/career/sources", async () => {
+    return { sources: await sources.list() };
+  });
+
+  app.patch("/api/career/sources/:id", async (request) => {
+    const { id } = request.params as { id: string };
+    const parsed = sourcePatchInputSchema.safeParse(request.body);
+    if (!parsed.success) {
+      throw validationError("Send enabled as true or false.");
+    }
+    return { source: await sources.setEnabled(id, parsed.data.enabled) };
+  });
+
   app.get("/api/career/analytics", async () => {
     const analytics = await service.getAnalytics();
     return { analytics };

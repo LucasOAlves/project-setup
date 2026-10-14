@@ -72,7 +72,12 @@ JobProvider                         (Career domain, board import, ADR-011)
 JobSearchProvider                   (Career domain, keyword search, ADR-011)
 ├── RemoteOkJobSearchProvider       (public, unauthenticated)
 ├── ArbeitnowJobSearchProvider      (public, unauthenticated)
-└── AdzunaJobSearchProvider         (free self-serve ADZUNA_APP_ID/ADZUNA_APP_KEY)
+├── AdzunaJobSearchProvider         (free self-serve ADZUNA_APP_ID/ADZUNA_APP_KEY)
+├── RemotiveJobSearchProvider       (public, unauthenticated, attribution required)
+└── HimalayasJobSearchProvider      (public, unauthenticated, attribution required)
+
+Both ports are gated by SourceRegistry (`sources` table): CareerService calls
+assertDiscoveryAllowed(source) before any board import or search.
 
 (no LinkedIn adapter exists for either port)
 ```

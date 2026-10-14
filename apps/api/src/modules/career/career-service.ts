@@ -40,6 +40,7 @@ import { computeContentTopicSuggestions } from "./content-suggestions.js";
 import type { CareerRepository, CompanyRow, JobRow, RecruiterRow } from "./career-repository.js";
 import type { JobProvider } from "./job-provider.js";
 import type { JobSearchProvider } from "./job-search-provider.js";
+import { ALLOW_ALL_SOURCES, type SourceGate } from "./source-registry.js";
 import { computeJobFit } from "./job-fit.js";
 import { scoreRecruiterRelevance } from "./recruiter-scoring.js";
 import { applyTailoringPlan, groundTailoringPlan } from "./resume-tailoring.js";
@@ -62,6 +63,7 @@ export class CareerService {
     private readonly defaultTextProvider: TextProviderName,
     private readonly boardProviders: Record<JobBoardSource, JobProvider>,
     private readonly searchProviders: Record<JobSearchSource, JobSearchProvider>,
+    private readonly sourceGate: SourceGate = ALLOW_ALL_SOURCES,
   ) {}
 
   async listCompanies(): Promise<CompanyPublic[]> {
@@ -102,6 +104,7 @@ export class CareerService {
       throw notFound("That company does not exist.");
     }
 
+    await this.sourceGate.assertDiscoveryAllowed(source);
     const postings = await this.boardProviders[source].listJobs(boardToken);
     const imported: JobPublic[] = [];
     let skipped = 0;
@@ -134,6 +137,7 @@ export class CareerService {
     keywords: string,
     location?: string,
   ): Promise<JobSearchResult[]> {
+    await this.sourceGate.assertDiscoveryAllowed(source);
     const postings = await this.searchProviders[source].searchJobs({ keywords, location });
     return postings.map((posting) => ({
       externalId: posting.externalId,

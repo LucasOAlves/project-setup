@@ -63,6 +63,8 @@ const SEARCH_SOURCE_LABELS: Record<JobSearchSource, string> = {
   remoteok: "RemoteOK",
   arbeitnow: "Arbeitnow",
   adzuna: "Adzuna",
+  remotive: "Remotive",
+  himalayas: "Himalayas",
 };
 
 const CONNECTION_STATUS_LABELS: Record<RecruiterConnectionStatus, string> = {
@@ -138,6 +140,9 @@ export function CareerView({
   const [searchLocation, setSearchLocation] = useState("");
   const [searching, setSearching] = useState(false);
   const [searchResults, setSearchResults] = useState<JobSearchResult[]>([]);
+  // The source the current results came from: the dropdown may change after a search, and
+  // both the import and the source attribution must use the source that produced them.
+  const [resultsSource, setResultsSource] = useState<JobSearchSource>("remoteok");
   const [addingResultId, setAddingResultId] = useState<string | null>(null);
   const [addedResultIds, setAddedResultIds] = useState<Set<string>>(new Set());
 
@@ -240,6 +245,7 @@ export function CareerView({
     try {
       const results = await searchJobs(searchSource, searchKeywords.trim(), searchLocation.trim() || undefined);
       setSearchResults(results);
+      setResultsSource(searchSource);
       setAddedResultIds(new Set());
     } catch (err) {
       setError((err as ApiError).message);
@@ -252,7 +258,7 @@ export function CareerView({
     setError(null);
     setAddingResultId(posting.externalId);
     try {
-      const job = await importSearchResult(searchSource, posting);
+      const job = await importSearchResult(resultsSource, posting);
       setJobs((current) => [job, ...current]);
       setAddedResultIds((current) => new Set(current).add(posting.externalId));
       void refreshAnalytics();
@@ -617,6 +623,13 @@ export function CareerView({
                 {posting.location ? ` · ${posting.location}` : ""}
               </p>
               <h3>{posting.title}</h3>
+              {/* Remotive and Himalayas require a link back and naming them as the source. */}
+              <p className="eyebrow">
+                via{" "}
+                <a href={posting.url} target="_blank" rel="noreferrer">
+                  {SEARCH_SOURCE_LABELS[resultsSource]}
+                </a>
+              </p>
               <div className="actions" style={{ justifyContent: "flex-start" }}>
                 <button
                   className="btn ghost"

@@ -84,13 +84,19 @@ nothing is re-created or overwritten. See
 [ADR-011](docs/decisions/ADR-011-career-domain-boundaries.md)'s update notes for why Greenhouse,
 not LinkedIn, is this project's first real job provider, and for the later board/search split.
 
-Job search is available above the company list: pick a search source (RemoteOK, Arbeitnow, or
-Adzuna — Adzuna needs a free `ADZUNA_APP_ID`/`ADZUNA_APP_KEY` from developer.adzuna.com; the
-other two need no key), enter keywords and an optional location, and "Add to tracker" imports
+Job search is available above the company list: pick a search source (RemoteOK, Arbeitnow,
+Adzuna, Remotive, or Himalayas — Adzuna needs a free `ADZUNA_APP_ID`/`ADZUNA_APP_KEY` from
+developer.adzuna.com; the others need no key), enter keywords and an optional location, and "Add to tracker" imports
 one result — creating its company automatically (matched case-insensitively, or created new) if
 it isn't tracked yet. Unlike board import, search spans many companies at once instead of one
 company's own board. A collapsible "New to these sites?" guide next to the search panel explains
 each of the five sources and how to find a company's board token.
+
+Each source can be turned off without a code change: `GET /api/career/sources` lists the
+per-source registry (whether discovery is allowed, how far application automation may go, the
+terms that were reviewed), and `PATCH /api/career/sources/:id` with `{ "enabled": false }`
+stops every search or board import against it. Search results show "via <source>" linking back
+to the original posting, which Remotive's and Himalayas's terms require.
 
 Content ideas from your job search close the Content↔Career loop, one direction of it: the
 Career step surfaces which technologies your tracked jobs actually request, kept only when

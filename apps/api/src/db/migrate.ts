@@ -30,6 +30,7 @@ export async function migrate(sql: postgres.Sql): Promise<void> {
     "0014_career_networking.sql",
     "0015_job_status_events.sql",
     "0016_job_hunter_foundation.sql",
+    "0017_remotive_himalayas_sources.sql",
   ];
 
   for (const file of files) {
