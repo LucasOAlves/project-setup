@@ -15,6 +15,18 @@ services:
       timeout: 5s
       retries: 10
 
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   api:
     build:
       context: .
@@ -49,6 +61,25 @@ services:
       timeout: 5s
       retries: 10
 
+  worker:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    command: ["npx", "tsx", "src/worker.ts"]
+    depends_on:
+      redis:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: postgres://studio:studio@postgres:5432/studio
+      REDIS_URL: redis://redis:6379
+      WORKER_HEARTBEAT_MS: ${WORKER_HEARTBEAT_MS:-300000}
+    volumes:
+      - ./apps/api/src:/app/apps/api/src
+      - ./packages/shared/src:/app/packages/shared/src
+
   web:
     build:
       context: .
@@ -67,3 +98,4 @@ services:
 volumes:
   postgres_data:
   media_data:
+  redis_data:

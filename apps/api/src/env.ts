@@ -18,6 +18,8 @@ const envSchema = z.object({
   NEWS_LOOKBACK_DAYS: z.coerce.number().int().positive().max(30).default(21),
   ADZUNA_APP_ID: z.string().optional().default(""),
   ADZUNA_APP_KEY: z.string().optional().default(""),
+  REDIS_URL: z.string().min(1).default("redis://localhost:6379"),
+  WORKER_HEARTBEAT_MS: z.coerce.number().int().positive().default(5 * 60 * 1000),
 });
 
 export type Env = z.infer<typeof envSchema>;

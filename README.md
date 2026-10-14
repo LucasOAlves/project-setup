@@ -33,6 +33,8 @@ docker compose up --build
 
 Then open `http://localhost:5173`.
 
+Compose also starts Redis and a background `worker` (BullMQ, see [ADR-015](docs/decisions/ADR-015-job-hunter-worker-process.md)). It runs only a heartbeat for now; Job Hunter's scheduled job discovery will run there. To run the worker on the host instead: `npm run worker -w @studio/api` with `REDIS_URL` pointing at a local Redis.
+
 Slice 1 is available: progressive professional profile, experiences, positioning, writing preferences, and up to three reference photos. On the Identity step, upload a resume PDF to pre-fill these forms (nothing is saved until you review and click Save and continue); on the Experience step, download a résumé PDF generated from the current saved profile, any time new information is added.
 
 Slice 2 is available: generate a structured professional persona and authority map from the saved profile. Set `OPENAI_API_KEY` in `.env` before generating.

@@ -33,3 +33,7 @@ Do not put OpenAI keys in the frontend.
 ## Tradeoffs
 
 Turborepo adds some workspace ceremony. That cost is lower than splitting services or duplicating types.
+
+## Update (ADR-015)
+
+Compose now also runs `redis` and a `worker` service. The worker is a second entrypoint of `apps/api`, not a new package, so the "no extraction until a second consumer" rule still holds.

@@ -5,13 +5,13 @@
 LinkedIn Content Studio is a **modular monolith** in a Turborepo:
 
 - `apps/web` — React, TypeScript, Vite
-- `apps/api` — Fastify, TypeScript, PostgreSQL
+- `apps/api` — Fastify, TypeScript, PostgreSQL; also the background worker entrypoint (`src/worker.ts`, BullMQ on Redis — ADR-015)
 - `packages/shared` — API contracts, domain types, error codes used by both apps
 - `packages/config` — shared TypeScript configuration
 
 AI, persistence, and news adapters live inside `apps/api`. They are not packages. Only web and api share types.
 
-Local runtime is Docker Compose: `web`, `api`, and `postgres`.
+Local runtime is Docker Compose: `web`, `api`, `worker`, `postgres`, and `redis`.
 
 ## Request flow
 
@@ -228,10 +228,11 @@ HTTP layer maps these to status codes. Messages are user-safe. Stack traces, key
 ```
 web  →  api  →  postgres
              →  OpenAI (egress)
+worker  →  redis (BullMQ queues + schedulers)
              →  NewsAPI (egress)
              →  local storage volume
 ```
 
 Service DNS names are used between containers. `localhost` is not used to reach a sibling container.
 
-The API waits on Postgres readiness. `.env.example` documents `OPENAI_API_KEY`, `NEWS_API_KEY`, model names, and database URL. Secrets are never committed.
+The API waits on Postgres readiness and runs migrations. The worker starts after Redis and the API are healthy; it currently runs only a heartbeat job, and Job Hunter pipelines (discovery, evaluation) register their queues in `apps/api/src/worker/queues.ts`. `.env.example` documents `OPENAI_API_KEY`, `NEWS_API_KEY`, model names, and database URL. Secrets are never committed.
