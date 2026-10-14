@@ -76,6 +76,13 @@ and technology stays. Technologies the job asks for that the profile lacks are l
 never added. Name, contact details and employer names are not sent to the model: the CV header
 comes from Application details and is added after the model answers.
 
+A cover letter is optional and generated only on request
+(`POST /api/career/jobs/:id/documents/cover-letter`). Every sentence must quote the profile or
+the posting; a claim about you needs a profile quote, and a sentence that adds a number or a
+technology its sources lack is removed (`cover-letter.ts`). The greeting, sign-off and header
+are added by code. Your edits are saved as a new version with
+`POST /api/career/jobs/:id/documents/cover-letter/edits`.
+
 Recruiters & contacts is a lightweight career CRM: add a contact under a company, optionally
 tie them to a tracked job, and track connection status (Not connected/Requested/Connected).
 "Score relevance" is a deterministic score (company match, role, job link — see

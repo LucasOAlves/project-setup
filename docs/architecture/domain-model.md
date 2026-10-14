@@ -293,6 +293,12 @@ the CV would show but that are not filled in) and how many summary sentences wer
 unsupported. Built by `TailoredCvGenerator` (prompt `tailored-cv.v1`, grounding in
 `tailored-cv.ts`) and rendered by `tailored-cv-pdf.ts`.
 
+A `COVER_LETTER` document's content is `coverLetterContent` (format `cover-letter@1`): header,
+greeting, paragraphs, sign-off and the number of sentences dropped. A generated letter
+(`CoverLetterGenerator`, prompt `cover-letter.v1`, grounding in `cover-letter.ts`) keeps only
+sentences whose quotes match the profile or posting they cite. A version the user edited has
+origin `EDITED` and `promptVersion` null, and is saved as written.
+
 ## TalentPlatformProfile (Job Hunter)
 
 One row per talent platform the user has touched (`talent_platform_profiles`, migration 0024),

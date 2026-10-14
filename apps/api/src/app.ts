@@ -54,6 +54,7 @@ import { ApplicationDocumentRepository } from "./modules/career/application-docu
 import { ApplicationDocumentService } from "./modules/career/application-document-service.js";
 import { registerDocumentRoutes } from "./modules/career/document-routes.js";
 import { TailoredCvGenerator } from "./modules/career/tailored-cv-generator.js";
+import { CoverLetterGenerator } from "./modules/career/cover-letter-generator.js";
 import { evaluationSettingsFromEnv } from "./modules/career/job-intake.js";
 import { registerProfileRoutes } from "./modules/profile/profile-routes.js";
 import { ProfileService } from "./modules/profile/profile-service.js";
@@ -167,14 +168,16 @@ export async function buildApp(env: Env, db: Database) {
     async (jobId) => (await careerRepository.getJob(jobId)) !== null,
   );
   const applicationDetails = new ApplicationDetailsService(new ApplicationDetailsRepository(db));
-  const cvGenerator = new TailoredCvGenerator({
+  const materialsDeps = {
     careerRepo: careerRepository,
     getProfile: () => profiles.getProfile(),
     getApplicationDetails: () => applicationDetails.get(),
     textProviders,
     defaultTextProvider,
     documents,
-  });
+  };
+  const cvGenerator = new TailoredCvGenerator(materialsDeps);
+  const coverLetters = new CoverLetterGenerator(materialsDeps);
 
   app.get("/health", async () => ({ ok: true }));
 
@@ -188,7 +191,7 @@ export async function buildApp(env: Env, db: Database) {
   await registerCustomTopicRoutes(app, customTopics);
   await registerImageRoutes(app, images);
   await registerCareerRoutes(app, career, sourceRegistry, documents);
-  await registerDocumentRoutes(app, documents, cvGenerator);
+  await registerDocumentRoutes(app, documents, { cv: cvGenerator, coverLetters });
   await registerDiscoveryRoutes(app, env, new CompanyWatchService(new CareerRepository(db)));
 
   app.setErrorHandler((error, _request, reply) => {

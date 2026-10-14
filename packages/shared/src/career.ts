@@ -601,3 +601,48 @@ export const tailoredCvContentSchema = z.object({
   missingDetails: z.array(z.string()),
 });
 export type TailoredCvContent = z.infer<typeof tailoredCvContentSchema>;
+
+// Cover letter (Milestone 2): what the model returns. Quotes are checked afterwards (cover-letter.ts).
+export const coverLetterModelOutputSchema = z.object({
+  paragraphs: z
+    .array(
+      z.object({
+        sentences: z
+          .array(
+            z.object({
+              text: z.string().trim().max(500),
+              evidence: z
+                .array(z.object({ source: z.enum(["PROFILE", "JOB"]), quote: z.string().max(400) }))
+                .max(4)
+                .default([]),
+            }),
+          )
+          .max(8)
+          .default([]),
+      }),
+    )
+    .max(6)
+    .default([]),
+});
+export type CoverLetterModelOutput = z.infer<typeof coverLetterModelOutputSchema>;
+
+export const coverLetterContentSchema = z.object({
+  format: z.literal("cover-letter@1"),
+  // null for a version the user wrote or edited.
+  promptVersion: z.string().nullable(),
+  job: z.object({ title: z.string(), companyName: z.string() }),
+  header: z.object({ fullName: z.string(), contactLine: z.string() }),
+  greeting: z.string(),
+  paragraphs: z.array(z.string()),
+  signOff: z.string(),
+  droppedSentences: z.number().int(),
+});
+export type CoverLetterContent = z.infer<typeof coverLetterContentSchema>;
+
+// The user's edit of a letter: their own words, saved as an EDITED version.
+export const coverLetterEditSchema = z.object({
+  greeting: z.string().trim().min(1).max(200),
+  paragraphs: z.array(z.string().trim().min(1).max(3000)).min(1).max(8),
+  signOff: z.string().trim().min(1).max(300),
+});
+export type CoverLetterEdit = z.infer<typeof coverLetterEditSchema>;

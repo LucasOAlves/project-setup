@@ -124,6 +124,12 @@ export {
 } from "./custom-topic.js";
 export {
   JOB_BOARD_SOURCES,
+  coverLetterModelOutputSchema,
+  coverLetterContentSchema,
+  coverLetterEditSchema,
+  type CoverLetterModelOutput,
+  type CoverLetterContent,
+  type CoverLetterEdit,
   tailoredCvModelOutputSchema,
   tailoredCvContentSchema,
   type TailoredCvModelOutput,
