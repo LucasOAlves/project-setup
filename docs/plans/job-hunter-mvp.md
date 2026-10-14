@@ -89,7 +89,8 @@ environment, so the first real run of each portal is the remaining check.
 
 ## Milestone 4 — approval and submission
 
-Proposed on 2026-10-14, awaiting approval. Done when spec acceptance criteria 6, 7, 8, 9 and 10
+Approved and built on 2026-10-14 (criteria 6 to 9 are covered by
+`apps/api/src/modules/browser/submission-e2e.test.ts`). Done when spec acceptance criteria 6, 7, 8, 9 and 10
 pass: nothing is submitted without your explicit approval of that exact payload, a change
 after approval invalidates it, a repeated run never submits twice, and an unclear result
 becomes SUBMISSION_UNKNOWN instead of a retry.
