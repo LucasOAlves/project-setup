@@ -850,3 +850,24 @@ textarea {
     align-self: center;
   }
 }
+
+.materials {
+  border-top: 1px solid var(--line);
+  margin-top: 12px;
+  padding-top: 8px;
+}
+
+.materials-section {
+  margin-top: 12px;
+}
+
+.tag.answer-needs_input {
+  background: #f4e1dc;
+  color: var(--danger);
+}
+
+.tag.answer-from_profile,
+.tag.answer-from_you {
+  background: #dfe8e2;
+  color: var(--forest);
+}

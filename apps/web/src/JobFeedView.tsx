@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { MaterialsPanel } from "./MaterialsPanel";
 import type {
   ExplanationClaim,
   FeedbackReason,
@@ -331,6 +332,7 @@ function FeedCard({
   // Feedback is tied to one evaluation: after a re-evaluation the earlier verdict no longer applies.
   const current = feedback && evaluation && feedback.evaluationId === evaluation.id ? feedback : null;
   const eligibility: FeedEligibilityFilter = evaluation?.eligibility ?? "NOT_EVALUATED";
+  const [materialsOpen, setMaterialsOpen] = useState(false);
 
   return (
     <article className="article-card" data-testid="feed-card">
@@ -376,7 +378,11 @@ function FeedCard({
             {open ? "Hide details" : "Show details"}
           </button>
         ) : null}
+        <button className="btn ghost" type="button" aria-expanded={materialsOpen} onClick={() => setMaterialsOpen(!materialsOpen)}>
+          {materialsOpen ? "Hide materials" : "Materials"}
+        </button>
       </div>
+      {materialsOpen ? <MaterialsPanel jobId={job.id} /> : null}
 
       {evaluation ? (
         <div className="actions" style={{ justifyContent: "flex-start" }} role="group" aria-label="Is this job relevant?">

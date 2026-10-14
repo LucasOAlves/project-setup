@@ -136,7 +136,7 @@ export function buildApplicationAnswers(input: AnswerInput): ApplicationAnswer[]
         status: "NEEDS_INPUT",
         note:
           result.reason === "NOT_IN_PROFILE"
-            ? `Your profile lists no experience with ${technology}.`
+            ? `None of your experiences lists ${technology} among its technologies.`
             : `An experience with ${technology} has no year in its dates.`,
       });
     }

@@ -99,6 +99,6 @@ describe("buildApplicationAnswers", () => {
         { id: "YEARS_WITH:Java", question: "How many years of professional experience do you have with Java?", answer: "1 year", status: "FROM_PROFILE" },
       ],
     );
-    assert.equal(tech[1]!.note, "Your profile lists no experience with Kubernetes.");
+    assert.equal(tech[1]!.note, "None of your experiences lists Kubernetes among its technologies.");
   });
 });

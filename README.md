@@ -92,6 +92,10 @@ those do not answer is left blank as "needs your input", never guessed. "Why do 
 here?" is drafted by the model under the cover letter's evidence rules. Edits are saved as a new
 version with `POST /api/career/jobs/:id/documents/answers/edits`.
 
+In the app, each Job feed card has a **Materials** button. It generates the CV, the cover
+letter and the answers, shows the gaps and missing details, lets you edit the letter and the
+answers, downloads the PDFs, and lists every earlier version.
+
 Recruiters & contacts is a lightweight career CRM: add a contact under a company, optionally
 tie them to a tracked job, and track connection status (Not connected/Requested/Connected).
 "Score relevance" is a deterministic score (company match, role, job link — see

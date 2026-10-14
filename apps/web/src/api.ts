@@ -48,6 +48,9 @@ import type {
   JobFeedbackPublic,
   JobFeedItem,
   TalentProfileInput,
+  ApplicationDocumentPublic,
+  CoverLetterEdit,
+  ApplicationAnswersEdit,
   ApplicationDetailsInput,
   ApplicationDetailsPublic,
   TalentProfilePublic,
@@ -628,6 +631,52 @@ export async function saveApplicationDetails(input: ApplicationDetailsInput): Pr
     throw await parseError(response);
   }
   return ((await response.json()) as { details: ApplicationDetailsPublic }).details;
+}
+
+export type DocumentSaveResult = { document: ApplicationDocumentPublic; created: boolean };
+
+export async function fetchJobDocuments(jobId: string): Promise<ApplicationDocumentPublic[]> {
+  const response = await fetch(`/api/career/jobs/${jobId}/documents`);
+  if (!response.ok) {
+    throw await parseError(response);
+  }
+  return ((await response.json()) as { documents: ApplicationDocumentPublic[] }).documents;
+}
+
+async function postDocument(path: string, body: unknown): Promise<DocumentSaveResult> {
+  const response = await fetch(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) {
+    throw await parseError(response);
+  }
+  return (await response.json()) as DocumentSaveResult;
+}
+
+export function generateCv(jobId: string): Promise<DocumentSaveResult> {
+  return postDocument(`/api/career/jobs/${jobId}/documents/cv`, {});
+}
+
+export function generateCoverLetter(jobId: string): Promise<DocumentSaveResult> {
+  return postDocument(`/api/career/jobs/${jobId}/documents/cover-letter`, {});
+}
+
+export function saveCoverLetterEdit(jobId: string, edit: CoverLetterEdit): Promise<DocumentSaveResult> {
+  return postDocument(`/api/career/jobs/${jobId}/documents/cover-letter/edits`, edit);
+}
+
+export function generateAnswers(jobId: string): Promise<DocumentSaveResult> {
+  return postDocument(`/api/career/jobs/${jobId}/documents/answers`, {});
+}
+
+export function saveAnswersEdit(jobId: string, edit: ApplicationAnswersEdit): Promise<DocumentSaveResult> {
+  return postDocument(`/api/career/jobs/${jobId}/documents/answers/edits`, edit);
+}
+
+export function documentFileUrl(documentId: string): string {
+  return `/api/career/documents/${documentId}/file`;
 }
 
 export async function fetchTalentProfiles(): Promise<TalentProfilePublic[]> {

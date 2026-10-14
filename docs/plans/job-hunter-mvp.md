@@ -43,7 +43,7 @@ comparing the pipeline with a job-hunting guide. Full analysis in the project do
 
 ## Milestone 2 — tailored application materials
 
-Proposed on 2026-10-14, awaiting approval. Done when spec acceptance criterion 4 passes:
+Approved and built on 2026-10-14. Done when spec acceptance criterion 4 passes:
 generated documents contain only verified candidate facts. Builds on the existing résumé
 tailoring (`resume-tailoring.ts`), which today only reorders profile content and stores nothing.
 Nothing is submitted in this milestone.
