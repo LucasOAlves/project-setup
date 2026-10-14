@@ -73,6 +73,16 @@ export class ApplicationRepository {
     });
   }
 
+  // Not a status change: consent the user gave for this application's next run.
+  async setAgreed(id: string, agreed: string[]): Promise<void> {
+    await this.db.update(applications).set({ agreed }).where(eq(applications.id, id));
+  }
+
+  async agreedForJob(jobId: string): Promise<string[]> {
+    const [row] = await this.db.select({ agreed: applications.agreed }).from(applications).where(eq(applications.jobId, jobId)).limit(1);
+    return row?.agreed ?? [];
+  }
+
   // Applications whose preview screenshot was taken before the cutoff (retention).
   async withScreenshotsBefore(cutoff: Date): Promise<ApplicationRow[]> {
     return this.db

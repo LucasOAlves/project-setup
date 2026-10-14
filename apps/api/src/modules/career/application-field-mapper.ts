@@ -22,6 +22,8 @@ export type FieldMapperInput = {
   };
   // Answers the user gave before, by questionKey.
   saved: Record<string, string>;
+  // Consent boxes the user ticked for this application only, by questionKey.
+  agreed: string[];
   now: Date;
 };
 
@@ -238,7 +240,8 @@ export function mapFormFields(input: FieldMapperInput): FieldPlan[] {
     const label = form.label.toLowerCase();
 
     if (form.kind === "CHECKBOX" && form.options.length === 0) {
-      return plan(form, { value: null, source: null, note: "Only you can agree to this. Confirm it in the preview if you do." });
+      if (input.agreed.includes(questionKey(form.label))) return plan(form, { value: "Yes", source: "SAVED_ANSWER", note: "You agreed to this for this application." });
+      return plan(form, { value: null, source: null, note: "Only you can agree to this. Tick it below if you do." });
     }
     if (VOLUNTARY.test(label)) {
       return plan(form, { value: null, source: null, note: "Voluntary self-identification is left for you." });

@@ -43,6 +43,9 @@ export async function fillForm(
         await target.selectOption({ label: item.value });
       } else if (item.kind === "COMBOBOX") {
         await fillCombobox(page, target, item.value);
+      } else if (item.kind === "CHECKBOX" && field.options.length === 0) {
+        // A lone consent box, ticked only because the user agreed for this application.
+        if (item.value === "Yes") await target.check();
       } else if (item.kind === "RADIO" || item.kind === "CHECKBOX") {
         await checkChoices(page, field, item.value);
       } else if (item.kind === "YES_NO") {
@@ -87,13 +90,16 @@ async function checkChoices(page: Page, field: FormField, value: string) {
 async function readBack(page: Page, fields: FormField[], plan: FieldPlan[]): Promise<ReadBack> {
   const wanted = plan.filter((item) => item.status === "FILLED").map((item) => item.key);
   const names = Object.fromEntries(fields.map((field) => [field.key, field.name]));
+  const lone = fields.filter((field) => field.kind === "CHECKBOX" && field.options.length === 0).map((field) => field.key);
   return page.evaluate(
-    ({ keys, keyAttribute, fieldNames }) => {
+    ({ keys, keyAttribute, fieldNames, loneBoxes }) => {
       const result: Record<string, { value: string | null; files?: string[] }> = {};
       for (const key of keys) {
         const element = document.querySelector(`[${keyAttribute}="${key}"]`);
         if (!element) continue;
-        if (element instanceof HTMLInputElement && element.type === "file") {
+        if (loneBoxes.includes(key) && element instanceof HTMLInputElement) {
+          result[key] = { value: element.checked ? "Yes" : "" };
+        } else if (element instanceof HTMLInputElement && element.type === "file") {
           result[key] = { value: null, files: Array.from(element.files ?? []).map((file) => file.name) };
         } else if (element instanceof HTMLInputElement && (element.type === "radio" || element.type === "checkbox")) {
           const name = fieldNames[key] ?? "";
@@ -119,6 +125,6 @@ async function readBack(page: Page, fields: FormField[], plan: FieldPlan[]): Pro
       }
       return result;
     },
-    { keys: wanted, keyAttribute: KEY_ATTRIBUTE, fieldNames: names },
+    { keys: wanted, keyAttribute: KEY_ATTRIBUTE, fieldNames: names, loneBoxes: lone },
   );
 }

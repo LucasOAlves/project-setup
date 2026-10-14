@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { MaterialsPanel } from "./MaterialsPanel";
+import { ApplicationPanel } from "./ApplicationPanel";
 import type {
   ExplanationClaim,
   FeedbackReason,
@@ -333,6 +334,7 @@ function FeedCard({
   const current = feedback && evaluation && feedback.evaluationId === evaluation.id ? feedback : null;
   const eligibility: FeedEligibilityFilter = evaluation?.eligibility ?? "NOT_EVALUATED";
   const [materialsOpen, setMaterialsOpen] = useState(false);
+  const [applicationOpen, setApplicationOpen] = useState(false);
 
   return (
     <article className="article-card" data-testid="feed-card">
@@ -381,8 +383,12 @@ function FeedCard({
         <button className="btn ghost" type="button" aria-expanded={materialsOpen} onClick={() => setMaterialsOpen(!materialsOpen)}>
           {materialsOpen ? "Hide materials" : "Materials"}
         </button>
+        <button className="btn ghost" type="button" aria-expanded={applicationOpen} onClick={() => setApplicationOpen(!applicationOpen)}>
+          {applicationOpen ? "Hide application" : "Application"}
+        </button>
       </div>
       {materialsOpen ? <MaterialsPanel jobId={job.id} /> : null}
+      {applicationOpen ? <ApplicationPanel jobId={job.id} jobUrl={job.url} /> : null}
 
       {evaluation ? (
         <div className="actions" style={{ justifyContent: "flex-start" }} role="group" aria-label="Is this job relevant?">

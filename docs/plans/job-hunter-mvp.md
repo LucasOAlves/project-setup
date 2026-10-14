@@ -63,7 +63,7 @@ immutable versions tied to a profile version.
 
 ## Milestone 3 — prepare applications with Playwright
 
-Approved on 2026-10-14. Done when spec acceptance criteria 5 and 11 pass:
+Approved and built on 2026-10-14. Done when spec acceptance criteria 5 and 11 pass:
 the browser worker prepares a supported application without submitting it, and an
 unsupported portal falls back to manual completion. Nothing is submitted in this milestone;
 approval and submission are Milestone 4.
@@ -82,5 +82,9 @@ later; only Greenhouse, Lever and Ashby are automated, and everything else uses 
 fallback; the browser runs headless; a login, CAPTCHA or verification page stops the run as
 BLOCKED_BY_PLATFORM and is never worked around. Two ADRs: Application as its own entity
 (updating ADR-011), and the isolated browser worker.
+
+Verified in a real headless Chromium against mock portals that copy each ATS's form
+structure (`mock-portals.ts`). The real portals were not reachable from the build
+environment, so the first real run of each portal is the remaining check.
 
 Milestones 4 and 5 (approval and submission, monitoring) are broken down once Milestone 3 ships.

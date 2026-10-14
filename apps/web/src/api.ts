@@ -49,6 +49,8 @@ import type {
   JobFeedItem,
   TalentProfileInput,
   ApplicationDocumentPublic,
+  ApplicationAnswersInput,
+  ApplicationPublic,
   CoverLetterEdit,
   ApplicationAnswersEdit,
   ApplicationDetailsInput,
@@ -1002,3 +1004,43 @@ export async function fetchFeedbackSummary(): Promise<FeedbackSummary> {
   return body.summary;
 }
 
+
+// Applications (Milestone 3): prepared in a private browser, never submitted.
+export async function fetchApplication(jobId: string): Promise<ApplicationPublic | null> {
+  const response = await fetch(`/api/career/jobs/${jobId}/application`);
+  if (!response.ok) {
+    throw await parseError(response);
+  }
+  return ((await response.json()) as { application: ApplicationPublic | null }).application;
+}
+
+export async function prepareApplication(jobId: string): Promise<ApplicationPublic> {
+  const response = await fetch(`/api/career/jobs/${jobId}/application/prepare`, { method: "POST" });
+  if (!response.ok) {
+    throw await parseError(response);
+  }
+  return ((await response.json()) as { application: ApplicationPublic }).application;
+}
+
+export async function saveApplicationAnswers(applicationId: string, input: ApplicationAnswersInput): Promise<void> {
+  const response = await fetch(`/api/career/applications/${applicationId}/answers`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!response.ok) {
+    throw await parseError(response);
+  }
+}
+
+export async function rejectApplication(applicationId: string): Promise<ApplicationPublic> {
+  const response = await fetch(`/api/career/applications/${applicationId}/reject`, { method: "POST" });
+  if (!response.ok) {
+    throw await parseError(response);
+  }
+  return ((await response.json()) as { application: ApplicationPublic }).application;
+}
+
+export function applicationPreviewUrl(application: Pick<ApplicationPublic, "id" | "preview">): string {
+  return `/api/career/applications/${application.id}/preview.png?at=${encodeURIComponent(application.preview?.capturedAt ?? "")}`;
+}

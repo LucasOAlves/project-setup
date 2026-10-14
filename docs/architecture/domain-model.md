@@ -303,6 +303,8 @@ exactly one row (`job_id` UNIQUE). It records:
   required, its options), every field's value, and each attachment's document version and file
   hash. Per-run field keys, label casing, notes, sources and field order are left out.
   Milestone 4's approval binds to it, so any material change makes a new hash.
+- `agreed` (migration 0031): the consent boxes the user ticked for this application. Unlike
+  saved answers, they are never reused on another form.
 
 ## SavedFormAnswer (Job Hunter)
 

@@ -146,3 +146,14 @@ export const applicationPublicSchema = z.object({
   events: z.array(applicationEventPublicSchema),
 });
 export type ApplicationPublic = z.infer<typeof applicationPublicSchema>;
+
+// Answers to an application's open questions (Milestone 3). Answers are saved by question and
+// reused on any form asking the same; consent boxes apply to this application only.
+export const applicationAnswersInputSchema = z.object({
+  answers: z
+    .array(z.object({ questionKey: z.string().min(1).max(400), answer: z.string().trim().min(1).max(3000) }))
+    .max(60)
+    .default([]),
+  agreed: z.array(z.string().min(1).max(400)).max(20).default([]),
+});
+export type ApplicationAnswersInput = z.infer<typeof applicationAnswersInputSchema>;

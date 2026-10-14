@@ -98,6 +98,26 @@ In the app, each Job feed card has a **Materials** button. It generates the CV, 
 letter and the answers, shows the gaps and missing details, lets you edit the letter and the
 answers, downloads the PDFs, and lists every earlier version.
 
+Next to it, **Application** prepares the application itself, without submitting it
+(Milestone 3). For a Greenhouse, Lever or Ashby posting, the browser worker opens the form in a
+private browser, reads every field and fills what your stated data answers:
+- contact details and links from Application details;
+- your name and current employer from the profile;
+- prepared answers, and years with a technology counted from dated experiences;
+- the CV PDF from Materials.
+
+It then reads each value back from the page and shows a preview: every field with where its
+value came from, and a screenshot with your typed details masked. Required questions nothing
+answers (work authorization yes/no, a select whose options do not match) come back as
+"Questions only you can answer". Answers you give are saved and reused when another form asks
+the same question. Consent boxes are only ticked if you agree for that application, and
+voluntary self-identification is never filled.
+
+A login, CAPTCHA or bot check stops the run as blocked. Nothing works around it. Any other
+portal, or a blocked one, shows the manual path instead: the posting link, the CV and the
+prepared answers to copy. Nothing is ever submitted from this screen. Submitting with your
+approval is Milestone 4.
+
 Recruiters & contacts is a lightweight career CRM: add a contact under a company, optionally
 tie them to a tracked job, and track connection status (Not connected/Requested/Connected).
 "Score relevance" is a deterministic score (company match, role, job link — see

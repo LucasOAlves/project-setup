@@ -45,6 +45,7 @@ test("the plan uses the current employer, the latest CV and prepared answers", a
             }, false)
           : null,
     savedAnswers: async () => ({}),
+    agreedFor: async () => [],
     now: () => new Date("2026-10-14T12:00:00Z"),
   });
 

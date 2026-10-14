@@ -290,6 +290,7 @@ export const applications = pgTable("applications", {
   fieldPlan: jsonb("field_plan").$type<unknown[]>(),
   preview: jsonb("preview").$type<Record<string, unknown>>(),
   payloadHash: text("payload_hash"),
+  agreed: jsonb("agreed").$type<string[]>().notNull().default([]),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

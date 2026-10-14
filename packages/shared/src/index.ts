@@ -305,6 +305,8 @@ export {
   FIELD_PLAN_SOURCES,
   fieldPlanSchema,
   applicationPreviewSchema,
+  applicationAnswersInputSchema,
+  type ApplicationAnswersInput,
   type ApplicationPreview,
   type FieldPlan,
   type FieldPlanStatus,

@@ -50,6 +50,7 @@ function input(fields: FormField[], overrides: Partial<FieldMapperInput> = {}): 
     ],
     documents: { cv: { id: CV, hasFile: true }, coverLetter: null },
     saved: {},
+    agreed: [],
     now: new Date("2026-10-14T12:00:00Z"),
     ...overrides,
   };
@@ -195,6 +196,16 @@ test("consent boxes are never ticked for you", () => {
   const plan = one(field("I agree to Acme Mock storing my data for this application.", { kind: "CHECKBOX", required: true }));
   assert.equal(plan.status, "NEEDS_INPUT");
   assert.equal(plan.value, null);
+});
+
+test("a consent box is ticked only when you agreed to it for this application", () => {
+  const consent = field("I agree to Acme Mock storing my data for this application.", { kind: "CHECKBOX", required: true });
+  const agreed = one(consent, { agreed: [questionKey(consent.label)] });
+  assert.equal(agreed.status, "FILLED");
+  assert.equal(agreed.value, "Yes");
+  // A saved answer from another application never ticks it.
+  const saved = one(consent, { saved: { [questionKey(consent.label)]: "Yes" } });
+  assert.equal(saved.status, "NEEDS_INPUT");
 });
 
 test("an unknown required question asks; an unknown optional one stays empty", () => {

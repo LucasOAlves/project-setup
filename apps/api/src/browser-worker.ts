@@ -72,6 +72,7 @@ async function main() {
     getDetails: () => details.get(),
     latestDocument: (jobId, type) => documents.latest(jobId, type),
     savedAnswers: () => savedAnswers.all(),
+    agreedFor: (jobId) => applicationRepo.agreedForJob(jobId),
   });
   const processor = new ApplicationPrepProcessor({
     applications,

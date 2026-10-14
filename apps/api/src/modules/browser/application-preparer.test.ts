@@ -81,6 +81,7 @@ function planWith(saved: Record<string, string> = {}) {
       experiences: [{ startPeriod: "2018", endPeriod: "Present", technologies: ["Node.js"] }],
       documents: { cv: { id: CV_ID, hasFile: true }, coverLetter: null },
       saved,
+      agreed: [],
       now: new Date("2026-10-14T12:00:00Z"),
     });
 }

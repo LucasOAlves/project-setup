@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { FastifyInstance } from "fastify";
 import { notFound } from "../../app-error.js";
+import type { ApplicationAnswerService } from "./application-answer-service.js";
 import type { ApplicationDispatcher } from "./application-dispatcher.js";
 import type { ApplicationService } from "./application-service.js";
 import type { StorageProvider } from "../uploads/storage-provider.js";
@@ -20,6 +21,7 @@ export async function registerApplicationRoutes(
   applications: ApplicationService,
   dispatcher: Pick<ApplicationDispatcher, "dispatch" | "close">,
   storage: Pick<StorageProvider, "get">,
+  answers: Pick<ApplicationAnswerService, "save">,
 ): Promise<void> {
   app.addHook("onClose", async () => {
     await dispatcher.close();
@@ -43,6 +45,12 @@ export async function registerApplicationRoutes(
     const file = key ? await storage.get(key) : null;
     if (!file) throw notFound("No preview screenshot is kept for this application.");
     return reply.header("content-type", "image/png").header("cache-control", "no-store").send(file.bytes);
+  });
+
+  // Answers to the open questions. Preparing again uses them.
+  app.post("/api/career/applications/:id/answers", async (request) => {
+    const { id } = request.params as { id: string };
+    return answers.save(parseId(id, "Application"), request.body);
   });
 
   app.post("/api/career/applications/:id/reject", async (request) => {

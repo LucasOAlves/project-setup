@@ -57,6 +57,8 @@ import { ApplicationRepository } from "./modules/career/application-repository.j
 import { ApplicationService } from "./modules/career/application-service.js";
 import { registerApplicationRoutes } from "./modules/career/application-routes.js";
 import { ApplicationDispatcher } from "./modules/career/application-dispatcher.js";
+import { ApplicationAnswerService } from "./modules/career/application-answer-service.js";
+import { SavedAnswerRepository } from "./modules/career/saved-answer-repository.js";
 import { AuditRepository } from "./modules/audit/audit-repository.js";
 import { TailoredCvGenerator } from "./modules/career/tailored-cv-generator.js";
 import { CoverLetterGenerator } from "./modules/career/cover-letter-generator.js";
@@ -185,7 +187,8 @@ export async function buildApp(env: Env, db: Database) {
   const cvGenerator = new TailoredCvGenerator(materialsDeps);
   const coverLetters = new CoverLetterGenerator(materialsDeps);
   const answers = new ApplicationAnswersGenerator(materialsDeps);
-  const applications = new ApplicationService(new ApplicationRepository(db), new AuditRepository(db), async (jobId) => {
+  const applicationRepo = new ApplicationRepository(db);
+  const applications = new ApplicationService(applicationRepo, new AuditRepository(db), async (jobId) => {
     const job = await careerRepository.getJob(jobId);
     return job ? { id: job.id, url: job.url } : null;
   });
@@ -203,7 +206,18 @@ export async function buildApp(env: Env, db: Database) {
   await registerImageRoutes(app, images);
   await registerCareerRoutes(app, career, sourceRegistry, documents);
   await registerDocumentRoutes(app, documents, { cv: cvGenerator, coverLetters, answers });
-  await registerApplicationRoutes(app, applications, new ApplicationDispatcher(env.REDIS_URL, applications), storage);
+  await registerApplicationRoutes(
+    app,
+    applications,
+    new ApplicationDispatcher(env.REDIS_URL, applications),
+    storage,
+    new ApplicationAnswerService({
+      applications,
+      saveAnswers: (saved) => new SavedAnswerRepository(db).upsert(saved),
+      setAgreed: (id, agreed) => applicationRepo.setAgreed(id, agreed),
+      audit: new AuditRepository(db),
+    }),
+  );
   await registerDiscoveryRoutes(app, env, new CompanyWatchService(new CareerRepository(db)));
 
   app.setErrorHandler((error, _request, reply) => {

@@ -871,3 +871,35 @@ textarea {
   background: #dfe8e2;
   color: var(--forest);
 }
+
+.tag.answer-left_empty {
+  background: transparent;
+  color: var(--ink-soft);
+  border: 1px solid var(--line);
+}
+
+.tag.application-ready_for_review {
+  background: #dfe8e2;
+  color: var(--forest);
+}
+
+.tag.application-needs_information,
+.tag.application-blocked_by_platform,
+.tag.application-failed {
+  background: #f4e1dc;
+  color: var(--danger);
+}
+
+.application-fields {
+  list-style: none;
+  padding-left: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.application-screenshot {
+  display: block;
+  max-width: 100%;
+  margin-top: 8px;
+  border: 1px solid var(--line);
+}

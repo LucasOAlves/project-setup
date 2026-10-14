@@ -10,6 +10,8 @@ export type FillContextDeps = {
   getDetails: () => Promise<ApplicationDetailsPublic | null>;
   latestDocument: (jobId: string, type: "CV" | "COVER_LETTER" | "APPLICATION_ANSWERS") => Promise<ApplicationDocumentPublic | null>;
   savedAnswers: () => Promise<Record<string, string>>;
+  // Consent boxes the user agreed to, per application's job.
+  agreedFor: (jobId: string) => Promise<string[]>;
   now?: () => Date;
 };
 
@@ -18,13 +20,14 @@ export class ApplicationFillPlanner {
   constructor(private readonly deps: FillContextDeps) {}
 
   async context(jobId: string): Promise<Omit<FieldMapperInput, "fields">> {
-    const [profile, details, cv, coverLetter, answersDocument, saved] = await Promise.all([
+    const [profile, details, cv, coverLetter, answersDocument, saved, agreed] = await Promise.all([
       this.deps.getProfile(),
       this.deps.getDetails(),
       this.deps.latestDocument(jobId, "CV"),
       this.deps.latestDocument(jobId, "COVER_LETTER"),
       this.deps.latestDocument(jobId, "APPLICATION_ANSWERS"),
       this.deps.savedAnswers(),
+      this.deps.agreedFor(jobId),
     ]);
     const experiences = profile?.experiences ?? [];
     const current = experiences.find((experience) => !experience.endPeriod.trim() || ONGOING.test(experience.endPeriod));
@@ -40,6 +43,7 @@ export class ApplicationFillPlanner {
         coverLetter: coverLetter ? { id: coverLetter.id, hasFile: coverLetter.hasFile } : null,
       },
       saved,
+      agreed,
       now: this.deps.now?.() ?? new Date(),
     };
   }
