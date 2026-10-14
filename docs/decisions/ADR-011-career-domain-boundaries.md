@@ -174,3 +174,10 @@ aggregators focused on remote roles. Unlike the first five, both terms require a
 link back and naming the source), so search results now show "via <source>". Every source is
 now also a row in the `sources` table, and `CareerService` checks `SourceRegistry` before
 calling either port, so a source can be switched off without touching code.
+
+## Update — Application split out (ADR-019)
+
+Milestone 3 brought the richer per-application state this ADR anticipated. `Application` is now
+its own table with an enforced state machine and a transition history
+([ADR-019](./ADR-019-application-entity-and-state-machine.md)). `jobs.status` stays the
+pursuit funnel and still allows any move.

@@ -28,3 +28,7 @@ export function malformedAiOutput(
 ): AppError {
   return new AppError(ERROR_CODES.MALFORMED_AI_OUTPUT, message, 422);
 }
+
+export function conflict(message: string): AppError {
+  return new AppError(ERROR_CODES.CONFLICT, message, 409);
+}

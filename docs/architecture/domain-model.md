@@ -275,6 +275,25 @@ expectation (amount, currency, per month or year). `version` goes up on every sa
 of `Profile` on purpose: model prompts are built from the profile, so contact details cannot
 reach a text provider by accident. Validated by `applicationDetailsInputSchema` (shared).
 
+## Application (Job Hunter)
+
+The application for one `Job` (`applications`, migration 0027; spec §4 and §7). Each job has
+exactly one row (`job_id` UNIQUE). It records:
+- `status`: PREPARING, NEEDS_INFORMATION, READY_FOR_REVIEW, BLOCKED_BY_PLATFORM, FAILED or
+  USER_REJECTED;
+- `mode`: AUTOMATED when the posting is on a supported portal (Greenhouse, Lever, Ashby),
+  otherwise MANUAL;
+- `portal`, `destinationUrl`, and the last run's error.
+
+Transitions follow `checkTransition` (`application-state.ts`):
+- Only the user starts a run or rejects.
+- Only the run (worker or system) records the outcome.
+- No outcome can be recorded unless a run is in progress.
+
+Each transition is written with an `application_events` row (from, to, actor, reason) in one
+transaction, and only if the status has not changed since it was read. Transitions are also
+recorded in `audit_events` (ADR-019).
+
 ## ApplicationDocument (Job Hunter)
 
 A generated CV, cover letter or set of application answers for one `Job`

@@ -275,6 +275,33 @@ export const applicationDocuments = pgTable("application_documents", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+// UNIQUE (job_id) is in migration 0027: one application per job.
+export const applications = pgTable("applications", {
+  id: uuid("id").primaryKey(),
+  jobId: uuid("job_id")
+    .notNull()
+    .references(() => jobs.id, { onDelete: "cascade" }),
+  status: text("status").notNull(),
+  mode: text("mode").notNull(),
+  portal: text("portal"),
+  destinationUrl: text("destination_url").notNull().default(""),
+  lastError: text("last_error").notNull().default(""),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const applicationEvents = pgTable("application_events", {
+  id: uuid("id").primaryKey(),
+  applicationId: uuid("application_id")
+    .notNull()
+    .references(() => applications.id, { onDelete: "cascade" }),
+  fromStatus: text("from_status"),
+  toStatus: text("to_status").notNull(),
+  actor: text("actor").notNull(),
+  reason: text("reason").notNull().default(""),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 export const recruiters = pgTable("recruiters", {
   id: uuid("id").primaryKey(),
   companyId: uuid("company_id")

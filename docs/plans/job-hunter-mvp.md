@@ -63,7 +63,7 @@ immutable versions tied to a profile version.
 
 ## Milestone 3 — prepare applications with Playwright
 
-Proposed on 2026-10-14, awaiting approval. Done when spec acceptance criteria 5 and 11 pass:
+Approved on 2026-10-14. Done when spec acceptance criteria 5 and 11 pass:
 the browser worker prepares a supported application without submitting it, and an
 unsupported portal falls back to manual completion. Nothing is submitted in this milestone;
 approval and submission are Milestone 4.

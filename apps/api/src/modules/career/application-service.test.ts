@@ -1,0 +1,144 @@
+import assert from "node:assert/strict";
+import { test } from "node:test";
+import { AppError } from "../../app-error.js";
+import type { AuditEventInput } from "../audit/audit-repository.js";
+import type { ApplicationEventRow, ApplicationRow } from "./application-repository.js";
+import { ApplicationService, supportedPortal } from "./application-service.js";
+
+const JOB = "11111111-1111-4111-8111-111111111111";
+const OTHER_JOB = "22222222-2222-4222-8222-222222222222";
+
+function setup(jobUrl = "https://job-boards.greenhouse.io/acme/jobs/123") {
+  const rows: ApplicationRow[] = [];
+  const events: ApplicationEventRow[] = [];
+  const audits: AuditEventInput[] = [];
+  let ids = 0;
+  const nextId = () => `00000000-0000-4000-8000-${String(++ids).padStart(12, "0")}`;
+  const repo = {
+    async get(id: string) {
+      return rows.find((row) => row.id === id) ?? null;
+    },
+    async findByJob(jobId: string) {
+      return rows.find((row) => row.jobId === jobId) ?? null;
+    },
+    async create(input: Pick<ApplicationRow, "jobId" | "status" | "mode" | "portal" | "destinationUrl">, record: { actor: string; reason: string }) {
+      if (rows.some((row) => row.jobId === input.jobId)) return null;
+      const now = new Date("2026-10-14T12:00:00Z");
+      const row: ApplicationRow = { id: nextId(), lastError: "", createdAt: now, updatedAt: now, ...input };
+      rows.push(row);
+      events.push({ id: nextId(), applicationId: row.id, fromStatus: null, toStatus: row.status, createdAt: now, ...record });
+      return row;
+    },
+    async transition(id: string, from: string, to: string, record: { actor: string; reason: string }, patch = {}) {
+      const row = rows.find((candidate) => candidate.id === id && candidate.status === from);
+      if (!row) return null;
+      Object.assign(row, patch, { status: to });
+      events.push({ id: nextId(), applicationId: id, fromStatus: from, toStatus: to, createdAt: new Date(), ...record });
+      return row;
+    },
+    async events(applicationId: string) {
+      return events.filter((event) => event.applicationId === applicationId);
+    },
+  };
+  const audit = {
+    async record(input: AuditEventInput) {
+      audits.push(input);
+    },
+  };
+  const service = new ApplicationService(repo, audit, async (id) => (id === JOB ? { id, url: jobUrl } : null));
+  return { service, rows, audits };
+}
+
+async function rejects(promise: Promise<unknown>, status: number, message?: RegExp) {
+  await assert.rejects(promise, (error: unknown) => {
+    assert.ok(error instanceof AppError);
+    assert.equal(error.statusCode, status);
+    if (message) assert.match(error.message, message);
+    return true;
+  });
+}
+
+test("supported portals are Greenhouse, Lever and Ashby; anything else is manual", () => {
+  assert.equal(supportedPortal("https://boards.greenhouse.io/acme/jobs/1"), "greenhouse");
+  assert.equal(supportedPortal("https://jobs.lever.co/acme/abc"), "lever");
+  assert.equal(supportedPortal("https://jobs.ashbyhq.com/acme/abc"), "ashby");
+  assert.equal(supportedPortal("https://apply.workable.com/acme/j/ABC"), null);
+  assert.equal(supportedPortal("https://acme.com/careers/1"), null);
+  assert.equal(supportedPortal(""), null);
+});
+
+test("starting creates the application in PREPARING with its history and an audit event", async () => {
+  const { service, audits } = setup();
+  const application = await service.startPreparation(JOB);
+
+  assert.equal(application.status, "PREPARING");
+  assert.equal(application.mode, "AUTOMATED");
+  assert.equal(application.portal, "greenhouse");
+  assert.deepEqual(
+    application.events.map((event) => [event.fromStatus, event.toStatus, event.actor]),
+    [[null, "PREPARING", "USER"]],
+  );
+  assert.equal(audits.length, 1);
+  assert.equal(audits[0]?.eventType, "APPLICATION_STATUS_CHANGED");
+  assert.equal(audits[0]?.actor, "USER");
+});
+
+test("an unsupported portal is prepared in manual mode", async () => {
+  const { service } = setup("https://acme.com/careers/42");
+  const application = await service.startPreparation(JOB);
+  assert.equal(application.mode, "MANUAL");
+  assert.equal(application.portal, null);
+});
+
+test("starting twice while a run is in progress is a conflict", async () => {
+  const { service } = setup();
+  await service.startPreparation(JOB);
+  await rejects(service.startPreparation(JOB), 409, /already being prepared/);
+});
+
+test("the worker records the outcome, then the user can prepare again", async () => {
+  const { service } = setup();
+  const started = await service.startPreparation(JOB);
+  const outcome = await service.recordOutcome(started.id, "NEEDS_INFORMATION", "WORKER", "2 required fields have no answer.");
+  assert.equal(outcome.status, "NEEDS_INFORMATION");
+
+  const again = await service.startPreparation(JOB);
+  assert.equal(again.status, "PREPARING");
+  assert.deepEqual(
+    again.events.map((event) => event.toStatus),
+    ["PREPARING", "NEEDS_INFORMATION", "PREPARING"],
+  );
+});
+
+test("a failed run keeps its error until the next run clears it", async () => {
+  const { service } = setup();
+  const started = await service.startPreparation(JOB);
+  const failed = await service.recordOutcome(started.id, "FAILED", "SYSTEM", "The run timed out.", { lastError: "Timed out" });
+  assert.equal(failed.lastError, "Timed out");
+  const again = await service.startPreparation(JOB);
+  assert.equal(again.lastError, "");
+});
+
+test("an outcome outside a run is a conflict", async () => {
+  const { service } = setup();
+  const started = await service.startPreparation(JOB);
+  await service.recordOutcome(started.id, "READY_FOR_REVIEW", "WORKER", "Filled.");
+  await rejects(service.recordOutcome(started.id, "FAILED", "WORKER", "late"), 409, /No preparation is running/);
+});
+
+test("the user can reject a settled application but not one mid-run", async () => {
+  const { service } = setup();
+  const started = await service.startPreparation(JOB);
+  await rejects(service.reject(started.id), 409, /Wait for the current preparation/);
+  await service.recordOutcome(started.id, "READY_FOR_REVIEW", "WORKER", "Filled.");
+  const rejected = await service.reject(started.id);
+  assert.equal(rejected.status, "USER_REJECTED");
+});
+
+test("unknown jobs and applications are 404", async () => {
+  const { service } = setup();
+  await rejects(service.getForJob(OTHER_JOB), 404);
+  await rejects(service.startPreparation(OTHER_JOB), 404);
+  await rejects(service.reject("99999999-9999-4999-8999-999999999999"), 404);
+  assert.equal(await service.getForJob(JOB), null);
+});
