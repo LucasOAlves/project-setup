@@ -31,7 +31,7 @@ const envSchema = z.object({
   // Scheduled discovery (JOB-009): which search sources run, with which keywords, when.
   DISCOVERY_SOURCES: z
     .string()
-    .default("remotive,himalayas,remoteok,arbeitnow")
+    .default("remotive,himalayas,remoteok,arbeitnow,weworkremotely")
     .transform(splitList)
     .pipe(z.array(z.enum(JOB_SEARCH_SOURCES))),
   // Each keyword is one request per source per run, so synonyms belong in MATCH_TARGET_ROLES.

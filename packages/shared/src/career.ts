@@ -39,7 +39,7 @@ export type JobBoardSource = (typeof JOB_BOARD_SOURCES)[number];
 
 // Search sources: an aggregator you query by keyword — results span many companies, so
 // importing one may need to create a new Company on the fly (see CareerService.importSearchResult).
-export const JOB_SEARCH_SOURCES = ["remoteok", "arbeitnow", "adzuna", "remotive", "himalayas"] as const;
+export const JOB_SEARCH_SOURCES = ["remoteok", "arbeitnow", "adzuna", "remotive", "himalayas", "weworkremotely"] as const;
 export type JobSearchSource = (typeof JOB_SEARCH_SOURCES)[number];
 
 export const JOB_SOURCES = [

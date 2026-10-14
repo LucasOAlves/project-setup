@@ -92,18 +92,18 @@ nothing is re-created or overwritten. See
 not LinkedIn, is this project's first real job provider, and for the later board/search split.
 
 Job search is available above the company list: pick a search source (RemoteOK, Arbeitnow,
-Adzuna, Remotive, or Himalayas — Adzuna needs a free `ADZUNA_APP_ID`/`ADZUNA_APP_KEY` from
+Adzuna, Remotive, Himalayas or We Work Remotely — Adzuna needs a free `ADZUNA_APP_ID`/`ADZUNA_APP_KEY` from
 developer.adzuna.com; the others need no key), enter keywords and an optional location, and "Add to tracker" imports
 one result — creating its company automatically (matched case-insensitively, or created new) if
 it isn't tracked yet. Unlike board import, search spans many companies at once instead of one
 company's own board. A collapsible "New to these sites?" guide next to the search panel explains
-each of the five sources and how to find a company's board token.
+each source and how to find a company's board token.
 
 Each source can be turned off without a code change: `GET /api/career/sources` lists the
 per-source registry (whether discovery is allowed, how far application automation may go, the
 terms that were reviewed), and `PATCH /api/career/sources/:id` with `{ "enabled": false }`
 stops every search or board import against it. Search results show "via <source>" linking back
-to the original posting, which Remotive's and Himalayas's terms require.
+to the original posting, which the Remotive, Himalayas and We Work Remotely terms require.
 
 Eligibility rules (Job Hunter) run with `POST /api/career/jobs/:id/evaluate`: a job comes back
 `ELIGIBLE`, `EXCLUDED` or `UNKNOWN` for a Brazil-based remote candidate, with the exact sentence

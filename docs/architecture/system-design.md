@@ -41,7 +41,7 @@ Controllers stay thin. Domain rules do not live in routes or React components.
 | images | creative brief, prompt, generation, association with post |
 | uploads | photo validation and storage identifiers |
 | ai | prompt templates, structured-output validation, provider clients |
-| career | companies, jobs, job-pursuit status, job fit scoring, résumé tailoring, recruiter/outreach tracking, career analytics, job board import + job search, and Career→Content topic suggestions — additive domain, shares `Profile` as its only cross-domain aggregate (ADR-011); `JobProvider` port (per-company board import — Greenhouse, Lever, Ashby, Workable, SmartRecruiters) and `JobSearchProvider` port (keyword search across companies — RemoteOK, Arbeitnow, Adzuna), all public/unauthenticated except Adzuna's free self-serve key; no LinkedIn integration, no external write ever happens automatically (ADR-012); the Content↔Career loop is one direction only, by design (ADR-013). Job Hunter (ADR-015) adds the source registry, normalization and dedupe, eligibility rules, daily discovery, matching v2, the evidence-checked explanation agent (ADR-016) the ranked job feed (`GET /api/career/feed`, `job-feed.ts`; web step "Job feed") relevance feedback with a calibration summary (`job_feedback`, `job-feedback.ts`) and the target-company watchlist (`company_watches`, `company-watch.ts`, `company-watch-service.ts`) |
+| career | companies, jobs, job-pursuit status, job fit scoring, résumé tailoring, recruiter/outreach tracking, career analytics, job board import + job search, and Career→Content topic suggestions — additive domain, shares `Profile` as its only cross-domain aggregate (ADR-011); `JobProvider` port (per-company board import — Greenhouse, Lever, Ashby, Workable, SmartRecruiters) and `JobSearchProvider` port (keyword search across companies — RemoteOK, Arbeitnow, Adzuna, Remotive, Himalayas, We Work Remotely), all public/unauthenticated except Adzuna's free self-serve key; no LinkedIn integration, no external write ever happens automatically (ADR-012); the Content↔Career loop is one direction only, by design (ADR-013). Job Hunter (ADR-015) adds the source registry, normalization and dedupe, eligibility rules, daily discovery, matching v2, the evidence-checked explanation agent (ADR-016) the ranked job feed (`GET /api/career/feed`, `job-feed.ts`; web step "Job feed") relevance feedback with a calibration summary (`job_feedback`, `job-feedback.ts`) and the target-company watchlist (`company_watches`, `company-watch.ts`, `company-watch-service.ts`) |
 
 Modules may call use cases across boundaries. They must not import OpenAI SDK types, NewsAPI types, or filesystem paths.
 
@@ -76,7 +76,8 @@ JobSearchProvider                   (Career domain, keyword search, ADR-011)
 ├── ArbeitnowJobSearchProvider      (public, unauthenticated)
 ├── AdzunaJobSearchProvider         (free self-serve ADZUNA_APP_ID/ADZUNA_APP_KEY)
 ├── RemotiveJobSearchProvider       (public, unauthenticated, attribution required)
-└── HimalayasJobSearchProvider      (public, unauthenticated, attribution required)
+├── HimalayasJobSearchProvider      (public, unauthenticated, attribution required)
+└── WeWorkRemotelyJobSearchProvider (public RSS feed, filtered locally, attribution required)
 
 WebSearchClient                     (Career domain, web search discovery, ADR-017)
 └── BraveSearchClient               (paid BRAVE_SEARCH_API_KEY, result URLs only)

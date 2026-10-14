@@ -73,6 +73,7 @@ const SEARCH_SOURCE_LABELS: Record<JobSearchSource, string> = {
   adzuna: "Adzuna",
   remotive: "Remotive",
   himalayas: "Himalayas",
+  weworkremotely: "We Work Remotely",
 };
 
 const CONNECTION_STATUS_LABELS: Record<RecruiterConnectionStatus, string> = {
@@ -691,7 +692,7 @@ export function CareerView({
                 {posting.location ? ` · ${posting.location}` : ""}
               </p>
               <h3>{posting.title}</h3>
-              {/* Remotive and Himalayas require a link back and naming them as the source. */}
+              {/* Remotive, Himalayas and We Work Remotely require a link back and naming them as the source. */}
               <p className="eyebrow">
                 via{" "}
                 <a href={posting.url} target="_blank" rel="noreferrer">
@@ -1459,6 +1460,11 @@ function JobSourceGuide() {
               search, but it needs a free API key. Get one instantly at{" "}
               <code>developer.adzuna.com</code>, then set <code>ADZUNA_APP_ID</code> and{" "}
               <code>ADZUNA_APP_KEY</code> in this workspace's environment.
+            </p>
+            <p>
+              <strong>We Work Remotely.</strong> A long-running remote-only board. Its public feed
+              of programming jobs is filtered by your keywords; every result links back to the
+              posting on We Work Remotely.
             </p>
           </div>
         </div>

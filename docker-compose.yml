@@ -50,7 +50,7 @@ services:
       NEWS_API_KEY: ${NEWS_API_KEY:-}
       NEWS_LOOKBACK_DAYS: ${NEWS_LOOKBACK_DAYS:-21}
       REDIS_URL: redis://redis:6379
-      DISCOVERY_SOURCES: ${DISCOVERY_SOURCES:-remotive,himalayas,remoteok,arbeitnow}
+      DISCOVERY_SOURCES: ${DISCOVERY_SOURCES:-remotive,himalayas,remoteok,arbeitnow,weworkremotely}
       MATCH_TARGET_USD_MONTHLY: ${MATCH_TARGET_USD_MONTHLY:-6000}
       MATCH_TARGET_ROLES: ${MATCH_TARGET_ROLES:-}
       BRAVE_SEARCH_API_KEY: ${BRAVE_SEARCH_API_KEY:-}
@@ -84,7 +84,7 @@ services:
       DATABASE_URL: postgres://studio:studio@postgres:5432/studio
       REDIS_URL: redis://redis:6379
       WORKER_HEARTBEAT_MS: ${WORKER_HEARTBEAT_MS:-300000}
-      DISCOVERY_SOURCES: ${DISCOVERY_SOURCES:-remotive,himalayas,remoteok,arbeitnow}
+      DISCOVERY_SOURCES: ${DISCOVERY_SOURCES:-remotive,himalayas,remoteok,arbeitnow,weworkremotely}
       MATCH_TARGET_USD_MONTHLY: ${MATCH_TARGET_USD_MONTHLY:-6000}
       MATCH_TARGET_ROLES: ${MATCH_TARGET_ROLES:-}
       BRAVE_SEARCH_API_KEY: ${BRAVE_SEARCH_API_KEY:-}

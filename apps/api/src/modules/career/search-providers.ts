@@ -6,6 +6,7 @@ import { HimalayasJobSearchProvider } from "./himalayas-job-search-provider.js";
 import type { JobSearchProvider } from "./job-search-provider.js";
 import { RemoteOkJobSearchProvider } from "./remoteok-job-search-provider.js";
 import { RemotiveJobSearchProvider } from "./remotive-job-search-provider.js";
+import { WeWorkRemotelyJobSearchProvider } from "./weworkremotely-job-search-provider.js";
 
 // One place that wires the search adapters, shared by the API and the discovery worker.
 export function createSearchProviders(env: Env): Record<JobSearchSource, JobSearchProvider> {
@@ -15,5 +16,6 @@ export function createSearchProviders(env: Env): Record<JobSearchSource, JobSear
     adzuna: new AdzunaJobSearchProvider(env.ADZUNA_APP_ID, env.ADZUNA_APP_KEY),
     remotive: new RemotiveJobSearchProvider(),
     himalayas: new HimalayasJobSearchProvider(),
+    weworkremotely: new WeWorkRemotelyJobSearchProvider(),
   };
 }

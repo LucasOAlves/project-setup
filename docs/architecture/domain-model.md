@@ -179,7 +179,7 @@ Rows imported before 0018 keep `{}`.
 
 One row per job-source adapter (`greenhouse`, `lever`, `ashby`, `remoteok`, `arbeitnow`,
 `adzuna` seeded by migration 0016, `remotive` and `himalayas` by 0017 with their reviewed terms
-in `notes`, `workable` and `smartrecruiters` by 0020). `SourceRegistry` reads it: `CareerService` calls `assertDiscoveryAllowed()` before
+in `notes`, `workable` and `smartrecruiters` by 0020, `brave` by 0022 and `weworkremotely` by 0023). `SourceRegistry` reads it: `CareerService` calls `assertDiscoveryAllowed()` before
 every board import or search, and `PATCH /api/career/sources/:id` toggles `enabled`. The per-source permission registry from the spec:
 `discoveryAllowed` gates scheduled discovery, `applicationMode` (`MANUAL` / `ASSISTED` /
 `AUTOMATED`) caps how far application automation may go, `termsUrl` records what was
