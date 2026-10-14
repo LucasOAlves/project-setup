@@ -285,6 +285,14 @@ structured `content`, its `contentHash` (key-order independent, `document-versio
 when a PDF was rendered, its `storageKey` and `fileHash`. Saving identical content returns the
 latest version. Deleting the job deletes the rows, and the job-delete route removes the files.
 
+A `CV` document's content is `tailoredCvContent` (shared, format `tailored-cv@1`): header
+(name, headline, contact line and links from ApplicationDetails), summary, experiences with
+highlights taken verbatim from the profile, skills, technologies, education, certifications,
+languages, `gaps` (job technologies the profile lacks), `missingDetails` (application details
+the CV would show but that are not filled in) and how many summary sentences were dropped as
+unsupported. Built by `TailoredCvGenerator` (prompt `tailored-cv.v1`, grounding in
+`tailored-cv.ts`) and rendered by `tailored-cv-pdf.ts`.
+
 ## TalentPlatformProfile (Job Hunter)
 
 One row per talent platform the user has touched (`talent_platform_profiles`, migration 0024),

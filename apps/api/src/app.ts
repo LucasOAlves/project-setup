@@ -53,6 +53,7 @@ import { ProfileRepository } from "./modules/profile/profile-repository.js";
 import { ApplicationDocumentRepository } from "./modules/career/application-document-repository.js";
 import { ApplicationDocumentService } from "./modules/career/application-document-service.js";
 import { registerDocumentRoutes } from "./modules/career/document-routes.js";
+import { TailoredCvGenerator } from "./modules/career/tailored-cv-generator.js";
 import { evaluationSettingsFromEnv } from "./modules/career/job-intake.js";
 import { registerProfileRoutes } from "./modules/profile/profile-routes.js";
 import { ProfileService } from "./modules/profile/profile-service.js";
@@ -165,11 +166,20 @@ export async function buildApp(env: Env, db: Database) {
     storage,
     async (jobId) => (await careerRepository.getJob(jobId)) !== null,
   );
+  const applicationDetails = new ApplicationDetailsService(new ApplicationDetailsRepository(db));
+  const cvGenerator = new TailoredCvGenerator({
+    careerRepo: careerRepository,
+    getProfile: () => profiles.getProfile(),
+    getApplicationDetails: () => applicationDetails.get(),
+    textProviders,
+    defaultTextProvider,
+    documents,
+  });
 
   app.get("/health", async () => ({ ok: true }));
 
   await registerProfileRoutes(app, profiles, env.MAX_DOCUMENT_BYTES);
-  await registerApplicationDetailsRoutes(app, new ApplicationDetailsService(new ApplicationDetailsRepository(db)));
+  await registerApplicationDetailsRoutes(app, applicationDetails);
   await registerPersonaRoutes(app, personas);
   await registerResearchRoutes(app, research);
   await registerOpportunityRoutes(app, opportunities);
@@ -178,7 +188,7 @@ export async function buildApp(env: Env, db: Database) {
   await registerCustomTopicRoutes(app, customTopics);
   await registerImageRoutes(app, images);
   await registerCareerRoutes(app, career, sourceRegistry, documents);
-  await registerDocumentRoutes(app, documents);
+  await registerDocumentRoutes(app, documents, cvGenerator);
   await registerDiscoveryRoutes(app, env, new CompanyWatchService(new CareerRepository(db)));
 
   app.setErrorHandler((error, _request, reply) => {

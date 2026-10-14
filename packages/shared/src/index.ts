@@ -124,6 +124,10 @@ export {
 } from "./custom-topic.js";
 export {
   JOB_BOARD_SOURCES,
+  tailoredCvModelOutputSchema,
+  tailoredCvContentSchema,
+  type TailoredCvModelOutput,
+  type TailoredCvContent,
   APPLICATION_DOCUMENT_TYPES,
   APPLICATION_DOCUMENT_ORIGINS,
   applicationDocumentPublicSchema,

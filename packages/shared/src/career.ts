@@ -549,3 +549,55 @@ export const applicationDocumentPublicSchema = z.object({
   createdAt: z.string(),
 });
 export type ApplicationDocumentPublic = z.infer<typeof applicationDocumentPublicSchema>;
+
+// Tailored CV v2 (Milestone 2): what the model returns. Ids and strings are checked against the
+// profile afterwards (tailored-cv.ts), so the schema only bounds sizes.
+export const tailoredCvModelOutputSchema = z.object({
+  rationale: z.string().trim().max(600).default(""),
+  summary: z
+    .array(z.object({ text: z.string().trim().max(400), evidence: z.array(z.string().max(400)).max(4).default([]) }))
+    .max(6)
+    .default([]),
+  experiences: z
+    .array(z.object({ id: z.string().min(1).max(100), bulletIds: z.array(z.string().min(1).max(120)).max(12).default([]) }))
+    .max(20)
+    .default([]),
+  topSkillsOrder: z.array(z.string().trim().max(80)).max(30).default([]),
+  technologiesOrder: z.array(z.string().trim().max(80)).max(50).default([]),
+});
+export type TailoredCvModelOutput = z.infer<typeof tailoredCvModelOutputSchema>;
+
+// What a saved CV document holds: everything the PDF shows, so a version is a complete record.
+export const tailoredCvContentSchema = z.object({
+  format: z.literal("tailored-cv@1"),
+  promptVersion: z.string(),
+  job: z.object({ title: z.string(), companyName: z.string() }),
+  header: z.object({
+    fullName: z.string(),
+    headline: z.string(),
+    contactLine: z.string(),
+    links: z.array(z.string()),
+  }),
+  rationale: z.string(),
+  summary: z.array(z.string()),
+  droppedSummarySentences: z.number().int(),
+  experiences: z.array(
+    z.object({
+      id: z.string(),
+      role: z.string(),
+      company: z.string(),
+      startPeriod: z.string(),
+      endPeriod: z.string(),
+      highlights: z.array(z.string()),
+    }),
+  ),
+  topSkills: z.array(z.string()),
+  technologies: z.array(z.string()),
+  education: z.array(z.string()),
+  certifications: z.array(z.string()),
+  languages: z.array(z.string()),
+  gaps: z.array(z.string()),
+  // Application details not filled in yet that the CV would show.
+  missingDetails: z.array(z.string()),
+});
+export type TailoredCvContent = z.infer<typeof tailoredCvContentSchema>;

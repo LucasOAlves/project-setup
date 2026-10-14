@@ -67,6 +67,15 @@ tailored résumé" renders a PDF from that ordering. The model never writes new 
 it only re-ranks real profile content, and anything it invents or omits is corrected
 deterministically before export (see `apps/api/src/modules/career/resume-tailoring.ts`).
 
+Tailored CV v2 (Job Hunter, `POST /api/career/jobs/:id/documents/cv`) goes further and saves
+the result as a versioned document: the model picks which of each experience's own sentences
+to show and writes up to three summary sentences, and code keeps only what the profile
+supports (`tailored-cv.ts`). Highlights are reused word for word; a summary sentence must quote
+the profile and may not add a number or technology the profile lacks; every experience, skill
+and technology stays. Technologies the job asks for that the profile lacks are listed as gaps,
+never added. Name, contact details and employer names are not sent to the model: the CV header
+comes from Application details and is added after the model answers.
+
 Recruiters & contacts is a lightweight career CRM: add a contact under a company, optionally
 tie them to a tracked job, and track connection status (Not connected/Requested/Connected).
 "Score relevance" is a deterministic score (company match, role, job link — see
