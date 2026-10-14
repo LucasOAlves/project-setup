@@ -24,7 +24,7 @@ function setup(jobUrl = "https://job-boards.greenhouse.io/acme/jobs/123", clock 
     async create(input: Pick<ApplicationRow, "jobId" | "status" | "mode" | "portal" | "destinationUrl">, record: { actor: string; reason: string }) {
       if (rows.some((row) => row.jobId === input.jobId)) return null;
       const now = clock.now;
-      const row: ApplicationRow = { id: nextId(), lastError: "", createdAt: now, updatedAt: now, ...input };
+      const row: ApplicationRow = { id: nextId(), lastError: "", formSnapshot: null, createdAt: now, updatedAt: now, ...input };
       rows.push(row);
       events.push({ id: nextId(), applicationId: row.id, fromStatus: null, toStatus: row.status, createdAt: now, ...record });
       return row;

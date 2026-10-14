@@ -79,6 +79,9 @@ export async function withGuardedPage<T>(
     });
     context.setDefaultTimeout(options.navigationTimeoutMs ?? 30_000);
     await context.addInitScript({ content: NO_SUBMIT_SCRIPT });
+    // tsx compiles with esbuild's keepNames, which wraps functions in a __name() helper. The
+    // functions we pass to page.evaluate carry those calls into the page, so define a no-op.
+    await context.addInitScript({ content: "globalThis.__name = globalThis.__name || ((target) => target);" });
     await context.routeWebSocket(/.*/, (socket) => socket.close());
     await context.route("**/*", async (route) => {
       const request = route.request();

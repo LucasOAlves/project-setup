@@ -12,6 +12,7 @@ import { ApplicationService } from "./modules/career/application-service.js";
 import { CareerRepository } from "./modules/career/career-repository.js";
 import { ApplicationPrepProcessor, type ApplicationPrepJob } from "./modules/browser/application-prep-processor.js";
 import { BrowserApplicationPreparer } from "./modules/browser/application-preparer.js";
+import { mockPortalResponse } from "./modules/browser/mock-portals.js";
 import { createLogger } from "./observability/logger.js";
 import { attachObservability } from "./worker/observability.js";
 import { createRedisConnection, QUEUE_NAMES } from "./worker/queues.js";
@@ -36,11 +37,18 @@ async function main() {
     const job = await careerRepo.getJob(jobId);
     return job ? { id: job.id, url: job.url } : null;
   });
+  if (env.BROWSER_MOCK_PORTALS && env.NODE_ENV === "production") {
+    throw new Error("BROWSER_MOCK_PORTALS is for local development only.");
+  }
+  if (env.BROWSER_MOCK_PORTALS) {
+    logger.warn("mock portals on", { reason: "BROWSER_MOCK_PORTALS=true: no request reaches the network" });
+  }
   const processor = new ApplicationPrepProcessor(
     applications,
     new BrowserApplicationPreparer({
       executablePath: env.BROWSER_EXECUTABLE_PATH,
       runTimeoutMs: env.BROWSER_RUN_TIMEOUT_MS,
+      ...(env.BROWSER_MOCK_PORTALS ? { mockResponse: mockPortalResponse } : {}),
     }),
   );
 

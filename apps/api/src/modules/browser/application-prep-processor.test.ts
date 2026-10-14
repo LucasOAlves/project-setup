@@ -13,6 +13,7 @@ const application: ApplicationPublic = {
   portal: "lever",
   destinationUrl: "https://jobs.lever.co/acme/abc",
   lastError: "",
+  form: null,
   createdAt: RUN,
   updatedAt: RUN,
   events: [],

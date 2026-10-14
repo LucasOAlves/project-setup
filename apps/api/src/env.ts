@@ -31,6 +31,11 @@ const envSchema = z.object({
   // Browser worker (Milestone 3). Empty uses Playwright's own Chromium.
   BROWSER_EXECUTABLE_PATH: z.string().default(""),
   BROWSER_RUN_TIMEOUT_MS: z.coerce.number().int().positive().default(120_000),
+  // Development only: serve the mock portals instead of the network, to try the flow locally.
+  BROWSER_MOCK_PORTALS: z
+    .enum(["true", "false"])
+    .default("false")
+    .transform((value) => value === "true"),
   // Scheduled discovery (JOB-009): which search sources run, with which keywords, when.
   DISCOVERY_SOURCES: z
     .string()

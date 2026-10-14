@@ -283,7 +283,9 @@ exactly one row (`job_id` UNIQUE). It records:
   USER_REJECTED;
 - `mode`: AUTOMATED when the posting is on a supported portal (Greenhouse, Lever, Ashby),
   otherwise MANUAL;
-- `portal`, `destinationUrl`, and the last run's error.
+- `portal`, `destinationUrl`, and the last run's error;
+- `formSnapshot`: the form the last browser run read (each field's label, kind, required flag
+  and options). This is page text, kept as data (migration 0028).
 
 Transitions follow `checkTransition` (`application-state.ts`):
 - Only the user starts a run or rejects.

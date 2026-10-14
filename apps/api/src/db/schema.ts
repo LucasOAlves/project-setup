@@ -286,6 +286,7 @@ export const applications = pgTable("applications", {
   portal: text("portal"),
   destinationUrl: text("destination_url").notNull().default(""),
   lastError: text("last_error").notNull().default(""),
+  formSnapshot: jsonb("form_snapshot").$type<Record<string, unknown>>(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

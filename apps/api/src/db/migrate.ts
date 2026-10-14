@@ -41,6 +41,7 @@ export async function migrate(sql: postgres.Sql): Promise<void> {
     "0025_application_details.sql",
     "0026_application_documents.sql",
     "0027_applications.sql",
+    "0028_application_form_snapshot.sql",
   ];
 
   for (const file of files) {

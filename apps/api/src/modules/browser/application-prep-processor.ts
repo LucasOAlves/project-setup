@@ -37,6 +37,7 @@ export class ApplicationPrepProcessor {
     }
     const recorded = await this.applications.recordOutcome(application.id, outcome.status, "WORKER", outcome.reason, {
       lastError: outcome.lastError ?? "",
+      ...(outcome.form ? { formSnapshot: outcome.form as unknown as Record<string, unknown> } : {}),
     });
     return { applicationId: application.id, status: recorded.status };
   }

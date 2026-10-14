@@ -1,6 +1,7 @@
 import {
   SUPPORTED_APPLICATION_PORTALS,
   detectBoardReference,
+  formSnapshotSchema,
   type ApplicationActor,
   type ApplicationPublic,
   type ApplicationState,
@@ -73,7 +74,7 @@ export class ApplicationService {
       await this.recordAudit(created, null, "USER", reason);
       return this.toPublic(created);
     }
-    return this.toPublic(await this.apply(existing, "PREPARING", "USER", reason, { ...target, lastError: "" }));
+    return this.toPublic(await this.apply(existing, "PREPARING", "USER", reason, { ...target, lastError: "", formSnapshot: null }));
   }
 
   // Records how a preparation run ended. Used by the browser worker and the manual path.
@@ -151,11 +152,18 @@ export class ApplicationService {
       portal: row.portal as ApplicationPublic["portal"],
       destinationUrl: row.destinationUrl,
       lastError: row.lastError,
+      form: parseForm(row.formSnapshot),
       createdAt: row.createdAt.toISOString(),
       updatedAt: row.updatedAt.toISOString(),
       events: events.map(toPublicEvent),
     };
   }
+}
+
+function parseForm(snapshot: unknown): ApplicationPublic["form"] {
+  if (!snapshot) return null;
+  const parsed = formSnapshotSchema.safeParse(snapshot);
+  return parsed.success ? parsed.data : null;
 }
 
 function toPublicEvent(event: ApplicationEventRow): ApplicationPublic["events"][number] {
