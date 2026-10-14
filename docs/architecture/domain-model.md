@@ -198,7 +198,21 @@ to regions outside LATAM/Americas/Brazil/worldwide, on-site or hybrid abroad), `
 accepted region in the location, or wording like "from anywhere in the world"), or `UNKNOWN`.
 Each reason quotes the exact text that decided it; an exclusion always wins over a
 confirmation, and `UNKNOWN` is never shown as eligible. `modelVersion` is
-`eligibility-rules@1`; score and explanation stay empty until tickets 8 and 9.
+`eligibility-rules@1`.
+
+Jobs the rules did not exclude are then scored by matching v2 (`job-matching.ts`, JOB-011),
+when a profile is saved: six weighted dimensions from the spec (technical stack 30%, seniority
+and responsibilities 20%, experience and achievements 20%, geographic and contract fit 15%,
+compensation 10%, other preferences 5%), each 0-100 with notes and a `known` flag. The stack
+is read from the posting text against a fixed technology vocabulary, because discovered jobs
+carry no structured technology list. `confidence` is the share of weight the posting gave
+enough to score, so an undisclosed salary is an uncertainty (`COMPENSATION_UNDISCLOSED`, score
+50, confidence 90) rather than an exclusion. `score`, `confidence` and the breakdown
+(`scoreBreakdown`: dimensions, matched and missing skills, flags) are stored on the row and
+`modelVersion` becomes `eligibility-rules@1+matching@2`. Excluded jobs keep a null score. The
+compensation target is `MATCH_TARGET_USD_MONTHLY` (default 6000). This is separate from the
+user-triggered Job Fit score on `Job.fitScore`, which reads fields typed on a tracked job.
+The explanation stays empty until ticket 9.
 
 ## AuditEvent (Job Hunter)
 

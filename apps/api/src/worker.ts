@@ -9,6 +9,8 @@ import { loadEnv, type Env } from "./env.js";
 import { CareerRepository } from "./modules/career/career-repository.js";
 import { DiscoveryService } from "./modules/career/discovery.js";
 import { JobIntake } from "./modules/career/job-intake.js";
+import { matchPreferencesFromEnv, type MatchProfile } from "./modules/career/job-matching.js";
+import { ProfileRepository } from "./modules/profile/profile-repository.js";
 import { createSearchProviders } from "./modules/career/search-providers.js";
 import { SourceRegistry } from "./modules/career/source-registry.js";
 import { AuditRepository } from "./modules/audit/audit-repository.js";
@@ -19,6 +21,7 @@ import {
   createRedisConnection,
   enqueueEvaluation,
   type DiscoveryJobData,
+  type EvaluationJobData,
   QUEUE_NAMES,
   SYSTEM_JOBS,
   type QueueName,
@@ -33,8 +36,8 @@ loadDotenv({
 // never blocks a request. The API owns migrations; the worker only waits for the database.
 //
 // Processors are registered per queue below. Discovery (JOB-009) runs daily per configured
-// source; evaluation (JOB-011/012) registers its processor when it lands, until then queued
-// evaluations wait in Redis (their ids are deterministic, so they never pile up twice).
+// source and queues each new, non-excluded job on `evaluation`, which runs the eligibility
+// rules and matching v2 (JOB-011) against the current profile.
 async function main() {
   const env = loadEnv();
   const logger = createLogger({ service: "worker" });
@@ -57,8 +60,11 @@ async function main() {
   const discoveryQueue = createQueue(QUEUE_NAMES.discovery, connection);
   await scheduleDiscovery(discoveryQueue, env, logger);
 
+  const careerRepo = new CareerRepository(db);
+  const profileRepo = new ProfileRepository(db);
+  const intake = new JobIntake(careerRepo, matchPreferencesFromEnv(env));
   const discovery = new DiscoveryService({
-    intake: new JobIntake(new CareerRepository(db)),
+    intake,
     providers: createSearchProviders(env),
     sourceGate: new SourceRegistry(db),
     queueEvaluation: async (jobId, profileVersion) => {
@@ -70,6 +76,22 @@ async function main() {
     [QUEUE_NAMES.discovery]: async (job) => {
       const data = job.data as DiscoveryJobData;
       return discovery.runSource(data.sourceId, env.DISCOVERY_KEYWORDS);
+    },
+    [QUEUE_NAMES.evaluation]: async (job) => {
+      const data = job.data as EvaluationJobData;
+      const jobRow = await careerRepo.getJob(data.jobId);
+      if (!jobRow) {
+        // Deleted since it was queued: nothing to evaluate, and retrying would not help.
+        return { jobId: data.jobId, skipped: "JOB_NOT_FOUND" };
+      }
+      const evaluation = await intake.evaluateJob(jobRow, await loadMatchProfile(profileRepo));
+      return {
+        jobId: data.jobId,
+        evaluationId: evaluation.id,
+        eligibility: evaluation.eligibility,
+        score: evaluation.score,
+        confidence: evaluation.confidence,
+      };
     },
     [QUEUE_NAMES.system]: async (job) => {
       if (job.name === SYSTEM_JOBS.heartbeat) {
@@ -96,6 +118,14 @@ async function main() {
   };
   process.on("SIGTERM", shutdown);
   process.on("SIGINT", shutdown);
+}
+
+// The worker reads the profile straight from the repository: the API's ProfileService also
+// wires storage and text providers the worker does not need.
+async function loadMatchProfile(repo: ProfileRepository): Promise<MatchProfile | null> {
+  const record = await repo.getWorkspaceProfile();
+  if (!record) return null;
+  return { ...record.profile, experiences: record.experiences };
 }
 
 // One daily job scheduler per configured source (DISCOVERY_SOURCES, DISCOVERY_CRON in

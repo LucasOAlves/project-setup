@@ -321,12 +321,44 @@ export const eligibilityReasonSchema = z.object({
 });
 export type EligibilityReasonPublic = z.infer<typeof eligibilityReasonSchema>;
 
+// Matching v2 (JOB-011): six weighted dimensions, each saying whether the posting gave
+// enough to score it. Confidence is the share of weight that was known.
+export const MATCH_DIMENSIONS = [
+  "technical",
+  "seniority",
+  "experience",
+  "geography",
+  "compensation",
+  "preferences",
+] as const;
+export type MatchDimensionName = (typeof MATCH_DIMENSIONS)[number];
+
+export const matchDimensionResultSchema = z.object({
+  score: z.number(),
+  known: z.boolean(),
+  weight: z.number(),
+  notes: z.array(z.string()),
+});
+
+export const matchBreakdownSchema = z.object({
+  version: z.string(),
+  dimensions: z.record(z.enum(MATCH_DIMENSIONS), matchDimensionResultSchema),
+  matchedSkills: z.array(z.string()),
+  missingSkills: z.array(z.string()),
+  flags: z.array(z.string()),
+});
+export type MatchBreakdown = z.infer<typeof matchBreakdownSchema>;
+
 export const jobEvaluationPublicSchema = z.object({
   id: z.string(),
   jobId: z.string(),
   profileVersion: z.number(),
   eligibility: z.enum(JOB_ELIGIBILITY_STATUSES),
   eligibilityReasons: z.array(eligibilityReasonSchema),
+  // Null when the job was excluded by the rules or no profile was saved yet.
+  score: z.number().nullable(),
+  confidence: z.number().nullable(),
+  match: matchBreakdownSchema.nullable(),
   modelVersion: z.string(),
   createdAt: z.string(),
 });

@@ -50,6 +50,7 @@ import { PersonaRepository } from "./modules/persona/persona-repository.js";
 import { PersonaService } from "./modules/persona/persona-service.js";
 import { LocalStorageProvider } from "./modules/uploads/local-storage.js";
 import { ProfileRepository } from "./modules/profile/profile-repository.js";
+import { matchPreferencesFromEnv } from "./modules/career/job-matching.js";
 import { registerProfileRoutes } from "./modules/profile/profile-routes.js";
 import { ProfileService } from "./modules/profile/profile-service.js";
 
@@ -145,6 +146,7 @@ export async function buildApp(env: Env, db: Database) {
     boardProviders,
     searchProviders,
     sourceRegistry,
+    matchPreferencesFromEnv(env),
   );
   const images = new ImageService(
     profiles,

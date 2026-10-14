@@ -37,6 +37,8 @@ const envSchema = z.object({
   DISCOVERY_KEYWORDS: z.string().default("typescript,node.js,angular,tech lead").transform(splitList),
   DISCOVERY_CRON: z.string().min(1).default("0 9 * * *"),
   DISCOVERY_TZ: z.string().min(1).default("America/Sao_Paulo"),
+  // Matching v2 compensation target, in USD per month (JOB-011).
+  MATCH_TARGET_USD_MONTHLY: z.coerce.number().int().positive().default(6000),
 });
 
 export type Env = z.infer<typeof envSchema>;

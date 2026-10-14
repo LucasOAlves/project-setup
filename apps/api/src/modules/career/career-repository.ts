@@ -165,6 +165,9 @@ export class CareerRepository {
     eligibility: string;
     eligibilityReasons: unknown[];
     modelVersion: string;
+    score?: number | null;
+    confidence?: number | null;
+    scoreBreakdown?: Record<string, unknown>;
   }): Promise<JobEvaluationRow> {
     const [row] = await this.db
       .insert(jobEvaluations)

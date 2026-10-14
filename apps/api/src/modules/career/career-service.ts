@@ -50,6 +50,7 @@ import type { JobSearchProvider } from "./job-search-provider.js";
 import { ALLOW_ALL_SOURCES, type SourceGate } from "./source-registry.js";
 import { computeJobFit } from "./job-fit.js";
 import { prepareImportedJob } from "./job-import.js";
+import { DEFAULT_MATCH_PREFERENCES, type MatchPreferences } from "./job-matching.js";
 import { JobIntake } from "./job-intake.js";
 import { scoreRecruiterRelevance } from "./recruiter-scoring.js";
 import { applyTailoringPlan, groundTailoringPlan } from "./resume-tailoring.js";
@@ -73,10 +74,11 @@ export class CareerService {
     private readonly boardProviders: Record<JobBoardSource, JobProvider>,
     private readonly searchProviders: Record<JobSearchSource, JobSearchProvider>,
     private readonly sourceGate: SourceGate = ALLOW_ALL_SOURCES,
+    private readonly matchPreferences: MatchPreferences = DEFAULT_MATCH_PREFERENCES,
   ) {}
 
   private get intake(): JobIntake {
-    return new JobIntake(this.repo);
+    return new JobIntake(this.repo, this.matchPreferences);
   }
 
   async listCompanies(): Promise<CompanyPublic[]> {
@@ -255,12 +257,13 @@ export class CareerService {
     return buildResumePdf(tailoredProfile);
   }
 
-  async evaluateEligibility(id: string): Promise<JobEvaluationPublic> {
+  async evaluateJob(id: string): Promise<JobEvaluationPublic> {
     const job = await this.repo.getJob(id);
     if (!job) {
       throw notFound("That job does not exist.");
     }
-    return evaluationToPublic(await this.intake.evaluateEligibility(job));
+    // Eligibility rules, then matching v2 for jobs the rules did not exclude (JOB-011).
+    return evaluationToPublic(await this.intake.evaluateJob(job, await this.profiles.getProfile()));
   }
 
   async getLatestEvaluation(id: string): Promise<JobEvaluationPublic | null> {
@@ -497,6 +500,9 @@ function evaluationToPublic(row: JobEvaluationRow): JobEvaluationPublic {
     profileVersion: row.profileVersion,
     eligibility: row.eligibility as JobEvaluationPublic["eligibility"],
     eligibilityReasons: row.eligibilityReasons as JobEvaluationPublic["eligibilityReasons"],
+    score: row.score,
+    confidence: row.confidence,
+    match: row.score === null ? null : (row.scoreBreakdown as JobEvaluationPublic["match"]),
     modelVersion: row.modelVersion,
     createdAt: row.createdAt.toISOString(),
   };

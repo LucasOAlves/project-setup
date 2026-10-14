@@ -100,7 +100,10 @@ to the original posting, which Remotive's and Himalayas's terms require.
 
 Eligibility rules (Job Hunter) run with `POST /api/career/jobs/:id/evaluate`: a job comes back
 `ELIGIBLE`, `EXCLUDED` or `UNKNOWN` for a Brazil-based remote candidate, with the exact sentence
-or location text behind each verdict. `GET /api/career/jobs/:id/evaluation` returns the latest.
+or location text behind each verdict. Jobs that are not excluded also get a 0-100 match score
+over the spec's six weighted dimensions, a confidence (how much of the score the posting
+actually supports) and flags such as undisclosed compensation; the worker does the same for
+every job discovery finds. `GET /api/career/jobs/:id/evaluation` returns the latest.
 There is no UI for it yet; the ranked job feed (ticket 10) will show it.
 
 Content ideas from your job search close the Content↔Career loop, one direction of it: the

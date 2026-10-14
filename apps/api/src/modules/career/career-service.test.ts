@@ -1009,7 +1009,7 @@ test("getContentSuggestions grounds market demand against the real saved profile
   assert.equal(suggestions[0]?.technology, "Kubernetes");
 });
 
-test("evaluateEligibility judges the source text and stores the verdict with its evidence", async () => {
+test("evaluateJob judges the source text and stores the verdict with its evidence", async () => {
   let stored: Record<string, unknown> = {};
   const service = new CareerService(
     {
@@ -1026,25 +1026,78 @@ test("evaluateEligibility judges the source text and stores the verdict with its
       },
       async insertJobEvaluation(input: Record<string, unknown>) {
         stored = input;
-        return { id: "eval-1", createdAt: new Date("2026-10-14T00:00:00Z"), ...input };
+        return { id: "eval-1", createdAt: new Date("2026-10-14T00:00:00Z"), score: null, confidence: null, scoreBreakdown: {}, ...input };
       },
     } as never,
-    {} as never,
+    {
+      async getProfile() {
+        return fakeProfileForTailoring();
+      },
+    } as never,
     textMap(noTextCalls),
     "openai",
     noBoardProviders(),
     noSearchProviders(),
   );
 
-  const evaluation = await service.evaluateEligibility("job-9");
+  const evaluation = await service.evaluateJob("job-9");
 
   assert.equal(evaluation.eligibility, "EXCLUDED");
   assert.equal(evaluation.profileVersion, 4);
   assert.equal(evaluation.eligibilityReasons[0]?.quote, "You must be based in the United States.");
+  // Excluded jobs are not ranked.
+  assert.equal(evaluation.score, null);
+  assert.equal(evaluation.match, null);
   assert.equal(stored.modelVersion, "eligibility-rules@1");
 });
 
-test("evaluateEligibility rejects an unknown job", async () => {
+test("evaluateJob scores a job the rules did not exclude against the saved profile", async () => {
+  let stored: Record<string, unknown> = {};
+  const service = new CareerService(
+    {
+      async getJob() {
+        return fakeJob({
+          id: "job-10",
+          title: "Senior Backend Engineer",
+          location: "Remote - LATAM",
+          rawDescription: "Fully remote, open to candidates in Brazil. Node.js and PostgreSQL.",
+          normalizedData: {
+            version: 1,
+            salary: { usdMonthlyMin: 7000, usdMonthlyMax: 9000, approximate: false },
+            regions: ["LATAM", "BRAZIL"],
+            employmentType: "FULL_TIME",
+          },
+        });
+      },
+      async getProfileVersion() {
+        return 4;
+      },
+      async insertJobEvaluation(input: Record<string, unknown>) {
+        stored = input;
+        return { id: "eval-2", createdAt: new Date("2026-10-14T00:00:00Z"), score: null, confidence: null, scoreBreakdown: {}, ...input };
+      },
+    } as never,
+    {
+      async getProfile() {
+        return { ...fakeProfileForTailoring(), yearsOfExperience: 9, architectureExperience: "", leadershipExperience: "", experiences: [] };
+      },
+    } as never,
+    textMap(noTextCalls),
+    "openai",
+    noBoardProviders(),
+    noSearchProviders(),
+  );
+
+  const evaluation = await service.evaluateJob("job-10");
+
+  assert.equal(evaluation.eligibility, "ELIGIBLE");
+  assert.equal(typeof evaluation.score, "number");
+  assert.equal(evaluation.match?.version, "matching@2");
+  assert.deepEqual(evaluation.match?.matchedSkills, ["Node.js", "PostgreSQL"]);
+  assert.equal(stored.modelVersion, "eligibility-rules@1+matching@2");
+});
+
+test("evaluateJob rejects an unknown job", async () => {
   const service = new CareerService(
     {
       async getJob() {
@@ -1057,5 +1110,5 @@ test("evaluateEligibility rejects an unknown job", async () => {
     noBoardProviders(),
     noSearchProviders(),
   );
-  await assert.rejects(() => service.evaluateEligibility("missing"), /does not exist/);
+  await assert.rejects(() => service.evaluateJob("missing"), /does not exist/);
 });
