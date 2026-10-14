@@ -56,6 +56,7 @@ import { registerDocumentRoutes } from "./modules/career/document-routes.js";
 import { ApplicationRepository } from "./modules/career/application-repository.js";
 import { ApplicationService } from "./modules/career/application-service.js";
 import { registerApplicationRoutes } from "./modules/career/application-routes.js";
+import { ApplicationDispatcher } from "./modules/career/application-dispatcher.js";
 import { AuditRepository } from "./modules/audit/audit-repository.js";
 import { TailoredCvGenerator } from "./modules/career/tailored-cv-generator.js";
 import { CoverLetterGenerator } from "./modules/career/cover-letter-generator.js";
@@ -202,7 +203,7 @@ export async function buildApp(env: Env, db: Database) {
   await registerImageRoutes(app, images);
   await registerCareerRoutes(app, career, sourceRegistry, documents);
   await registerDocumentRoutes(app, documents, { cv: cvGenerator, coverLetters, answers });
-  await registerApplicationRoutes(app, applications);
+  await registerApplicationRoutes(app, applications, new ApplicationDispatcher(env.REDIS_URL, applications));
   await registerDiscoveryRoutes(app, env, new CompanyWatchService(new CareerRepository(db)));
 
   app.setErrorHandler((error, _request, reply) => {

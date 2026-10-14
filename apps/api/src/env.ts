@@ -28,6 +28,9 @@ const envSchema = z.object({
   ADZUNA_APP_KEY: z.string().optional().default(""),
   REDIS_URL: z.string().min(1).default("redis://localhost:6379"),
   WORKER_HEARTBEAT_MS: z.coerce.number().int().positive().default(5 * 60 * 1000),
+  // Browser worker (Milestone 3). Empty uses Playwright's own Chromium.
+  BROWSER_EXECUTABLE_PATH: z.string().default(""),
+  BROWSER_RUN_TIMEOUT_MS: z.coerce.number().int().positive().default(120_000),
   // Scheduled discovery (JOB-009): which search sources run, with which keywords, when.
   DISCOVERY_SOURCES: z
     .string()

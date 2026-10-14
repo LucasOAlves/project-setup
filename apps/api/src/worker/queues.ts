@@ -1,6 +1,6 @@
 import { Queue, type JobsOptions } from "bullmq";
 import { Redis } from "ioredis";
-import { discoveryJobId, evaluationJobId, watchJobId } from "./job-ids.js";
+import { applicationPrepJobId, discoveryJobId, evaluationJobId, watchJobId } from "./job-ids.js";
 
 // Queue names are the contract between whoever enqueues (API routes, schedulers) and the
 // worker process that consumes them — see ADR-015. New pipelines add their queue here
@@ -9,6 +9,8 @@ export const QUEUE_NAMES = {
   system: "system",
   discovery: "discovery",
   evaluation: "evaluation",
+  // Consumed only by the browser worker process (browser-worker.ts), never by worker.ts.
+  applicationPrep: "application-prep",
 } as const;
 
 export type QueueName = (typeof QUEUE_NAMES)[keyof typeof QUEUE_NAMES];
@@ -22,6 +24,8 @@ export type DiscoveryJobData = { sourceId: string; correlationId: string };
 export type WatchCompanyJobData = { companyId: string; correlationId: string };
 export const WATCH_JOBS = { run: "watchlist", company: "watch-company" } as const;
 export type EvaluationJobData = { jobId: string; profileVersion: number; correlationId: string };
+// runId is the time the run started, so each "prepare" is its own job and a duplicate add is not.
+export type ApplicationPrepJobData = { applicationId: string; runId: string; correlationId: string };
 
 // Retries for transient failures (a source API timing out, a model rate limit): 3 attempts,
 // 30s then 60s apart. A processor that knows a failure is permanent throws BullMQ's
@@ -56,4 +60,9 @@ export async function enqueueEvaluation(queue: Queue, data: EvaluationJobData) {
 // Spaced a few seconds apart so a long watchlist never bursts the boards' hosts.
 export async function enqueueWatchCompany(queue: Queue, data: WatchCompanyJobData, at = new Date(), delayMs = 0) {
   return queue.add(WATCH_JOBS.company, data, { jobId: watchJobId(data.companyId, at), delay: delayMs });
+}
+
+// A browser run is not retried: re-opening the portal is the user's call, through "prepare" again.
+export async function enqueueApplicationPrep(queue: Queue, data: ApplicationPrepJobData) {
+  return queue.add("prepare", data, { jobId: applicationPrepJobId(data.applicationId, data.runId), attempts: 1 });
 }

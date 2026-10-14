@@ -105,6 +105,30 @@ services:
       - ./apps/api/src:/app/apps/api/src
       - ./packages/shared/src:/app/packages/shared/src
 
+  # Runs Chromium for application preparation (Milestone 3). It gets only the database and
+  # Redis: no model keys, no API port, no storage volume, and resource limits.
+  browser-worker:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile.browser
+    depends_on:
+      redis:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: postgres://studio:studio@postgres:5432/studio
+      REDIS_URL: redis://redis:6379
+      BROWSER_EXECUTABLE_PATH: ${BROWSER_EXECUTABLE_PATH:-}
+      BROWSER_RUN_TIMEOUT_MS: ${BROWSER_RUN_TIMEOUT_MS:-120000}
+    shm_size: "1gb"
+    mem_limit: 2g
+    cpus: 1.5
+    volumes:
+      - ./apps/api/src:/app/apps/api/src
+      - ./packages/shared/src:/app/packages/shared/src
+
   web:
     build:
       context: .

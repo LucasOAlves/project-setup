@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { FastifyInstance } from "fastify";
 import { notFound } from "../../app-error.js";
+import type { ApplicationDispatcher } from "./application-dispatcher.js";
 import type { ApplicationService } from "./application-service.js";
 
 const idSchema = z.string().uuid();
@@ -11,8 +12,23 @@ function parseId(raw: unknown, what: string): string {
   return parsed.data;
 }
 
-// Applications (Milestone 3): read one job's application and its history, and reject it.
-export async function registerApplicationRoutes(app: FastifyInstance, applications: ApplicationService): Promise<void> {
+// Applications (Milestone 3): prepare one job's application, read it with its history, and
+// reject it. Preparing never submits anything.
+export async function registerApplicationRoutes(
+  app: FastifyInstance,
+  applications: ApplicationService,
+  dispatcher: Pick<ApplicationDispatcher, "dispatch" | "close">,
+): Promise<void> {
+  app.addHook("onClose", async () => {
+    await dispatcher.close();
+  });
+
+  app.post("/api/career/jobs/:id/application/prepare", async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const started = await applications.startPreparation(parseId(id, "Job"));
+    return reply.code(202).send({ application: await dispatcher.dispatch(started) });
+  });
+
   app.get("/api/career/jobs/:id/application", async (request) => {
     const { id } = request.params as { id: string };
     return { application: await applications.getForJob(parseId(id, "Job")) };

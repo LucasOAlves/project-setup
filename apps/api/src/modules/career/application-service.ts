@@ -22,6 +22,9 @@ type JobLookup = (jobId: string) => Promise<{ id: string; url: string } | null>;
 
 const SUPPORTED = new Set<string>(SUPPORTED_APPLICATION_PORTALS);
 
+// A run still PREPARING after this long has lost its worker (a crash or a restart).
+export const ABANDONED_RUN_MS = 10 * 60 * 1000;
+
 // The ATS whose application form the browser worker can fill, or null for the manual path.
 export function supportedPortal(url: string): SupportedApplicationPortal | null {
   const source = detectBoardReference(url)?.source;
@@ -35,12 +38,17 @@ export class ApplicationService {
     private readonly repo: Repo,
     private readonly audit: Audit,
     private readonly findJob: JobLookup,
+    private readonly now: () => Date = () => new Date(),
   ) {}
 
   async getForJob(jobId: string): Promise<ApplicationPublic | null> {
     await this.requireJob(jobId);
     const row = await this.repo.findByJob(jobId);
-    return row ? this.toPublic(row) : null;
+    return row ? this.toPublic(await this.expireIfAbandoned(row)) : null;
+  }
+
+  async get(applicationId: string): Promise<ApplicationPublic> {
+    return this.toPublic(await this.requireApplication(applicationId));
   }
 
   // Creates the job's application, or starts a new preparation run for it.
@@ -54,7 +62,8 @@ export class ApplicationService {
     };
     const reason = "You asked to prepare this application.";
 
-    const existing = await this.repo.findByJob(jobId);
+    const found = await this.repo.findByJob(jobId);
+    const existing = found ? await this.expireIfAbandoned(found) : null;
     if (!existing) {
       const created = await this.repo.create(
         { jobId, status: initialApplicationState, ...target },
@@ -82,6 +91,16 @@ export class ApplicationService {
   async reject(applicationId: string): Promise<ApplicationPublic> {
     const row = await this.requireApplication(applicationId);
     return this.toPublic(await this.apply(row, "USER_REJECTED", "USER", "You rejected this application."));
+  }
+
+  private async expireIfAbandoned(row: ApplicationRow): Promise<ApplicationRow> {
+    if (row.status !== "PREPARING" || this.now().getTime() - row.updatedAt.getTime() < ABANDONED_RUN_MS) return row;
+    try {
+      return await this.apply(row, "FAILED", "SYSTEM", "The preparation run stopped without finishing.", { lastError: "ABANDONED" });
+    } catch {
+      // The worker finished it in the meantime.
+      return (await this.repo.get(row.id)) ?? row;
+    }
   }
 
   private async apply(

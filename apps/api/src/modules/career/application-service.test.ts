@@ -8,7 +8,7 @@ import { ApplicationService, supportedPortal } from "./application-service.js";
 const JOB = "11111111-1111-4111-8111-111111111111";
 const OTHER_JOB = "22222222-2222-4222-8222-222222222222";
 
-function setup(jobUrl = "https://job-boards.greenhouse.io/acme/jobs/123") {
+function setup(jobUrl = "https://job-boards.greenhouse.io/acme/jobs/123", clock = { now: new Date("2026-10-14T12:00:00Z") }) {
   const rows: ApplicationRow[] = [];
   const events: ApplicationEventRow[] = [];
   const audits: AuditEventInput[] = [];
@@ -23,7 +23,7 @@ function setup(jobUrl = "https://job-boards.greenhouse.io/acme/jobs/123") {
     },
     async create(input: Pick<ApplicationRow, "jobId" | "status" | "mode" | "portal" | "destinationUrl">, record: { actor: string; reason: string }) {
       if (rows.some((row) => row.jobId === input.jobId)) return null;
-      const now = new Date("2026-10-14T12:00:00Z");
+      const now = clock.now;
       const row: ApplicationRow = { id: nextId(), lastError: "", createdAt: now, updatedAt: now, ...input };
       rows.push(row);
       events.push({ id: nextId(), applicationId: row.id, fromStatus: null, toStatus: row.status, createdAt: now, ...record });
@@ -32,7 +32,7 @@ function setup(jobUrl = "https://job-boards.greenhouse.io/acme/jobs/123") {
     async transition(id: string, from: string, to: string, record: { actor: string; reason: string }, patch = {}) {
       const row = rows.find((candidate) => candidate.id === id && candidate.status === from);
       if (!row) return null;
-      Object.assign(row, patch, { status: to });
+      Object.assign(row, patch, { status: to, updatedAt: clock.now });
       events.push({ id: nextId(), applicationId: id, fromStatus: from, toStatus: to, createdAt: new Date(), ...record });
       return row;
     },
@@ -45,7 +45,7 @@ function setup(jobUrl = "https://job-boards.greenhouse.io/acme/jobs/123") {
       audits.push(input);
     },
   };
-  const service = new ApplicationService(repo, audit, async (id) => (id === JOB ? { id, url: jobUrl } : null));
+  const service = new ApplicationService(repo, audit, async (id) => (id === JOB ? { id, url: jobUrl } : null), () => clock.now);
   return { service, rows, audits };
 }
 
@@ -141,4 +141,34 @@ test("unknown jobs and applications are 404", async () => {
   await rejects(service.startPreparation(OTHER_JOB), 404);
   await rejects(service.reject("99999999-9999-4999-8999-999999999999"), 404);
   assert.equal(await service.getForJob(JOB), null);
+});
+
+test("a run left in PREPARING past the limit is failed by the system and can be started again", async () => {
+  const clock = { now: new Date("2026-10-14T12:00:00Z") };
+  const { service } = setup(undefined, clock);
+  await service.startPreparation(JOB);
+
+  clock.now = new Date("2026-10-14T12:05:00Z");
+  assert.equal((await service.getForJob(JOB))?.status, "PREPARING");
+
+  clock.now = new Date("2026-10-14T12:11:00Z");
+  const expired = await service.getForJob(JOB);
+  assert.equal(expired?.status, "FAILED");
+  assert.equal(expired?.lastError, "ABANDONED");
+  assert.equal(expired?.events.at(-1)?.actor, "SYSTEM");
+
+  const restarted = await service.startPreparation(JOB);
+  assert.equal(restarted.status, "PREPARING");
+});
+
+test("starting again over an abandoned run expires it first", async () => {
+  const clock = { now: new Date("2026-10-14T12:00:00Z") };
+  const { service } = setup(undefined, clock);
+  await service.startPreparation(JOB);
+  clock.now = new Date("2026-10-14T13:00:00Z");
+  const restarted = await service.startPreparation(JOB);
+  assert.deepEqual(
+    restarted.events.map((event) => event.toStatus),
+    ["PREPARING", "FAILED", "PREPARING"],
+  );
 });

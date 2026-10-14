@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { discoveryJobId, evaluationJobId, watchJobId } from "./job-ids.ts";
+import { applicationPrepJobId, discoveryJobId, evaluationJobId, watchJobId } from "./job-ids.ts";
 
 test("discoveryJobId is one id per source per UTC day", () => {
   const morning = discoveryJobId("remoteok", new Date("2026-10-14T01:00:00Z"));
@@ -39,4 +39,11 @@ test("watchJobId is one id per company per UTC hour", () => {
   assert.equal(watchJobId(id, new Date("2026-10-14T12:59:00Z")), watchJobId(id, new Date("2026-10-14T12:01:00Z")));
   assert.notEqual(watchJobId(id, new Date("2026-10-14T13:00:00Z")), watchJobId(id, new Date("2026-10-14T12:59:00Z")));
   assert.equal(watchJobId(id, new Date("2026-10-14T12:05:00Z")).includes(":"), false);
+});
+
+test("applicationPrepJobId is one id per application per run, with no colons", () => {
+  const id = applicationPrepJobId("app-1", "2026-10-14T12:00:00.000Z");
+  assert.equal(id, applicationPrepJobId("app-1", "2026-10-14T12:00:00.000Z"));
+  assert.notEqual(id, applicationPrepJobId("app-1", "2026-10-14T12:05:00.000Z"));
+  assert.equal(id.includes(":"), false);
 });
