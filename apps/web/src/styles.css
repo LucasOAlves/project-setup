@@ -207,6 +207,19 @@ textarea {
   align-items: center;
 }
 
+.tag.signal-stale,
+.tag.signal-likely_ghost,
+.tag.signal-no_posted_date {
+  background: #f4e1dc;
+  color: var(--danger);
+}
+
+.tag.signal-salary_published,
+.tag.signal-company_site {
+  background: #dfe8e2;
+  color: var(--forest);
+}
+
 .tag button {
   border: 0;
   background: transparent;

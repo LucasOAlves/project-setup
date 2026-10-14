@@ -131,6 +131,10 @@ confidence, then the newest posting. It filters by eligibility (excluded jobs hi
 source, title or company, and posting age. Each card opens the eligibility quotes, the score
 breakdown and the explanation, with every claim's quoted evidence. Jobs can be (re)evaluated
 from the card, and "Run discovery now" queues today's discovery. API: `GET /api/career/feed`.
+Cards also flag a posting with no date, one posted 30+ days ago, and a likely ghost job
+(60+ days), and mark a published salary and a link to the company's own careers site. When
+the same role arrives from an aggregator and from the company's ATS board, it is tracked
+once, linked to the company's posting.
 Mark a job relevant or not, with reasons. The feed then shows how often the match score agrees
 with you and which reasons come up most. Once each side has enough verdicts, it also names the
 dimension that best separates relevant from not-relevant jobs.

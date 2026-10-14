@@ -124,6 +124,8 @@ export {
 } from "./custom-topic.js";
 export {
   JOB_BOARD_SOURCES,
+  JOB_FRESHNESS_SIGNALS,
+  type JobFreshnessSignal,
   COMPANY_WATCH_STATUSES,
   companyWatchInputSchema,
   companyWatchPublicSchema,

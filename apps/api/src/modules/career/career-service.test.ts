@@ -670,6 +670,9 @@ test("importFromBoard skips postings already imported and only creates the new o
       async findJobByProvenance() {
         return null;
       },
+      async listJobsForCompany() {
+        return [];
+      },
       async getJobByExternalId(_source: string, externalId: string) {
         return externalId === "1" ? fakeJob({ externalId: "1" }) : null;
       },
@@ -691,6 +694,80 @@ test("importFromBoard skips postings already imported and only creates the new o
   assert.equal(result.imported.length, 1);
   assert.equal(created.length, 1);
   assert.equal((created[0] as { externalId: string }).externalId, "2");
+});
+
+test("importFromBoard points an aggregator copy of the same role at the company's posting instead of adding it", async () => {
+  const created: unknown[] = [];
+  const patches: Array<{ id: string; patch: Record<string, unknown> }> = [];
+  const aggregatorCopy = fakeJob({
+    id: "remotive-copy",
+    source: "remotive",
+    title: "Backend Engineer (Remote)",
+    url: "https://remotive.com/remote-jobs/software-dev/backend-engineer-9",
+    salaryMin: null,
+    salaryMax: null,
+    sourcePostedAt: null,
+  });
+  const boardProviders = noBoardProviders();
+  boardProviders.greenhouse = {
+    async listJobs() {
+      return [
+        {
+          externalId: "77",
+          title: "Backend Engineer",
+          url: "https://job-boards.greenhouse.io/nimbus/jobs/77",
+          location: "Remote",
+          description: "",
+          companyNameFromSource: "Nimbus",
+          updatedAt: new Date(),
+          postedAt: new Date("2026-10-10T00:00:00Z"),
+        },
+      ];
+    },
+  };
+  const service = new CareerService(
+    {
+      async getCompany() {
+        return fakeCompany();
+      },
+      async findJobByProvenance() {
+        return null;
+      },
+      async listJobsForCompany() {
+        return [aggregatorCopy];
+      },
+      async applyCompanySitePatch(id: string, patch: Record<string, unknown>) {
+        patches.push({ id, patch });
+        return { ...aggregatorCopy, ...patch };
+      },
+      async getJobByExternalId() {
+        return null;
+      },
+      async createImportedJob(input: unknown) {
+        created.push(input);
+        return fakeJob({ ...(input as Record<string, unknown>) });
+      },
+    } as never,
+    {} as never,
+    textMap(noTextCalls),
+    "openai",
+    boardProviders,
+    noSearchProviders(),
+  );
+
+  const result = await service.importFromBoard("company-1", "greenhouse", "nimbus");
+
+  assert.equal(created.length, 0);
+  assert.equal(result.imported.length, 0);
+  assert.deepEqual(patches, [
+    {
+      id: "remotive-copy",
+      patch: {
+        url: "https://job-boards.greenhouse.io/nimbus/jobs/77",
+        sourcePostedAt: new Date("2026-10-10T00:00:00Z"),
+      },
+    },
+  ]);
 });
 
 test("searchJobs returns normalized postings from the chosen search provider", async () => {
@@ -775,6 +852,9 @@ test("importSearchResult reuses an existing company matched case-insensitively",
       async findJobByProvenance() {
         return null;
       },
+      async listJobsForCompany() {
+        return [];
+      },
       async getJobByExternalId() {
         return null;
       },
@@ -814,6 +894,9 @@ test("importSearchResult creates a new company when none matches", async () => {
     {
       async findJobByProvenance() {
         return null;
+      },
+      async listJobsForCompany() {
+        return [];
       },
       async getJobByExternalId() {
         return null;
@@ -893,6 +976,9 @@ test("importSearchResult stores normalized salary, regions and type", async () =
       async findJobByProvenance() {
         return null;
       },
+      async listJobsForCompany() {
+        return [];
+      },
       async findCompanyByName() {
         return fakeCompany();
       },
@@ -934,6 +1020,9 @@ test("importSearchResult is idempotent on re-import", async () => {
     {
       async findJobByProvenance() {
         return null;
+      },
+      async listJobsForCompany() {
+        return [];
       },
       async getJobByExternalId() {
         return fakeJob({ externalId: "42", source: "remoteok" });

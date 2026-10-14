@@ -168,6 +168,20 @@ re-importing from the same source idempotent. Board import hashes with the track
 name, so a board posting and an aggregator copy under a differently spelled company name only
 dedupe through the canonical URL.
 
+Preferring the company's own posting (Milestone 1.5, `job-source-preference.ts`): an
+aggregator copy and the ATS posting of one role rarely share a URL or hash, so `JobIntake`
+also treats as the same role a job at the same tracked company, from the other kind of source
+(one ATS board, one aggregator; manual jobs never), whose title matches once case,
+punctuation and "remote" are ignored, and only when exactly one such job exists. When the
+ATS posting is the one arriving, the tracked aggregator copy is pointed at its URL and gets
+the salary and posted date it lacked; its own `source` and `externalId` stay, so the
+aggregator's next run still finds it. A company whose name is spelled differently on the two
+sources is still two companies and is not matched.
+
+Freshness signals (`job-freshness.ts`) are computed when the feed is read, never stored:
+`NO_POSTED_DATE`, `STALE` (posted 30+ days ago), `LIKELY_GHOST` (60+ days), `SALARY_PUBLISHED`
+and `COMPANY_SITE` (the URL is an ATS posting).
+
 `normalizedData` (migration 0018) holds what `job-normalization.ts` derives at import:
 salary in USD per month (`usdMonthlyMin`/`usdMonthlyMax`, `approximate` when converted from
 another currency with the static rates in that file, `null` when undisclosed), region tokens

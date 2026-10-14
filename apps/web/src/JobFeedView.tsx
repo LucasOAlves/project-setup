@@ -6,6 +6,7 @@ import type {
   FeedEligibilityFilter,
   GroundedJobExplanation,
   JobFeedItem,
+  JobFreshnessSignal,
   MatchDimensionName,
   EligibilityReasonPublic,
 } from "@studio/shared";
@@ -51,6 +52,15 @@ const FLAG_LABELS: Record<string, string> = {
   COMPENSATION_UNDISCLOSED: "Pay not disclosed",
   COMPENSATION_BELOW_TARGET: "Pay below target",
   COMPENSATION_APPROXIMATE: "Pay converted (approximate)",
+};
+
+// Freshness and trust signals: warnings first, then the good signs.
+const SIGNAL_LABELS: Record<JobFreshnessSignal, string> = {
+  NO_POSTED_DATE: "No posting date",
+  STALE: "Posted over 30 days ago",
+  LIKELY_GHOST: "Likely ghost job (60+ days)",
+  SALARY_PUBLISHED: "Salary published",
+  COMPANY_SITE: "On the company's site",
 };
 
 const ACTION_LABELS: Record<GroundedJobExplanation["recommendedAction"], string> = {
@@ -338,6 +348,11 @@ function FeedCard({
           </span>
         ) : null}
         {explanation ? <span className="tag">{ACTION_LABELS[explanation.recommendedAction]}</span> : null}
+        {(item.signals ?? []).map((signal) => (
+          <span className={`tag signal-${signal.toLowerCase()}`} key={signal} data-testid="feed-signal">
+            {SIGNAL_LABELS[signal]}
+          </span>
+        ))}
         {(evaluation?.match?.flags ?? []).map((flag) => (
           <span className="tag" key={flag}>
             {FLAG_LABELS[flag] ?? flag}

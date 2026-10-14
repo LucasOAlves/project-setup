@@ -64,6 +64,7 @@ import { ALLOW_ALL_SOURCES, type SourceGate } from "./source-registry.js";
 import { computeJobFit } from "./job-fit.js";
 import { JobExplainer } from "./job-explanation.js";
 import { buildJobFeed } from "./job-feed.js";
+import { jobFreshnessSignals } from "./job-freshness.js";
 import { summarizeFeedback, type RatedEvaluation } from "./job-feedback.js";
 import { DEFAULT_EVALUATION_SETTINGS, JobIntake, type EvaluationSettings } from "./job-intake.js";
 import { scoreRecruiterRelevance } from "./recruiter-scoring.js";
@@ -313,6 +314,7 @@ export class CareerService {
         explanation: explained ? evaluationToPublic(explained).explanation : null,
         explainedAt: explained ? explained.createdAt.toISOString() : null,
         feedback: feedback.has(row.id) ? feedbackToPublic(feedback.get(row.id)!) : null,
+        signals: jobFreshnessSignals(row, now),
       };
     });
     return buildJobFeed(items, parsed.data, now);

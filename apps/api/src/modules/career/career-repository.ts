@@ -3,6 +3,7 @@ import { and, count, desc, eq, gte, inArray, isNotNull, or } from "drizzle-orm";
 import type { CompanyInput, JobInput, JobPatchInput, RecruiterInput, RecruiterPatchInput } from "@studio/shared";
 import type { Database } from "../../db/client.js";
 import type { DedupeKeys, ImportedJobFields } from "./job-import.js";
+import type { CompanySitePatch } from "./job-source-preference.js";
 import { companies, companyWatches, talentPlatformProfiles, jobEvaluations, jobFeedback, jobStatusEvents, jobs, profiles, recruiters } from "../../db/schema.js";
 
 export type CompanyRow = typeof companies.$inferSelect;
@@ -138,6 +139,19 @@ export class CareerRepository {
       .from(jobs)
       .where(or(...conditions))
       .limit(1);
+    return row ?? null;
+  }
+
+  async listJobsForCompany(companyId: string): Promise<JobRow[]> {
+    return this.db.select().from(jobs).where(eq(jobs.companyId, companyId));
+  }
+
+  async applyCompanySitePatch(id: string, patch: CompanySitePatch): Promise<JobRow | null> {
+    const [row] = await this.db
+      .update(jobs)
+      .set({ ...patch, updatedAt: new Date() })
+      .where(eq(jobs.id, id))
+      .returning();
     return row ?? null;
   }
 

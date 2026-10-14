@@ -480,6 +480,12 @@ export const feedbackSummarySchema = z.object({
 });
 export type FeedbackSummary = z.infer<typeof feedbackSummarySchema>;
 
+// Freshness and trust signals shown on a feed card (Milestone 1.5): an old or undated posting
+// may no longer be open, and a published salary or a link to the company's own careers site
+// make a posting more trustworthy.
+export const JOB_FRESHNESS_SIGNALS = ["NO_POSTED_DATE", "STALE", "LIKELY_GHOST", "SALARY_PUBLISHED", "COMPANY_SITE"] as const;
+export type JobFreshnessSignal = (typeof JOB_FRESHNESS_SIGNALS)[number];
+
 export const jobFeedItemSchema = z.object({
   job: jobPublicSchema,
   companyName: z.string(),
@@ -489,6 +495,7 @@ export const jobFeedItemSchema = z.object({
   explanation: groundedJobExplanationSchema.nullable(),
   explainedAt: z.string().nullable(),
   feedback: jobFeedbackPublicSchema.nullable(),
+  signals: z.array(z.enum(JOB_FRESHNESS_SIGNALS)),
 });
 export type JobFeedItem = z.infer<typeof jobFeedItemSchema>;
 

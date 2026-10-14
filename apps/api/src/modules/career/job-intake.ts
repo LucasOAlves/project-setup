@@ -1,6 +1,6 @@
 import type { CareerRepository, JobEvaluationRow, JobRow } from "./career-repository.js";
 import { BRAZIL_REMOTE_CANDIDATE, evaluateEligibility } from "./job-eligibility.js";
-import { prepareImportedJob, type JobNormalizedData } from "./job-import.js";
+import { prepareImportedJob, type ImportedJobFields, type JobNormalizedData } from "./job-import.js";
 import {
   DEFAULT_MATCH_PREFERENCES,
   matchJob,
@@ -11,6 +11,7 @@ import {
 } from "./job-matching.js";
 import type { NormalizedJobPosting } from "./job-provider.js";
 import type { JobExplainer } from "./job-explanation.js";
+import { companySiteUpgrade, findCrossSourceMatch } from "./job-source-preference.js";
 
 // Recorded on each evaluation so a verdict can be traced to the rule set that produced it.
 export const ELIGIBILITY_RULES_VERSION = "eligibility-rules@2";
@@ -96,7 +97,10 @@ export class JobIntake {
     }
 
     let company = await this.repo.findCompanyByName(companyName);
-    if (!company) {
+    if (company) {
+      const sameRole = await this.findSameRole(source, fields, company.id);
+      if (sameRole) return { job: sameRole, outcome: "DUPLICATE" };
+    } else {
       company = await this.repo.createCompany({
         name: companyName,
         website: "",
@@ -129,8 +133,24 @@ export class JobIntake {
     if (duplicate) {
       return { job: duplicate, outcome: "DUPLICATE" };
     }
+    const sameRole = await this.findSameRole(source, fields, company.id);
+    if (sameRole) return { job: sameRole, outcome: "DUPLICATE" };
     const job = await this.repo.createImportedJob({ companyId: company.id, ...fields });
     return { job, outcome: "CREATED" };
+  }
+
+  // The same role already tracked at this company through the other kind of source (an
+  // aggregator copy of an ATS posting, or the reverse). The company's own posting is preferred:
+  // when it is the one arriving, the tracked copy is pointed at it (job-source-preference.ts).
+  private async findSameRole(
+    source: string,
+    fields: ImportedJobFields,
+    companyId: string,
+  ): Promise<JobRow | null> {
+    const match = findCrossSourceMatch({ source, title: fields.title }, await this.repo.listJobsForCompany(companyId));
+    if (!match) return null;
+    const patch = companySiteUpgrade(match, { ...fields, source });
+    return patch ? ((await this.repo.applyCompanySitePatch(match.id, patch)) ?? match) : match;
   }
 
   // ANALYZE-level per ADR-012: deterministic rules, no model call. Each run appends a
