@@ -87,4 +87,33 @@ Verified in a real headless Chromium against mock portals that copy each ATS's f
 structure (`mock-portals.ts`). The real portals were not reachable from the build
 environment, so the first real run of each portal is the remaining check.
 
-Milestones 4 and 5 (approval and submission, monitoring) are broken down once Milestone 3 ships.
+## Milestone 4 — approval and submission
+
+Proposed on 2026-10-14, awaiting approval. Done when spec acceptance criteria 6, 7, 8, 9 and 10
+pass: nothing is submitted without your explicit approval of that exact payload, a change
+after approval invalidates it, a repeated run never submits twice, and an unclear result
+becomes SUBMISSION_UNKNOWN instead of a retry.
+
+| # | Spec ticket | Scope | Depends on | Test-first |
+| --- | --- | --- | --- | --- |
+| 1 | JOB-003 (part) | Single-user sign-in: a password whose hash is set in the environment, an httpOnly SameSite=Strict session cookie, every `/api` route behind it, and an Origin check on requests that change state. Today the API has no sign-in at all (ADR-003), and the spec only lets the signed-in user approve | — | session and Origin checks |
+| 2 | JOB-020 | `approvals` table, insert-only: application, payload hash, destination, CV and cover letter document ids, form revision, decided at, expires at, and invalidated at with a reason. New states APPROVED, SUBMITTING, SUBMITTED, SUBMISSION_UNKNOWN and EXPIRED. Only you can approve, and only a READY_FOR_REVIEW application whose current hash matches the hash you saw. Preparing again, new answers or rejecting invalidate the approval | 1 | yes (transitions, approval validity) |
+| 3 | JOB-024 | Per-portal submission permission in the source registry, plus a global switch that is off by default. Browser guard submit mode: during a submit run only, exactly one POST to the portal's own form action on the portal's hosts, after the run has claimed the approval | 2 | yes (guard submit rule) |
+| 4 | JOB-022 | Submission executor on the browser worker: its own queue keyed by approval id, one attempt, never retried. It claims APPROVED to SUBMITTING atomically, opens a fresh page, fills it again, recomputes the payload hash with the current documents and compares it with the approved one, reads the approval from the database again just before the click, and then clicks submit. Any difference before the click sends the application back to review with the reason. Each run is an `executions` row | 2, 3 | no |
+| 5 | JOB-023 | Outcome check per portal: a confirmation page or message, or the form action's response. A clear success becomes SUBMITTED with a confirmation reference and a masked screenshot. A clear validation error shown before the page leaves becomes NEEDS_INFORMATION. Anything else, including a run that stops after the click, becomes SUBMISSION_UNKNOWN. From there only you decide: "it was sent" (SUBMITTED) or "it was not sent" (back to review, needing a new approval) | 4 | yes (outcome classifier) |
+| 6 | JOB-021, JOB-024 | Approval inbox: applications ready for review with the preview, destination, documents and every value that will be sent, plus Approve and Not applying. The panel shows submitting, submitted and unknown states, the execution history and the audit trail. For manual portals, blocked runs or submission switched off, an assisted path lets you submit by hand and then mark "I submitted it" | 2, 5 | no |
+| 7 | JOB-029, JOB-030 | End-to-end tests against the mock portals for criteria 6 to 9: no approval means no submit request leaves, a changed payload is refused, two runs on one approval submit once, and a dropped response becomes SUBMISSION_UNKNOWN. Plus an injected-instruction page that asks the worker to submit | 4, 5 | no |
+
+Defaults: submission is off until you switch it on, so approving first produces the assisted
+path; the plan is to turn it on after the first real preparation on each portal looks right.
+An approval expires after 24 hours. A login, CAPTCHA or verification page during submission
+stops the run as BLOCKED_BY_PLATFORM and moves to the assisted path. Abandoned SUBMITTING runs
+become SUBMISSION_UNKNOWN, never FAILED, because the click may have happened. Two ADRs: the
+payload-bound approval with at-most-once submission (updating ADR-012), and single-user
+sign-in (updating ADR-003); ADR-020 gets a note on the submit mode.
+
+As in Milestone 3, verification is against the mock portals. The submit requests of the real
+Greenhouse, Lever and Ashby forms cannot be reached from the build environment, so the first
+real submission should be one you watch.
+
+Milestone 5 (monitoring) is broken down once Milestone 4 ships.
