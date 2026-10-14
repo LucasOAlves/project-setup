@@ -61,5 +61,26 @@ Defaults: materials in English only; the cover letter is generated only on reque
 question bank is fixed in code for now. A new ADR covers storing generated documents as
 immutable versions tied to a profile version.
 
-Milestones 3 to 5 (Playwright preparation, approval and submission, monitoring) are broken
-down once Milestone 2 ships.
+## Milestone 3 — prepare applications with Playwright
+
+Proposed on 2026-10-14, awaiting approval. Done when spec acceptance criteria 5 and 11 pass:
+the browser worker prepares a supported application without submitting it, and an
+unsupported portal falls back to manual completion. Nothing is submitted in this milestone;
+approval and submission are Milestone 4.
+
+| # | Spec ticket | Scope | Depends on | Test-first |
+| --- | --- | --- | --- | --- |
+| 1 | JOB-020 (data only) | `applications` table and state machine (PREPARING, NEEDS_INFORMATION, READY_FOR_REVIEW, BLOCKED_BY_PLATFORM, FAILED, USER_REJECTED) with a full transition history; one application per job and source | — | yes (transition rules) |
+| 2 | JOB-017 | Separate browser worker process and Compose service with Playwright Chromium: its own queue, one job at a time, timeouts, a throwaway browser context per run, no shell access. Navigation guard: only the job's ATS domain, never localhost, private networks or cloud metadata; downloads blocked | 1 | yes (host guard) |
+| 3 | JOB-018 | Form reading for Greenhouse, Lever and Ashby application pages: label, type, required, options. Page text is treated as data, never as instructions. Local mock portals of each ATS for tests | 2 | no |
+| 4 | JOB-018, JOB-019 | Field mapper: each form field to an Application details value, a prepared answer, or the CV and cover letter versions; required fields with no verified value become questions for you | 3 | yes (mapper) |
+| 5 | JOB-018, JOB-019 | Fill and preview: fill the fields, attach the CV PDF, check what the page shows, take a screenshot with contact details masked, and compute a payload hash for Milestone 4's approval. No code path clicks submit, and the network guard blocks the submit request. Screenshots are kept for 30 days | 4 | yes (payload hash) |
+| 6 | JOB-019, JOB-024 | "Prepare application" on each job: preview of every field, open questions you answer before preparing again, and a manual fallback for unsupported portals (copy-ready answers, the CV and the link) | 5 | no |
+
+Defaults: conventional Playwright with one adapter per ATS, with Playwright MCP left for
+later; only Greenhouse, Lever and Ashby are automated, and everything else uses the manual
+fallback; the browser runs headless; a login, CAPTCHA or verification page stops the run as
+BLOCKED_BY_PLATFORM and is never worked around. Two ADRs: Application as its own entity
+(updating ADR-011), and the isolated browser worker.
+
+Milestones 4 and 5 (approval and submission, monitoring) are broken down once Milestone 3 ships.
