@@ -235,3 +235,4 @@ export {
   type ContentPlanTopic,
   type ContentPlanTopicPublic,
 } from "./content-plan.js";
+export { detectBoardReference, type BoardReference } from "./board-reference.js";

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import {
   JOB_BOARD_SOURCES,
+  detectBoardReference,
   JOB_EMPLOYMENT_TYPES,
   JOB_SEARCH_SOURCES,
   JOB_STATUSES,
@@ -1208,6 +1209,10 @@ function CompanyCard({
 }) {
   const [source, setSource] = useState<JobBoardSource>("greenhouse");
   const [boardToken, setBoardToken] = useState("");
+  // A pasted board or posting URL decides the source and token, whatever the select says.
+  const detected = detectBoardReference(boardToken);
+  const effectiveSource = detected?.source ?? source;
+  const effectiveToken = detected?.token ?? boardToken.trim();
 
   return (
     <article className="article-card">
@@ -1217,7 +1222,11 @@ function CompanyCard({
       <div className="grid-2">
         <label className="field">
           Board source
-          <select value={source} onChange={(event) => setSource(event.target.value as JobBoardSource)}>
+          <select
+            value={effectiveSource}
+            disabled={detected !== null}
+            onChange={(event) => setSource(event.target.value as JobBoardSource)}
+          >
             {JOB_BOARD_SOURCES.map((option) => (
               <option key={option} value={option}>
                 {BOARD_SOURCE_LABELS[option]}
@@ -1226,11 +1235,11 @@ function CompanyCard({
           </select>
         </label>
         <label className="field">
-          Board token
+          Board token or careers URL
           <input
             value={boardToken}
             onChange={(event) => setBoardToken(event.target.value)}
-            placeholder="e.g. nimbus"
+            placeholder="e.g. nimbus or https://jobs.ashbyhq.com/nimbus"
           />
         </label>
       </div>
@@ -1238,12 +1247,17 @@ function CompanyCard({
         <button
           className="btn ghost"
           type="button"
-          disabled={importing || !boardToken.trim()}
-          onClick={() => onImport(source, boardToken.trim())}
+          disabled={importing || !effectiveToken}
+          onClick={() => onImport(effectiveSource, effectiveToken)}
         >
-          {importing ? "Importing…" : `Import from ${BOARD_SOURCE_LABELS[source]}`}
+          {importing ? "Importing…" : `Import from ${BOARD_SOURCE_LABELS[effectiveSource]}`}
         </button>
       </div>
+      {detected ? (
+        <p className="status">
+          Recognized a {BOARD_SOURCE_LABELS[detected.source]} board: <code>{detected.token}</code>
+        </p>
+      ) : null}
       {importResult ? (
         <p className="status">
           Imported {importResult.imported} new job{importResult.imported === 1 ? "" : "s"}
@@ -1274,7 +1288,8 @@ function JobSourceGuide() {
             <p>
               <strong>Greenhouse.</strong> A hiring platform many companies use for their careers
               page. If a company's job listings live at{" "}
-              <code>boards.greenhouse.io/&lt;token&gt;</code>, that last part is the board token —
+              <code>job-boards.greenhouse.io/&lt;token&gt;</code> (or the older{" "}
+              <code>boards.greenhouse.io/&lt;token&gt;</code>), that last part is the board token —
               use it above.
             </p>
             <p>
@@ -1289,7 +1304,8 @@ function JobSourceGuide() {
             <p>
               To find a company's token: open their careers page, look for a "powered by
               Greenhouse/Lever/Ashby" link, or check if their job URLs already match one of the
-              patterns above.
+              patterns above. You can also paste a board or job URL into the token field and the
+              source and token are worked out for you.
             </p>
           </div>
           <div>

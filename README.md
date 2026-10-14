@@ -76,9 +76,11 @@ send yourself — this app never sends a message, a connection request, or anyth
 your behalf (see [ADR-012](docs/decisions/ADR-012-external-action-approval.md)).
 
 Job board import is available on each tracked company: pick a board source (Greenhouse, Lever,
-or Ashby), enter that company's board token (the slug in `boards.greenhouse.io/<token>`,
-`jobs.lever.co/<token>`, or `jobs.ashbyhq.com/<token>`), and "Import from…" pulls every open
-posting from that board's real, public, unauthenticated Job Board API — no OAuth, no LinkedIn.
+or Ashby), enter that company's board token (the slug in `job-boards.greenhouse.io/<token>` or
+the older `boards.greenhouse.io/<token>`, `jobs.lever.co/<token>`, or `jobs.ashbyhq.com/<token>`)
+or paste a board or job URL and let the app work out the source and token, and "Import from…"
+pulls every open posting from that board's real, public, unauthenticated Job Board API — no
+OAuth, no LinkedIn. Ashby imports include the published pay range (`includeCompensation=true`).
 Re-running an import only adds postings not already tracked (matched by source + external id);
 nothing is re-created or overwritten. See
 [ADR-011](docs/decisions/ADR-011-career-domain-boundaries.md)'s update notes for why Greenhouse,
