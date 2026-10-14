@@ -83,6 +83,15 @@ technology its sources lack is removed (`cover-letter.ts`). The greeting, sign-o
 are added by code. Your edits are saved as a new version with
 `POST /api/career/jobs/:id/documents/cover-letter/edits`.
 
+Application answers (`POST /api/career/jobs/:id/documents/answers`) cover the questions forms
+usually ask: work authorization, visa sponsorship, notice period, salary expectation, location,
+time zone, English level, years of experience, profile links and years with up to three of the
+job's technologies (counted from the dated experiences that list them). They come only from
+what you entered in Application details and your profile (`application-answers.ts`); anything
+those do not answer is left blank as "needs your input", never guessed. "Why do you want to work
+here?" is drafted by the model under the cover letter's evidence rules. Edits are saved as a new
+version with `POST /api/career/jobs/:id/documents/answers/edits`.
+
 Recruiters & contacts is a lightweight career CRM: add a contact under a company, optionally
 tie them to a tracked job, and track connection status (Not connected/Requested/Connected).
 "Score relevance" is a deterministic score (company match, role, job link — see

@@ -3,6 +3,7 @@ import type { FastifyInstance } from "fastify";
 import { notFound } from "../../app-error.js";
 import { textProviderSchema } from "@studio/shared";
 import type { ApplicationDocumentService } from "./application-document-service.js";
+import type { ApplicationAnswersGenerator } from "./application-answers-generator.js";
 import type { CoverLetterGenerator } from "./cover-letter-generator.js";
 import type { TailoredCvGenerator } from "./tailored-cv-generator.js";
 
@@ -27,6 +28,7 @@ export async function registerDocumentRoutes(
   generators: {
     cv: Pick<TailoredCvGenerator, "generate">;
     coverLetters: Pick<CoverLetterGenerator, "generate" | "saveEdit">;
+    answers: Pick<ApplicationAnswersGenerator, "generate" | "saveEdit">;
   },
 ): Promise<void> {
   app.get("/api/career/jobs/:id/documents", async (request) => {
@@ -52,6 +54,18 @@ export async function registerDocumentRoutes(
   app.post("/api/career/jobs/:id/documents/cover-letter/edits", async (request, reply) => {
     const { id } = request.params as { id: string };
     const result = await generators.coverLetters.saveEdit(parseId(id, "Job"), request.body);
+    return reply.code(result.created ? 201 : 200).send(result);
+  });
+
+  app.post("/api/career/jobs/:id/documents/answers", async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const result = await generators.answers.generate(parseId(id, "Job"), providerFrom(request.body));
+    return reply.code(result.created ? 201 : 200).send(result);
+  });
+
+  app.post("/api/career/jobs/:id/documents/answers/edits", async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const result = await generators.answers.saveEdit(parseId(id, "Job"), request.body);
     return reply.code(result.created ? 201 : 200).send(result);
   });
 

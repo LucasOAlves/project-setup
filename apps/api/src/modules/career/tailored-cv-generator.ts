@@ -2,11 +2,10 @@ import {
   tailoredCvModelOutputSchema,
   type ApplicationDetailsPublic,
   type ApplicationDocumentPublic,
-  type ProfilePublic,
   type TailoredCvContent,
   type TextProviderName,
 } from "@studio/shared";
-import { malformedAiOutput, notFound } from "../../app-error.js";
+import { malformedAiOutput } from "../../app-error.js";
 import { parseJsonObject } from "../ai/parse-json.js";
 import {
   TAILORED_CV_PROMPT_VERSION,
@@ -14,20 +13,12 @@ import {
   buildTailoredCvUserPrompt,
 } from "../ai/prompts/tailored-cv.v1.js";
 import { resolveTextProvider } from "../ai/resolve-provider.js";
-import type { TextGenerationProvider } from "../ai/text-generation-provider.js";
-import type { ApplicationDocumentService } from "./application-document-service.js";
-import type { CareerRepository } from "./career-repository.js";
 import { buildProfileText } from "./job-explanation.js";
+import { loadMaterialsContext, type MaterialsDeps } from "./materials-context.js";
 import { experienceBullets, groundTailoredCv } from "./tailored-cv.js";
 import { buildTailoredCvPdf } from "./tailored-cv-pdf.js";
 
-export type TailoredCvGeneratorDeps = {
-  careerRepo: Pick<CareerRepository, "getJob" | "getCompany" | "getProfileVersion">;
-  getProfile: () => Promise<ProfilePublic | null>;
-  getApplicationDetails: () => Promise<ApplicationDetailsPublic | null>;
-  textProviders: Record<TextProviderName, TextGenerationProvider>;
-  defaultTextProvider: TextProviderName;
-  documents: Pick<ApplicationDocumentService, "save">;
+export type TailoredCvGeneratorDeps = MaterialsDeps & {
   renderPdf?: (cv: TailoredCvContent) => Promise<Buffer>;
 };
 
@@ -84,15 +75,7 @@ export class TailoredCvGenerator {
     jobId: string,
     provider?: TextProviderName,
   ): Promise<{ document: ApplicationDocumentPublic; created: boolean }> {
-    const job = await this.deps.careerRepo.getJob(jobId);
-    if (!job) throw notFound("That job does not exist.");
-    const profile = await this.deps.getProfile();
-    if (!profile) throw notFound("Save a professional profile before generating a CV.");
-    const [company, details, profileVersion] = await Promise.all([
-      this.deps.careerRepo.getCompany(job.companyId),
-      this.deps.getApplicationDetails(),
-      this.deps.careerRepo.getProfileVersion(),
-    ]);
+    const { job, companyName, profile, details, profileVersion } = await loadMaterialsContext(this.deps, jobId, "generating a CV");
 
     const jobDescription = job.rawDescription || job.description;
     const promptInput = {
@@ -130,7 +113,7 @@ export class TailoredCvGenerator {
     const content: TailoredCvContent = {
       format: "tailored-cv@1",
       promptVersion: TAILORED_CV_PROMPT_VERSION,
-      job: { title: job.title, companyName: company?.name ?? "" },
+      job: { title: job.title, companyName },
       header: {
         fullName: profile.fullName,
         headline: profile.headline || profile.currentJobTitle,

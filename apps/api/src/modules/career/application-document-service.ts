@@ -60,6 +60,11 @@ export class ApplicationDocumentService {
     }
   }
 
+  async latest(jobId: string, type: ApplicationDocumentType): Promise<ApplicationDocumentPublic | null> {
+    const row = await this.repo.latest(jobId, type);
+    return row ? documentToPublic(row) : null;
+  }
+
   async list(jobId: string): Promise<ApplicationDocumentPublic[]> {
     if (!(await this.jobExists(jobId))) {
       throw notFound("Job not found.");

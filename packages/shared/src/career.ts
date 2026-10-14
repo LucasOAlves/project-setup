@@ -646,3 +646,44 @@ export const coverLetterEditSchema = z.object({
   signOff: z.string().trim().min(1).max(300),
 });
 export type CoverLetterEdit = z.infer<typeof coverLetterEditSchema>;
+
+// Application answers (Milestone 2): common form questions answered from what the user stated.
+export const APPLICATION_ANSWER_STATUSES = ["FROM_PROFILE", "DRAFTED", "NEEDS_INPUT", "FROM_YOU"] as const;
+export const applicationAnswerSchema = z.object({
+  id: z.string(),
+  question: z.string(),
+  answer: z.string(),
+  status: z.enum(APPLICATION_ANSWER_STATUSES),
+  note: z.string().optional(),
+});
+export type ApplicationAnswerPublic = z.infer<typeof applicationAnswerSchema>;
+
+export const applicationAnswersContentSchema = z.object({
+  format: z.literal("application-answers@1"),
+  promptVersion: z.string().nullable(),
+  job: z.object({ title: z.string(), companyName: z.string() }),
+  answers: z.array(applicationAnswerSchema),
+  droppedSentences: z.number().int(),
+});
+export type ApplicationAnswersContent = z.infer<typeof applicationAnswersContentSchema>;
+
+// The model drafts only the open question; quotes are checked like a cover letter's.
+export const openAnswerModelOutputSchema = z.object({
+  sentences: z
+    .array(
+      z.object({
+        text: z.string().trim().max(500),
+        evidence: z
+          .array(z.object({ source: z.enum(["PROFILE", "JOB"]), quote: z.string().max(400) }))
+          .max(4)
+          .default([]),
+      }),
+    )
+    .max(6)
+    .default([]),
+});
+
+export const applicationAnswersEditSchema = z.object({
+  answers: z.array(z.object({ id: z.string().min(1).max(120), answer: z.string().trim().max(3000) })).min(1).max(40),
+});
+export type ApplicationAnswersEdit = z.infer<typeof applicationAnswersEditSchema>;

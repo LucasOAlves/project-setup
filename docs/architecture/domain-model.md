@@ -299,6 +299,13 @@ greeting, paragraphs, sign-off and the number of sentences dropped. A generated 
 sentences whose quotes match the profile or posting they cite. A version the user edited has
 origin `EDITED` and `promptVersion` null, and is saved as written.
 
+An `APPLICATION_ANSWERS` document's content is `applicationAnswersContent` (format
+`application-answers@1`): one entry per question with its answer and a status. `FROM_PROFILE`
+answers are mapped by code from ApplicationDetails and the profile (`application-answers.ts`).
+`DRAFTED` is the model's grounded "why this company" (prompt `application-answers.v1`, checked
+with the cover-letter rules). `NEEDS_INPUT` means nothing the user stated answers it.
+`FROM_YOU` is an answer the user typed in an `EDITED` version. Answers have no PDF.
+
 ## TalentPlatformProfile (Job Hunter)
 
 One row per talent platform the user has touched (`talent_platform_profiles`, migration 0024),

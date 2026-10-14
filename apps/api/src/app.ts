@@ -55,6 +55,7 @@ import { ApplicationDocumentService } from "./modules/career/application-documen
 import { registerDocumentRoutes } from "./modules/career/document-routes.js";
 import { TailoredCvGenerator } from "./modules/career/tailored-cv-generator.js";
 import { CoverLetterGenerator } from "./modules/career/cover-letter-generator.js";
+import { ApplicationAnswersGenerator } from "./modules/career/application-answers-generator.js";
 import { evaluationSettingsFromEnv } from "./modules/career/job-intake.js";
 import { registerProfileRoutes } from "./modules/profile/profile-routes.js";
 import { ProfileService } from "./modules/profile/profile-service.js";
@@ -178,6 +179,7 @@ export async function buildApp(env: Env, db: Database) {
   };
   const cvGenerator = new TailoredCvGenerator(materialsDeps);
   const coverLetters = new CoverLetterGenerator(materialsDeps);
+  const answers = new ApplicationAnswersGenerator(materialsDeps);
 
   app.get("/health", async () => ({ ok: true }));
 
@@ -191,7 +193,7 @@ export async function buildApp(env: Env, db: Database) {
   await registerCustomTopicRoutes(app, customTopics);
   await registerImageRoutes(app, images);
   await registerCareerRoutes(app, career, sourceRegistry, documents);
-  await registerDocumentRoutes(app, documents, { cv: cvGenerator, coverLetters });
+  await registerDocumentRoutes(app, documents, { cv: cvGenerator, coverLetters, answers });
   await registerDiscoveryRoutes(app, env, new CompanyWatchService(new CareerRepository(db)));
 
   app.setErrorHandler((error, _request, reply) => {

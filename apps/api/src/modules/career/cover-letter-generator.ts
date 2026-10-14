@@ -5,7 +5,7 @@ import {
   type CoverLetterContent,
   type TextProviderName,
 } from "@studio/shared";
-import { malformedAiOutput, notFound, validationError } from "../../app-error.js";
+import { malformedAiOutput, validationError } from "../../app-error.js";
 import { parseJsonObject } from "../ai/parse-json.js";
 import {
   COVER_LETTER_PROMPT_VERSION,
@@ -16,6 +16,7 @@ import { resolveTextProvider } from "../ai/resolve-provider.js";
 import { groundCoverLetter } from "./cover-letter.js";
 import { buildCoverLetterPdf } from "./cover-letter-pdf.js";
 import { buildProfileText } from "./job-explanation.js";
+import { loadMaterialsContext, materialsJobText } from "./materials-context.js";
 import { cvDetailsSections, type TailoredCvGeneratorDeps } from "./tailored-cv-generator.js";
 
 export type CoverLetterGeneratorDeps = Omit<TailoredCvGeneratorDeps, "renderPdf"> & {
@@ -35,25 +36,12 @@ export class CoverLetterGenerator {
   }
 
   private async load(jobId: string) {
-    const job = await this.deps.careerRepo.getJob(jobId);
-    if (!job) throw notFound("That job does not exist.");
-    const profile = await this.deps.getProfile();
-    if (!profile) throw notFound("Save a professional profile before writing a cover letter.");
-    const [company, details, profileVersion] = await Promise.all([
-      this.deps.careerRepo.getCompany(job.companyId),
-      this.deps.getApplicationDetails(),
-      this.deps.careerRepo.getProfileVersion(),
-    ]);
-    const companyName = company?.name ?? "";
+    const context = await loadMaterialsContext(this.deps, jobId, "writing a cover letter");
     return {
-      job,
-      profile,
-      details,
-      profileVersion,
-      companyName,
+      ...context,
       frame: {
-        job: { title: job.title, companyName },
-        header: { fullName: profile.fullName, contactLine: cvDetailsSections(details).contactLine },
+        job: { title: context.job.title, companyName: context.companyName },
+        header: { fullName: context.profile.fullName, contactLine: cvDetailsSections(context.details).contactLine },
       },
     };
   }
@@ -72,15 +60,8 @@ export class CoverLetterGenerator {
 
   async generate(jobId: string, provider?: TextProviderName): Promise<SaveResult> {
     const loaded = await this.load(jobId);
-    const { job, profile, companyName } = loaded;
-    const jobText = [
-      companyName ? `Company: ${companyName}` : "",
-      `Title: ${job.title}`,
-      job.rawDescription || job.description,
-      ...job.requirements,
-    ]
-      .filter(Boolean)
-      .join("\n");
+    const { profile, companyName } = loaded;
+    const jobText = materialsJobText(loaded);
     const profileText = buildProfileText(profile);
 
     const text = resolveTextProvider(this.deps.textProviders, this.deps.defaultTextProvider, provider);
