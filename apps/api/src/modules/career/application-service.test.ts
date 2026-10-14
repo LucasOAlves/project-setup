@@ -13,6 +13,7 @@ function setup(jobUrl = "https://job-boards.greenhouse.io/acme/jobs/123", clock 
   const events: ApplicationEventRow[] = [];
   const audits: AuditEventInput[] = [];
   const approvals: ApprovalRow[] = [];
+  const executions: Array<{ id: string; applicationId: string; approvalId: string; attemptNumber: number; finished: boolean }> = [];
   let ids = 0;
   const nextId = () => `00000000-0000-4000-8000-${String(++ids).padStart(12, "0")}`;
   const repo = {
@@ -51,6 +52,18 @@ function setup(jobUrl = "https://job-boards.greenhouse.io/acme/jobs/123", clock 
       events.push({ id: nextId(), applicationId: id, fromStatus: "READY_FOR_REVIEW", toStatus: "APPROVED", createdAt: clock.now, ...record });
       return { row, approval };
     },
+    async claimSubmission(id: string, approvalId: string, record: { actor: string; reason: string }) {
+      const row = rows.find((candidate) => candidate.id === id && candidate.status === "APPROVED");
+      if (!row || executions.some((execution) => execution.approvalId === approvalId)) return null;
+      Object.assign(row, { status: "SUBMITTING", updatedAt: clock.now });
+      const execution = { id: nextId(), applicationId: id, approvalId, attemptNumber: executions.length + 1, finished: false };
+      executions.push(execution);
+      events.push({ id: nextId(), applicationId: id, fromStatus: "APPROVED", toStatus: "SUBMITTING", createdAt: clock.now, ...record });
+      return { row, execution: execution as never };
+    },
+    async finishOpenExecutions(applicationId: string) {
+      for (const execution of executions) if (execution.applicationId === applicationId) execution.finished = true;
+    },
     async liveApproval(applicationId: string) {
       return approvals.filter((approval) => approval.applicationId === applicationId && !approval.invalidatedAt).at(-1) ?? null;
     },
@@ -63,8 +76,15 @@ function setup(jobUrl = "https://job-boards.greenhouse.io/acme/jobs/123", clock 
       audits.push(input);
     },
   };
-  const service = new ApplicationService(repo, audit, async (id) => (id === JOB ? { id, url: jobUrl } : null), () => clock.now);
-  return { service, rows, audits, approvals, clock };
+  const permit = { allowed: true };
+  const service = new ApplicationService(
+    repo,
+    audit,
+    async (id) => (id === JOB ? { id, url: jobUrl } : null),
+    () => clock.now,
+    async () => (permit.allowed ? { allowed: true } : { allowed: false, reason: "SWITCHED_OFF" }),
+  );
+  return { service, rows, audits, approvals, clock, executions, permit };
 }
 
 async function rejects(promise: Promise<unknown>, status: number, message?: RegExp) {
@@ -273,13 +293,14 @@ test("an approval past 24 hours lapses back to review when the application is re
 
 test("a submission run that stalls becomes SUBMISSION_UNKNOWN, not FAILED", async () => {
   const setupResult = setup();
-  const { service, id, rows, clock } = await readyForReview(setupResult);
-  await service.approve(id, { payloadHash: HASH });
-  Object.assign(rows[0]!, { status: "SUBMITTING", updatedAt: clock.now });
+  const { service, id, clock, executions } = await readyForReview(setupResult);
+  const approved = await service.approve(id, { payloadHash: HASH });
+  await service.claimSubmission(id, approved.approval!.id);
   clock.now = new Date(clock.now.getTime() + 11 * 60 * 1000);
   const read = await service.get(id);
   assert.equal(read.status, "SUBMISSION_UNKNOWN");
   assert.equal(read.lastError, "ABANDONED");
+  assert.equal(executions[0]?.finished, true);
 });
 
 test("a submission in progress cannot be rejected or prepared again", async () => {
@@ -288,4 +309,55 @@ test("a submission in progress cannot be rejected or prepared again", async () =
   rows[0]!.status = "SUBMITTING";
   await rejects(service.reject(id), 409);
   await rejects(service.startPreparation(JOB), 409);
+});
+
+// Milestone 4, ticket 4: the submission run's claim and last check.
+
+test("the run claims an approved application once per approval", async () => {
+  const { service, id, executions, audits } = await readyForReview();
+  const approved = await service.approve(id, { payloadHash: HASH });
+  const first = await service.claimSubmission(id, approved.approval!.id);
+  assert.equal(first.claimed, true);
+  if (first.claimed) assert.equal(first.application.status, "SUBMITTING");
+  const second = await service.claimSubmission(id, approved.approval!.id);
+  assert.equal(second.claimed, false);
+  assert.equal(executions.length, 1);
+  assert.ok(audits.some((audit) => audit.eventType === "SUBMISSION_STARTED"));
+});
+
+test("a run for an approval that is no longer live is skipped", async () => {
+  const { service, id } = await readyForReview();
+  const approved = await service.approve(id, { payloadHash: HASH });
+  await service.withdrawApproval(id);
+  await service.approve(id, { payloadHash: HASH });
+  const stale = await service.claimSubmission(id, approved.approval!.id);
+  assert.deepEqual(stale, { claimed: false, reason: "This run was queued for an approval that is no longer live." });
+});
+
+test("a run is not claimed when submission is not permitted", async () => {
+  const { service, id, permit } = await readyForReview();
+  const approved = await service.approve(id, { payloadHash: HASH });
+  permit.allowed = false;
+  const result = await service.claimSubmission(id, approved.approval!.id);
+  assert.equal(result.claimed, false);
+  assert.equal((await service.get(id)).status, "APPROVED");
+});
+
+test("an expired approval is not claimed", async () => {
+  const { service, id, clock } = await readyForReview();
+  const approved = await service.approve(id, { payloadHash: HASH });
+  clock.now = new Date("2026-10-15T12:00:01Z");
+  const result = await service.claimSubmission(id, approved.approval!.id);
+  assert.equal(result.claimed, false);
+});
+
+test("right before the click, the filled payload must hash to the approved one", async () => {
+  const { service, id, permit } = await readyForReview();
+  const approved = await service.approve(id, { payloadHash: HASH });
+  await service.claimSubmission(id, approved.approval!.id);
+  assert.deepEqual(await service.confirmBeforeClick(id, approved.approval!.id, HASH), { ok: true });
+  assert.deepEqual(await service.confirmBeforeClick(id, approved.approval!.id, "c".repeat(64)), { ok: false, reason: "PAYLOAD_CHANGED" });
+  assert.deepEqual(await service.confirmBeforeClick(id, "99999999-9999-4999-8999-999999999999", HASH), { ok: false, reason: "INVALIDATED" });
+  permit.allowed = false;
+  assert.deepEqual(await service.confirmBeforeClick(id, approved.approval!.id, HASH), { ok: false, reason: "NOT_PERMITTED" });
 });

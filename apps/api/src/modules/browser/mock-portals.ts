@@ -57,7 +57,8 @@ const GREENHOUSE = `<!doctype html><html lang="en"><head><title>Job Application 
     option.addEventListener("click", () => { field.value = option.textContent; list.innerHTML = ""; });
     list.appendChild(option);
   });
-  // A real portal posts the form here. The browser worker must never let this run.
+  // Marks a submit the page let through. Preparation runs must never get here; an approved
+  // submission run does, once.
   document.getElementById("application-form").addEventListener("submit", () => { document.title = "SUBMITTED"; });
 </script>
 </main></body></html>`;
@@ -116,6 +117,29 @@ const ASHBY = `<!doctype html><html lang="en"><head><title>Staff Engineer @ Acme
   <button type="submit" class="ashby-application-form-submit-button">Submit Application</button>
 </div></div>
 <script>
+  // Like Ashby's submit: one GraphQL mutation naming the posting, then a thank-you message.
+  document.querySelector(".ashby-application-form-submit-button").addEventListener("click", async () => {
+    const container = document.querySelector(".ashby-application-form-container");
+    try {
+      const response = await fetch("https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiSubmitSingleApplicationFormAction", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          operationName: "ApiSubmitSingleApplicationFormAction",
+          query: "mutation ApiSubmitSingleApplicationFormAction($jobPostingId: String!) { submitSingleApplicationFormAction(jobPostingId: $jobPostingId) { applicationFormResult { __typename } } }",
+          variables: { organizationHostedJobsPageName: "acmemock", jobPostingId: "7c1d-mock" },
+        }),
+      });
+      const result = await response.json();
+      if (result?.data?.submitSingleApplicationFormAction?.applicationFormResult?.__typename === "FormSubmitSuccess") {
+        container.innerHTML = "<h2>Thanks for applying!</h2><p>Your application was successfully submitted. We'll be in touch.</p>";
+      } else {
+        container.insertAdjacentHTML("afterbegin", '<p role="alert">Something went wrong. Please try again.</p>');
+      }
+    } catch {
+      container.insertAdjacentHTML("afterbegin", '<p role="alert">Something went wrong. Please try again.</p>');
+    }
+  });
   // Like Ashby's Yes/No buttons: the chosen one is marked pressed.
   for (const group of document.querySelectorAll("._yesno_mock")) {
     for (const button of group.querySelectorAll("button")) {
@@ -133,9 +157,31 @@ const PAGES: Record<SupportedApplicationPortal, { url: string; html: string }> =
   ashby: { url: `${MOCK_POSTINGS.ashby}/application`, html: ASHBY },
 };
 
-// Serves the three mock application pages. Every other URL gets nothing.
-export function mockPortalResponse(url: string): MockResponse | null {
+const THANKS = (portal: string) =>
+  `<!doctype html><html lang="en"><head><title>Application submitted</title></head><body><main><h1>Thank you for applying.</h1><p>Your application has been received by Acme Mock (${portal}). Application ID: MOCK-${portal.toUpperCase()}-0001.</p></main></body></html>`;
+
+// What each mock portal answers to its submit request (Milestone 4). Only an approved
+// submission run gets these requests past the guard.
+const SUBMITS: Array<{ method: string; url: string; response: MockResponse }> = [
+  { method: "POST", url: `${MOCK_POSTINGS.greenhouse}/applications`, response: { contentType: "text/html; charset=utf-8", body: THANKS("greenhouse") } },
+  { method: "POST", url: `${MOCK_POSTINGS.lever}/apply`, response: { contentType: "text/html; charset=utf-8", body: THANKS("lever") } },
+  {
+    method: "POST",
+    url: "https://jobs.ashbyhq.com/api/non-user-graphql",
+    response: {
+      contentType: "application/json",
+      body: JSON.stringify({ data: { submitSingleApplicationFormAction: { applicationFormResult: { __typename: "FormSubmitSuccess" } } } }),
+    },
+  },
+];
+
+// Serves the three mock application pages and their submit endpoints. Every other URL gets
+// nothing.
+export function mockPortalResponse(url: string, method = "GET"): MockResponse | null {
   const clean = url.split("#")[0]!.split("?")[0];
+  if (method.toUpperCase() !== "GET") {
+    return SUBMITS.find((submit) => submit.method === method.toUpperCase() && submit.url === clean)?.response ?? null;
+  }
   const page = Object.values(PAGES).find((candidate) => candidate.url === clean);
   return page ? { contentType: "text/html; charset=utf-8", body: page.html } : null;
 }

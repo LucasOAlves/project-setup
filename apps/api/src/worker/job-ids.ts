@@ -24,6 +24,11 @@ export function watchJobId(companyId: string, at: Date): string {
   return `watch.${safe(companyId)}.${at.toISOString().slice(0, 13)}`;
 }
 
+// One submission run per approval.
+export function applicationSubmitJobId(approvalId: string): string {
+  return `submit.${safe(approvalId)}`;
+}
+
 // One browser run per application per "prepare" request.
 export function applicationPrepJobId(applicationId: string, runId: string): string {
   return `prep.${safe(applicationId)}.${safe(runId)}`;

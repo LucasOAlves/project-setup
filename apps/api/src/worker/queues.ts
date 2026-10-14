@@ -1,6 +1,6 @@
 import { Queue, type JobsOptions } from "bullmq";
 import { Redis } from "ioredis";
-import { applicationPrepJobId, discoveryJobId, evaluationJobId, watchJobId } from "./job-ids.js";
+import { applicationPrepJobId, applicationSubmitJobId, discoveryJobId, evaluationJobId, watchJobId } from "./job-ids.js";
 
 // Queue names are the contract between whoever enqueues (API routes, schedulers) and the
 // worker process that consumes them — see ADR-015. New pipelines add their queue here
@@ -11,6 +11,8 @@ export const QUEUE_NAMES = {
   evaluation: "evaluation",
   // Consumed only by the browser worker process (browser-worker.ts), never by worker.ts.
   applicationPrep: "application-prep",
+  // Approved submissions (Milestone 4), also consumed only by the browser worker.
+  applicationSubmit: "application-submit",
 } as const;
 
 export type QueueName = (typeof QUEUE_NAMES)[keyof typeof QUEUE_NAMES];
@@ -26,6 +28,7 @@ export const WATCH_JOBS = { run: "watchlist", company: "watch-company" } as cons
 export type EvaluationJobData = { jobId: string; profileVersion: number; correlationId: string };
 // runId is the time the run started, so each "prepare" is its own job and a duplicate add is not.
 export type ApplicationPrepJobData = { applicationId: string; runId: string; correlationId: string };
+export type ApplicationSubmitJobData = { applicationId: string; approvalId: string; correlationId: string };
 
 // Retries for transient failures (a source API timing out, a model rate limit): 3 attempts,
 // 30s then 60s apart. A processor that knows a failure is permanent throws BullMQ's
@@ -65,4 +68,16 @@ export async function enqueueWatchCompany(queue: Queue, data: WatchCompanyJobDat
 // A browser run is not retried: re-opening the portal is the user's call, through "prepare" again.
 export async function enqueueApplicationPrep(queue: Queue, data: ApplicationPrepJobData) {
   return queue.add("prepare", data, { jobId: applicationPrepJobId(data.applicationId, data.runId), attempts: 1 });
+}
+
+// One submission run per approval, never retried: the job id is the approval's, attempts is 1,
+// and the executions table refuses a second run for the same approval even if the job is added
+// again after Redis forgot the first. A finished job for the approval (one that was skipped
+// because submission was switched off, say) is cleared so "submit" can queue it again: the
+// claim in the executions table, not the job id, is what keeps it to one run.
+export async function enqueueApplicationSubmit(queue: Queue, data: ApplicationSubmitJobData) {
+  const jobId = applicationSubmitJobId(data.approvalId);
+  const previous = await queue.getJob(jobId);
+  if (previous && ((await previous.isCompleted()) || (await previous.isFailed()))) await previous.remove();
+  return queue.add("submit", data, { jobId, attempts: 1 });
 }

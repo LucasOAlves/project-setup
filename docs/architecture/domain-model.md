@@ -325,6 +325,18 @@ use. `checkApproval` (`application-approval.ts`, test-first) is the one validity
 application must be APPROVED or SUBMITTING, the approval live and unexpired, and the payload
 hash and destination unchanged.
 
+## Execution (Job Hunter)
+
+One submission run for one approval (`executions`, migration 0034; spec §7, ADR-022). The
+worker creates it in the same transaction that moves the application from APPROVED to
+SUBMITTING (`claimSubmission`), and `approval_id` is unique, so an approval can be used for one
+run only, even if its job is queued twice. A row records the attempt number, when the run
+started, when the submit button was clicked (`clicked_at`, null if the run stopped before), when
+it finished, the result (the application's outcome state), an error type, the HTTP status of
+the submit request and the confirmation reference the page showed. A run left open when the
+worker dies is closed as SUBMISSION_UNKNOWN by `settleStale`. A SUBMITTED application also keeps
+`submitted_at` and `confirmation_reference` on `applications`.
+
 ## SavedFormAnswer (Job Hunter)
 
 An answer the user gave to an application-form question (`saved_form_answers`, migration

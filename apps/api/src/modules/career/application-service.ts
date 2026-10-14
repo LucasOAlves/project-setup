@@ -20,11 +20,14 @@ import type {
   ApplicationRow,
   ApprovalRow,
 } from "./application-repository.js";
-import { APPROVAL_TTL_MS, checkApproval } from "./application-approval.js";
+import { APPROVAL_PROBLEM_TEXT, APPROVAL_TTL_MS, checkApproval, type ApprovalCheck } from "./application-approval.js";
 import { checkTransition, initialApplicationState } from "./application-state.js";
 import { SUBMISSION_BLOCK_TEXT, type SubmissionPermission } from "./submission-permission.js";
 
-type Repo = Pick<ApplicationRepository, "get" | "findByJob" | "create" | "transition" | "events" | "approve" | "liveApproval">;
+type Repo = Pick<
+  ApplicationRepository,
+  "get" | "findByJob" | "create" | "transition" | "events" | "approve" | "liveApproval" | "claimSubmission" | "finishOpenExecutions"
+>;
 type Audit = { record(input: AuditEventInput): Promise<void> };
 type JobLookup = (jobId: string) => Promise<{ id: string; url: string } | null>;
 type SubmissionCheck = (application: { mode: string; portal: string | null }) => Promise<SubmissionPermission>;
@@ -158,6 +161,49 @@ export class ApplicationService {
     return this.toPublic(result.row);
   }
 
+  // The submission run takes the application (Milestone 4, spec section 5 step 13): only with
+  // the live approval it was queued for, only while that approval is valid and submission is
+  // permitted, and only once per approval.
+  async claimSubmission(
+    applicationId: string,
+    approvalId: string,
+  ): Promise<{ claimed: true; application: ApplicationPublic; executionId: string } | { claimed: false; reason: string }> {
+    const row = await this.settleStale(await this.requireApplication(applicationId));
+    if (row.status !== "APPROVED") return { claimed: false, reason: `The application is ${row.status}, not APPROVED.` };
+    const approval = await this.repo.liveApproval(row.id);
+    if (!approval || approval.id !== approvalId) return { claimed: false, reason: "This run was queued for an approval that is no longer live." };
+    const check = checkApproval(toFacts(approval), toTarget(row), this.now());
+    if (!check.ok) return { claimed: false, reason: APPROVAL_PROBLEM_TEXT[check.reason] };
+    const permission = await this.submissionCheck(row);
+    if (!permission.allowed) return { claimed: false, reason: SUBMISSION_BLOCK_TEXT[permission.reason] };
+
+    const reason = "The browser worker started submitting your approved application.";
+    const claimed = await this.repo.claimSubmission(row.id, approvalId, { actor: "WORKER", reason });
+    if (!claimed) return { claimed: false, reason: "Another run already took this approval." };
+    await this.recordAudit(claimed.row, "APPROVED", "WORKER", reason);
+    await this.audit.record({
+      eventType: "SUBMISSION_STARTED",
+      actor: "WORKER",
+      entityType: "execution",
+      entityId: claimed.execution.id,
+      payload: { applicationId: row.id, approvalId, attempt: claimed.execution.attemptNumber },
+    });
+    return { claimed: true, application: await this.toPublic(claimed.row), executionId: claimed.execution.id };
+  }
+
+  // The last check, right before the click (spec section 5 step 14): the run is still the
+  // application's, the approval is still live and unexpired, submission is still permitted, and
+  // the payload the run just filled hashes to exactly what was approved.
+  async confirmBeforeClick(applicationId: string, approvalId: string, filledPayloadHash: string): Promise<ApprovalCheck | { ok: false; reason: "NOT_PERMITTED" }> {
+    const row = await this.requireApplication(applicationId);
+    const approval = await this.repo.liveApproval(row.id);
+    if (!approval || approval.id !== approvalId) return { ok: false, reason: "INVALIDATED" };
+    const check = checkApproval(toFacts(approval), { ...toTarget(row), payloadHash: filledPayloadHash }, this.now());
+    if (!check.ok) return check;
+    const permission = await this.submissionCheck(row);
+    return permission.allowed ? check : { ok: false, reason: "NOT_PERMITTED" };
+  }
+
   // Back to review. The repository invalidates the approval in the same transaction.
   async withdrawApproval(applicationId: string, reason = "You withdrew your approval."): Promise<ApplicationPublic> {
     const row = await this.settleStale(await this.requireApplication(applicationId));
@@ -173,6 +219,7 @@ export class ApplicationService {
         return await this.apply(row, "FAILED", "SYSTEM", "The preparation run stopped without finishing.", { lastError: "ABANDONED" });
       }
       if (row.status === "SUBMITTING" && age >= ABANDONED_RUN_MS) {
+        await this.repo.finishOpenExecutions(row.id, { result: "SUBMISSION_UNKNOWN", errorType: "ABANDONED", submitStatus: null, confirmationReference: "" }, this.now());
         return await this.apply(
           row,
           "SUBMISSION_UNKNOWN",

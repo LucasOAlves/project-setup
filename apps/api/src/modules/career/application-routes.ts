@@ -19,7 +19,7 @@ function parseId(raw: unknown, what: string): string {
 export async function registerApplicationRoutes(
   app: FastifyInstance,
   applications: ApplicationService,
-  dispatcher: Pick<ApplicationDispatcher, "dispatch" | "close">,
+  dispatcher: Pick<ApplicationDispatcher, "dispatch" | "dispatchSubmission" | "close">,
   storage: Pick<StorageProvider, "get">,
   answers: Pick<ApplicationAnswerService, "save">,
 ): Promise<void> {
@@ -55,9 +55,26 @@ export async function registerApplicationRoutes(
 
   // Approving needs the signed-in user (Milestone 4, ADR-021). The body carries the payload
   // hash the user reviewed.
+  // When submission is permitted, approving also queues the submission. If the queue is down
+  // the approval is kept and "submit" queues it later.
   app.post("/api/career/applications/:id/approve", { config: { signedIn: true } }, async (request) => {
     const { id } = request.params as { id: string };
-    return { application: await applications.approve(parseId(id, "Application"), request.body) };
+    const approved = await applications.approve(parseId(id, "Application"), request.body);
+    let queued = false;
+    if (approved.submission.allowed) {
+      queued = await dispatcher
+        .dispatchSubmission(approved)
+        .then(() => true)
+        .catch(() => false);
+    }
+    return { application: approved, queued };
+  });
+
+  app.post("/api/career/applications/:id/submit", { config: { signedIn: true } }, async (request) => {
+    const { id } = request.params as { id: string };
+    const application = await applications.get(parseId(id, "Application"));
+    await dispatcher.dispatchSubmission(application);
+    return { application, queued: true };
   });
 
   app.post("/api/career/applications/:id/approval/withdraw", async (request) => {

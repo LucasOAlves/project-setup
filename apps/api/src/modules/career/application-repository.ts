@@ -1,15 +1,17 @@
 import { randomUUID } from "node:crypto";
 import { and, asc, desc, eq, isNotNull, isNull, sql } from "drizzle-orm";
 import type { Database } from "../../db/client.js";
-import { applicationEvents, applications, approvals } from "../../db/schema.js";
+import { applicationEvents, applications, approvals, executions } from "../../db/schema.js";
 
 export type ApplicationRow = typeof applications.$inferSelect;
 export type ApplicationEventRow = typeof applicationEvents.$inferSelect;
 export type ApprovalRow = typeof approvals.$inferSelect;
+export type ExecutionRow = typeof executions.$inferSelect;
+export type ExecutionFinish = Pick<ExecutionRow, "result" | "errorType" | "submitStatus" | "confirmationReference">;
 export type NewApproval = Pick<ApprovalRow, "payloadHash" | "destinationUrl" | "documentIds" | "formRevision" | "decidedAt" | "expiresAt">;
 
 export type NewApplication = Pick<ApplicationRow, "jobId" | "status" | "mode" | "portal" | "destinationUrl">;
-export type ApplicationPatch = Partial<Pick<ApplicationRow, "mode" | "portal" | "destinationUrl" | "lastError" | "formSnapshot" | "fieldPlan" | "preview" | "payloadHash">>;
+export type ApplicationPatch = Partial<Pick<ApplicationRow, "mode" | "portal" | "destinationUrl" | "lastError" | "formSnapshot" | "fieldPlan" | "preview" | "payloadHash" | "submittedAt" | "confirmationReference">>;
 export type TransitionRecord = { actor: string; reason: string };
 
 // Every status write goes with its event in one transaction, and a transition only applies
@@ -108,6 +110,71 @@ export class ApplicationRepository {
       });
       return { row, approval: created! };
     });
+  }
+
+  // APPROVED to SUBMITTING and the run's execution row, together (Milestone 4). Returns null
+  // when the application is no longer APPROVED or this approval already started a run: the
+  // unique approval_id makes a second run for the same approval impossible.
+  async claimSubmission(
+    id: string,
+    approvalId: string,
+    record: TransitionRecord,
+  ): Promise<{ row: ApplicationRow; execution: ExecutionRow } | null> {
+    try {
+      return await this.db.transaction(async (tx) => {
+        const [row] = await tx
+          .update(applications)
+          .set({ status: "SUBMITTING", updatedAt: new Date() })
+          .where(and(eq(applications.id, id), eq(applications.status, "APPROVED")))
+          .returning();
+        if (!row) return null;
+        const [{ count }] = (await tx
+          .select({ count: sql<number>`count(*)::int` })
+          .from(executions)
+          .where(eq(executions.applicationId, id))) as [{ count: number }];
+        const [execution] = await tx
+          .insert(executions)
+          .values({ id: randomUUID(), applicationId: id, approvalId, attemptNumber: count + 1 })
+          .returning();
+        await tx.insert(applicationEvents).values({
+          id: randomUUID(),
+          applicationId: id,
+          fromStatus: "APPROVED",
+          toStatus: "SUBMITTING",
+          actor: record.actor,
+          reason: record.reason,
+        });
+        return { row, execution: execution! };
+      });
+    } catch (error) {
+      // The unique approval_id: this approval already ran.
+      const code = (error as { code?: string }).code ?? (error as { cause?: { code?: string } }).cause?.code;
+      if (code === "23505") return null;
+      throw error;
+    }
+  }
+
+  async markClicked(executionId: string, at: Date): Promise<void> {
+    await this.db.update(executions).set({ clickedAt: at }).where(eq(executions.id, executionId));
+  }
+
+  async finishExecution(executionId: string, finish: ExecutionFinish, at: Date): Promise<void> {
+    await this.db
+      .update(executions)
+      .set({ ...finish, finishedAt: at })
+      .where(and(eq(executions.id, executionId), isNull(executions.finishedAt)));
+  }
+
+  // Closes whatever run of this application is still open, e.g. one that lost its worker.
+  async finishOpenExecutions(applicationId: string, finish: ExecutionFinish, at: Date): Promise<void> {
+    await this.db
+      .update(executions)
+      .set({ ...finish, finishedAt: at })
+      .where(and(eq(executions.applicationId, applicationId), isNull(executions.finishedAt)));
+  }
+
+  async executions(applicationId: string): Promise<ExecutionRow[]> {
+    return this.db.select().from(executions).where(eq(executions.applicationId, applicationId)).orderBy(asc(executions.startedAt));
   }
 
   // The approval not yet invalidated, if any.

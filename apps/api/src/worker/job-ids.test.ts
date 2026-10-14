@@ -47,3 +47,11 @@ test("applicationPrepJobId is one id per application per run, with no colons", (
   assert.notEqual(id, applicationPrepJobId("app-1", "2026-10-14T12:05:00.000Z"));
   assert.equal(id.includes(":"), false);
 });
+
+test("applicationSubmitJobId is one id per approval, with no colons", async () => {
+  const { applicationSubmitJobId } = await import("./job-ids.ts");
+  const id = applicationSubmitJobId("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa");
+  assert.equal(id, applicationSubmitJobId("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"));
+  assert.notEqual(id, applicationSubmitJobId("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"));
+  assert.doesNotMatch(id, /:/);
+});

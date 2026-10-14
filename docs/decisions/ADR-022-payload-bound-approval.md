@@ -2,8 +2,8 @@
 
 ## Status
 
-Accepted (Milestone 4). The approval part is built in ticket 2. The submission rules below are
-the contract for tickets 4 and 5. Applies [ADR-012](./ADR-012-external-action-approval.md) to
+Accepted (Milestone 4). The approval part is built in ticket 2, and the submission rules below
+in tickets 4 and 5 (see the update note at the end). Applies [ADR-012](./ADR-012-external-action-approval.md) to
 job applications.
 
 ## Context
@@ -63,3 +63,15 @@ Submission (tickets 4 and 5) follows these rules:
 Option 1 is less code but cannot meet "valid for one exact payload". Option 3 could show what
 changed, at the cost of a second copy of personal data. With option 2 the app can say that
 something changed but not what, and the user reviews the new preview to see it.
+
+## Update: submission built (tickets 4 and 5)
+
+The claim is a guarded update plus an `executions` row whose `approval_id` is unique (migration
+0034), so a second job for the same approval finds nothing to claim. The submit queue's job id
+is the approval's and runs once (`attempts: 1`). A finished job may be queued again, for
+example after submission was switched off, because the claim, not the job id, keeps it to one
+run. `confirmBeforeClick` recomputes the payload hash from the refilled page and runs
+`checkApproval` immediately before the click. `classifySubmission` (`submission-outcome.ts`,
+test-first) decides the outcome: SUBMITTED only on a 2xx submit response with a new
+confirmation message and the form gone or a new page; an error after the click, a 5xx or an
+unclear page becomes SUBMISSION_UNKNOWN.

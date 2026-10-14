@@ -9,6 +9,10 @@ import { loadEnv } from "./env.js";
 import { AuditRepository } from "./modules/audit/audit-repository.js";
 import { ApplicationRepository } from "./modules/career/application-repository.js";
 import { ApplicationService } from "./modules/career/application-service.js";
+import { SourceRegistry } from "./modules/career/source-registry.js";
+import { submissionCheckFor } from "./modules/career/submission-permission.js";
+import { ApplicationSubmitProcessor, type ApplicationSubmitJob } from "./modules/browser/application-submit-processor.js";
+import { BrowserApplicationSubmitter } from "./modules/browser/application-submitter.js";
 import { CareerRepository } from "./modules/career/career-repository.js";
 import {
   ApplicationPrepProcessor,
@@ -33,9 +37,11 @@ loadDotenv({
   path: path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../.env"),
 });
 
-// Browser worker process (Milestone 3, ADR-020): the only process that runs Chromium. It
-// consumes `application-prep` one run at a time, with no access to the model providers or
-// the API's routes, and records each run's outcome on the application. It never submits.
+// Browser worker process (ADR-020): the only process that runs Chromium. It consumes
+// `application-prep` (Milestone 3) and `application-submit` (Milestone 4), one run at a time
+// each, with no access to the model providers or the API's routes, and records each run's
+// outcome on the application. It submits only an approved application, once, when
+// APPLICATION_SUBMISSION_ENABLED and the portal's source settings allow it.
 async function main() {
   const env = loadEnv();
   const logger = createLogger({ service: "browser-worker" });
@@ -46,10 +52,17 @@ async function main() {
   const audit = new AuditRepository(db);
   const careerRepo = new CareerRepository(db);
   const applicationRepo = new ApplicationRepository(db);
-  const applications = new ApplicationService(applicationRepo, audit, async (jobId) => {
-    const job = await careerRepo.getJob(jobId);
-    return job ? { id: job.id, url: job.url } : null;
-  });
+  const sourceRegistry = new SourceRegistry(db);
+  const applications = new ApplicationService(
+    applicationRepo,
+    audit,
+    async (jobId) => {
+      const job = await careerRepo.getJob(jobId);
+      return job ? { id: job.id, url: job.url } : null;
+    },
+    () => new Date(),
+    submissionCheckFor(env.APPLICATION_SUBMISSION_ENABLED, (portal) => sourceRegistry.applicationPolicy(portal)),
+  );
   if (env.BROWSER_MOCK_PORTALS && env.NODE_ENV === "production") {
     throw new Error("BROWSER_MOCK_PORTALS is for local development only.");
   }
@@ -74,21 +87,23 @@ async function main() {
     savedAnswers: () => savedAnswers.all(),
     agreedFor: (jobId) => applicationRepo.agreedForJob(jobId),
   });
+  const browserOptions = {
+    executablePath: env.BROWSER_EXECUTABLE_PATH,
+    runTimeoutMs: env.BROWSER_RUN_TIMEOUT_MS,
+    ...(env.BROWSER_MOCK_PORTALS ? { mockResponse: mockPortalResponse } : {}),
+  };
+  const files = {
+    load: async (documentId: string) => {
+      const file = await documents.getFile(documentId);
+      return { name: file.filename, mimeType: file.mimeType, buffer: file.bytes };
+    },
+    fileHash: async (documentId: string) => (await documentRepo.get(documentId))?.fileHash ?? null,
+  };
   const processor = new ApplicationPrepProcessor({
     applications,
-    preparer: new BrowserApplicationPreparer({
-      executablePath: env.BROWSER_EXECUTABLE_PATH,
-      runTimeoutMs: env.BROWSER_RUN_TIMEOUT_MS,
-      ...(env.BROWSER_MOCK_PORTALS ? { mockResponse: mockPortalResponse } : {}),
-    }),
+    preparer: new BrowserApplicationPreparer(browserOptions),
     planner,
-    files: {
-      load: async (documentId) => {
-        const file = await documents.getFile(documentId);
-        return { name: file.filename, mimeType: file.mimeType, buffer: file.bytes };
-      },
-      fileHash: async (documentId) => (await documentRepo.get(documentId))?.fileHash ?? null,
-    },
+    files,
     screenshots: {
       put: async (bytes) => (await storage.put({ bytes, mimeType: "image/png", extension: "png" })).key,
       delete: (key) => storage.delete(key),
@@ -106,16 +121,37 @@ async function main() {
   await sweepScreenshots();
   const sweepTimer = setInterval(() => void sweepScreenshots(), 6 * 60 * 60 * 1000);
 
+  const submitProcessor = new ApplicationSubmitProcessor({
+    applications,
+    executions: applicationRepo,
+    submitter: new BrowserApplicationSubmitter(browserOptions),
+    planner,
+    files,
+    audit,
+  });
+
   const connection = createRedisConnection(env.REDIS_URL);
   const worker = new Worker(QUEUE_NAMES.applicationPrep, (job) => processor.process(job.data as ApplicationPrepJob), {
     connection,
     concurrency: 1,
   });
   attachObservability(worker, QUEUE_NAMES.applicationPrep, logger, audit);
-  logger.info("browser worker started", { queue: QUEUE_NAMES.applicationPrep, runTimeoutMs: env.BROWSER_RUN_TIMEOUT_MS });
+  // Submissions run one at a time too, on their own queue, so a long preparation never delays
+  // the check right before a click.
+  const submitWorker = new Worker(QUEUE_NAMES.applicationSubmit, (job) => submitProcessor.process(job.data as ApplicationSubmitJob), {
+    connection,
+    concurrency: 1,
+  });
+  attachObservability(submitWorker, QUEUE_NAMES.applicationSubmit, logger, audit);
+  logger.info("browser worker started", {
+    queues: [QUEUE_NAMES.applicationPrep, QUEUE_NAMES.applicationSubmit],
+    runTimeoutMs: env.BROWSER_RUN_TIMEOUT_MS,
+    submissionEnabled: env.APPLICATION_SUBMISSION_ENABLED,
+  });
 
   const shutdown = async () => {
     clearInterval(sweepTimer);
+    await submitWorker.close();
     await worker.close();
     await connection.quit();
     await sql.end();

@@ -291,6 +291,8 @@ export const applications = pgTable("applications", {
   preview: jsonb("preview").$type<Record<string, unknown>>(),
   payloadHash: text("payload_hash"),
   agreed: jsonb("agreed").$type<string[]>().notNull().default([]),
+  submittedAt: timestamp("submitted_at", { withTimezone: true }),
+  confirmationReference: text("confirmation_reference").notNull().default(""),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
@@ -309,6 +311,24 @@ export const approvals = pgTable("approvals", {
   expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
   invalidatedAt: timestamp("invalidated_at", { withTimezone: true }),
   invalidationReason: text("invalidation_reason").notNull().default(""),
+});
+
+export const executions = pgTable("executions", {
+  id: uuid("id").primaryKey(),
+  applicationId: uuid("application_id")
+    .notNull()
+    .references(() => applications.id, { onDelete: "cascade" }),
+  approvalId: uuid("approval_id")
+    .notNull()
+    .references(() => approvals.id, { onDelete: "cascade" }),
+  attemptNumber: integer("attempt_number").notNull(),
+  startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
+  clickedAt: timestamp("clicked_at", { withTimezone: true }),
+  finishedAt: timestamp("finished_at", { withTimezone: true }),
+  result: text("result").notNull().default(""),
+  errorType: text("error_type").notNull().default(""),
+  submitStatus: integer("submit_status"),
+  confirmationReference: text("confirmation_reference").notNull().default(""),
 });
 
 export const savedFormAnswers = pgTable("saved_form_answers", {

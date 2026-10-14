@@ -123,8 +123,16 @@ When the review looks right, **Approve this application** records your approval 
 that form: the same values, files and destination, identified by its payload hash
 ([ADR-022](docs/decisions/ADR-022-payload-bound-approval.md)). Approving needs sign-in. The
 approval lasts 24 hours. Preparing again, new answers, rejecting or **Withdraw approval**
-cancel it. Submitting an approved application is the next part of Milestone 4. Until then
-nothing is sent.
+cancel it.
+
+When submission is allowed (below), approving queues the submission. The browser worker claims
+the approval once, opens the form again, refills it, and checks right before the click that
+the payload hash, destination and approval are unchanged; anything different goes back to
+review. Only then does it let exactly one submit request through. The application becomes
+**Submitted** only when the portal confirms it (a confirmation message, plus the form gone or
+a new page). An error after the click, or no clear confirmation, becomes **Submission
+unknown**: nothing retries, and you check the portal or your email. Each run is kept in
+`executions` with its timestamps, result and any confirmation reference.
 
 Automatic submission stays off unless two settings agree: `APPLICATION_SUBMISSION_ENABLED=true`
 for the deployment, and the portal set to `AUTOMATED` in source settings
