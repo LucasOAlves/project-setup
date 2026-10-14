@@ -4,6 +4,8 @@ import { portalPolicy } from "./browser-guard.js";
 import { BrowserRunTimeout, withGuardedPage, type BrowserSessionOptions } from "./browser-session.js";
 import { applicationPageUrl } from "./form-fields.js";
 import { FormNotFound, readApplicationForm } from "./form-reader.js";
+import { checkFilledValues } from "./filled-values.js";
+import { fillForm, type AttachmentFile } from "./form-filler.js";
 import { collectPageSignals } from "./page-signals.js";
 
 export type PreparationOutcome = {
@@ -12,6 +14,16 @@ export type PreparationOutcome = {
   lastError?: string;
   form?: FormSnapshot;
   plan?: FieldPlan[];
+  preview?: PreparationPreview;
+};
+
+export type PreparationPreview = {
+  // Full-page PNG with every typed value masked, or null if it could not be taken.
+  screenshot: Buffer | null;
+  pageUrl: string;
+  confirmed: number;
+  unverified: string[];
+  blockedRequests: number;
 };
 
 export type PreparationTarget = {
@@ -19,7 +31,11 @@ export type PreparationTarget = {
   destinationUrl: string;
   // Decides each field's value from the user's stated data (application-field-mapper.ts).
   planFields?: (fields: FormField[]) => Promise<FieldPlan[]>;
+  // Reads a document's PDF to attach. Without it, nothing is filled.
+  loadFile?: (documentId: string) => Promise<AttachmentFile>;
 };
+
+const MASKED_KINDS = new Set(["TEXT", "EMAIL", "PHONE", "URL", "NUMBER", "DATE", "TEXTAREA", "COMBOBOX"]);
 
 // One browser run for one application (Milestone 3): open the portal inside the guard, stop on
 // a login or CAPTCHA, then read and fill the form. It never submits.
@@ -70,7 +86,40 @@ export class BrowserApplicationPreparer {
         if (!target.planFields) {
           return { status: "NEEDS_INFORMATION" as const, reason: `Read ${fields.length} fields.`, form };
         }
-        const plan = await target.planFields(fields);
+        let plan = await target.planFields(fields);
+        let preview: PreparationPreview | undefined;
+        if (target.loadFile) {
+          const readBack = await fillForm(page, fields, plan, target.loadFile);
+          const check = checkFilledValues(plan, readBack);
+          const mismatched = new Map(check.mismatches.map((mismatch) => [mismatch.key, mismatch]));
+          // A value the portal did not keep is not claimed: it becomes a question again.
+          plan = plan.map((field) => {
+            const mismatch = mismatched.get(field.key);
+            if (!mismatch) return field;
+            return {
+              ...field,
+              status: field.required ? ("NEEDS_INPUT" as const) : ("LEFT_EMPTY" as const),
+              value: null,
+              source: null,
+              note: mismatch.actual
+                ? `The portal did not keep "${mismatch.expected}"; it shows "${mismatch.actual}".`
+                : `The portal did not keep "${mismatch.expected}".`,
+            };
+          });
+          const masks = plan
+            .filter((field) => field.status === "FILLED" && MASKED_KINDS.has(field.kind))
+            .map((field) => page.locator(`[data-jh-key="${field.key}"]`));
+          const screenshot = await page
+            .screenshot({ fullPage: true, mask: masks, maskColor: "#3a3a3a", animations: "disabled" })
+            .catch(() => null);
+          preview = {
+            screenshot,
+            pageUrl: page.url(),
+            confirmed: check.confirmed.length,
+            unverified: check.unverified,
+            blockedRequests: blocked.length,
+          };
+        }
         const questions = plan.filter((field) => field.status === "NEEDS_INPUT").length;
         if (questions > 0) {
           return {
@@ -78,9 +127,18 @@ export class BrowserApplicationPreparer {
             reason: `${questions} required ${questions === 1 ? "question needs" : "questions need"} your answer.`,
             form,
             plan,
+            ...(preview ? { preview } : {}),
           };
         }
-        return { status: "READY_FOR_REVIEW" as const, reason: "Every required field has an answer from your details.", form, plan };
+        return {
+          status: "READY_FOR_REVIEW" as const,
+          reason: preview
+            ? "The form is filled with your details and waits for your review. Nothing was submitted."
+            : "Every required field has an answer from your details.",
+          form,
+          plan,
+          ...(preview ? { preview } : {}),
+        };
       });
     } catch (error) {
       if (error instanceof BrowserRunTimeout) return { status: "FAILED", reason: error.message, lastError: "TIMEOUT" };

@@ -111,6 +111,20 @@ export const fieldPlanSchema = z.object({
 });
 export type FieldPlan = z.infer<typeof fieldPlanSchema>;
 
+export const applicationPreviewSchema = z.object({
+  capturedAt: z.string(),
+  // Removed after 30 days. The counts stay.
+  hasScreenshot: z.boolean(),
+  pageUrl: z.string(),
+  // Fields the page showed back exactly as planned.
+  confirmed: z.number().int(),
+  // Fields filled but that the page cannot report back (some Yes/No buttons).
+  unverified: z.array(z.string()),
+  // Requests the network guard refused during the run.
+  blockedRequests: z.number().int(),
+});
+export type ApplicationPreview = z.infer<typeof applicationPreviewSchema>;
+
 export const applicationPublicSchema = z.object({
   id: z.string().uuid(),
   jobId: z.string().uuid(),
@@ -123,6 +137,10 @@ export const applicationPublicSchema = z.object({
   form: formSnapshotSchema.nullable(),
   // What goes in each field of that form, and which questions still need your answer.
   plan: z.array(fieldPlanSchema).nullable(),
+  preview: applicationPreviewSchema.nullable(),
+  // Identifies the exact payload (destination, form, values, attachments). Milestone 4's
+  // approval is bound to it.
+  payloadHash: z.string().nullable(),
   createdAt: z.string(),
   updatedAt: z.string(),
   events: z.array(applicationEventPublicSchema),

@@ -105,9 +105,9 @@ services:
       - ./apps/api/src:/app/apps/api/src
       - ./packages/shared/src:/app/packages/shared/src
 
-  # Runs Chromium for application preparation (Milestone 3). It gets the database, Redis and a
-  # read-only view of stored documents (to attach the CV): no model keys, no API port, and
-  # resource limits.
+  # Runs Chromium for application preparation (Milestone 3). It gets the database, Redis and the
+  # storage volume (to attach the CV and save preview screenshots): no model keys, no API port,
+  # and resource limits. Chromium itself only receives the files the worker hands it.
   browser-worker:
     build:
       context: .
@@ -128,7 +128,7 @@ services:
     mem_limit: 2g
     cpus: 1.5
     volumes:
-      - media_data:/data/storage:ro
+      - media_data:/data/storage
       - ./apps/api/src:/app/apps/api/src
       - ./packages/shared/src:/app/packages/shared/src
 

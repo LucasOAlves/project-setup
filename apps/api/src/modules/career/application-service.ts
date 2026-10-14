@@ -1,6 +1,7 @@
 import {
   SUPPORTED_APPLICATION_PORTALS,
   detectBoardReference,
+  applicationPreviewSchema,
   fieldPlanSchema,
   formSnapshotSchema,
   type ApplicationActor,
@@ -50,6 +51,13 @@ export class ApplicationService {
     return row ? this.toPublic(await this.expireIfAbandoned(row)) : null;
   }
 
+  // The stored key of the last preview's screenshot, if it is still kept.
+  async screenshotKey(applicationId: string): Promise<string | null> {
+    const row = await this.requireApplication(applicationId);
+    const key = row.preview?.screenshotKey;
+    return typeof key === "string" ? key : null;
+  }
+
   async get(applicationId: string): Promise<ApplicationPublic> {
     return this.toPublic(await this.requireApplication(applicationId));
   }
@@ -76,7 +84,7 @@ export class ApplicationService {
       await this.recordAudit(created, null, "USER", reason);
       return this.toPublic(created);
     }
-    return this.toPublic(await this.apply(existing, "PREPARING", "USER", reason, { ...target, lastError: "", formSnapshot: null, fieldPlan: null }));
+    return this.toPublic(await this.apply(existing, "PREPARING", "USER", reason, { ...target, lastError: "", formSnapshot: null, fieldPlan: null, payloadHash: null }));
   }
 
   // Records how a preparation run ended. Used by the browser worker and the manual path.
@@ -156,6 +164,8 @@ export class ApplicationService {
       lastError: row.lastError,
       form: parseForm(row.formSnapshot),
       plan: parsePlan(row.fieldPlan),
+      preview: parsePreview(row.preview),
+      payloadHash: row.payloadHash,
       createdAt: row.createdAt.toISOString(),
       updatedAt: row.updatedAt.toISOString(),
       events: events.map(toPublicEvent),
@@ -172,6 +182,12 @@ function parseForm(snapshot: unknown): ApplicationPublic["form"] {
 function parsePlan(plan: unknown): ApplicationPublic["plan"] {
   if (!plan) return null;
   const parsed = z.array(fieldPlanSchema).safeParse(plan);
+  return parsed.success ? parsed.data : null;
+}
+
+function parsePreview(preview: Record<string, unknown> | null): ApplicationPublic["preview"] {
+  if (!preview) return null;
+  const parsed = applicationPreviewSchema.safeParse({ ...preview, hasScreenshot: typeof preview.screenshotKey === "string" });
   return parsed.success ? parsed.data : null;
 }
 

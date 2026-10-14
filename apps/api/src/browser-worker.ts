@@ -10,7 +10,11 @@ import { AuditRepository } from "./modules/audit/audit-repository.js";
 import { ApplicationRepository } from "./modules/career/application-repository.js";
 import { ApplicationService } from "./modules/career/application-service.js";
 import { CareerRepository } from "./modules/career/career-repository.js";
-import { ApplicationPrepProcessor, type ApplicationPrepJob } from "./modules/browser/application-prep-processor.js";
+import {
+  ApplicationPrepProcessor,
+  expireOldScreenshots,
+  type ApplicationPrepJob,
+} from "./modules/browser/application-prep-processor.js";
 import { BrowserApplicationPreparer } from "./modules/browser/application-preparer.js";
 import { mockPortalResponse } from "./modules/browser/mock-portals.js";
 import { ApplicationDocumentRepository } from "./modules/career/application-document-repository.js";
@@ -41,7 +45,8 @@ async function main() {
   const db = createDb(sql);
   const audit = new AuditRepository(db);
   const careerRepo = new CareerRepository(db);
-  const applications = new ApplicationService(new ApplicationRepository(db), audit, async (jobId) => {
+  const applicationRepo = new ApplicationRepository(db);
+  const applications = new ApplicationService(applicationRepo, audit, async (jobId) => {
     const job = await careerRepo.getJob(jobId);
     return job ? { id: job.id, url: job.url } : null;
   });
@@ -53,11 +58,9 @@ async function main() {
   }
   // The worker reads the user's details to fill forms. None of it goes to a model: this
   // process has no model keys.
-  const documents = new ApplicationDocumentService(
-    new ApplicationDocumentRepository(db),
-    new LocalStorageProvider(env.STORAGE_DIR),
-    async (jobId) => (await careerRepo.getJob(jobId)) !== null,
-  );
+  const storage = new LocalStorageProvider(env.STORAGE_DIR);
+  const documentRepo = new ApplicationDocumentRepository(db);
+  const documents = new ApplicationDocumentService(documentRepo, storage, async (jobId) => (await careerRepo.getJob(jobId)) !== null);
   const profileRepo = new ProfileRepository(db);
   const details = new ApplicationDetailsService(new ApplicationDetailsRepository(db));
   const savedAnswers = new SavedAnswerRepository(db);
@@ -70,15 +73,37 @@ async function main() {
     latestDocument: (jobId, type) => documents.latest(jobId, type),
     savedAnswers: () => savedAnswers.all(),
   });
-  const processor = new ApplicationPrepProcessor(
+  const processor = new ApplicationPrepProcessor({
     applications,
-    new BrowserApplicationPreparer({
+    preparer: new BrowserApplicationPreparer({
       executablePath: env.BROWSER_EXECUTABLE_PATH,
       runTimeoutMs: env.BROWSER_RUN_TIMEOUT_MS,
       ...(env.BROWSER_MOCK_PORTALS ? { mockResponse: mockPortalResponse } : {}),
     }),
     planner,
-  );
+    files: {
+      load: async (documentId) => {
+        const file = await documents.getFile(documentId);
+        return { name: file.filename, mimeType: file.mimeType, buffer: file.bytes };
+      },
+      fileHash: async (documentId) => (await documentRepo.get(documentId))?.fileHash ?? null,
+    },
+    screenshots: {
+      put: async (bytes) => (await storage.put({ bytes, mimeType: "image/png", extension: "png" })).key,
+      delete: (key) => storage.delete(key),
+    },
+  });
+
+  const sweepScreenshots = async () => {
+    try {
+      const expired = await expireOldScreenshots(applicationRepo, (key) => storage.delete(key));
+      if (expired > 0) logger.info("expired preview screenshots", { count: expired });
+    } catch (error) {
+      logger.error("screenshot retention sweep failed", { error });
+    }
+  };
+  await sweepScreenshots();
+  const sweepTimer = setInterval(() => void sweepScreenshots(), 6 * 60 * 60 * 1000);
 
   const connection = createRedisConnection(env.REDIS_URL);
   const worker = new Worker(QUEUE_NAMES.applicationPrep, (job) => processor.process(job.data as ApplicationPrepJob), {
@@ -89,6 +114,7 @@ async function main() {
   logger.info("browser worker started", { queue: QUEUE_NAMES.applicationPrep, runTimeoutMs: env.BROWSER_RUN_TIMEOUT_MS });
 
   const shutdown = async () => {
+    clearInterval(sweepTimer);
     await worker.close();
     await connection.quit();
     await sql.end();

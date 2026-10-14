@@ -203,7 +203,7 @@ export async function buildApp(env: Env, db: Database) {
   await registerImageRoutes(app, images);
   await registerCareerRoutes(app, career, sourceRegistry, documents);
   await registerDocumentRoutes(app, documents, { cv: cvGenerator, coverLetters, answers });
-  await registerApplicationRoutes(app, applications, new ApplicationDispatcher(env.REDIS_URL, applications));
+  await registerApplicationRoutes(app, applications, new ApplicationDispatcher(env.REDIS_URL, applications), storage);
   await registerDiscoveryRoutes(app, env, new CompanyWatchService(new CareerRepository(db)));
 
   app.setErrorHandler((error, _request, reply) => {

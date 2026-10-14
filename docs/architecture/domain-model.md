@@ -293,6 +293,16 @@ exactly one row (`job_id` UNIQUE). It records:
   NEEDS_INPUT, an optional one is left empty. Consent boxes and voluntary self-identification
   are never filled for the user. A yes/no work authorization question is never inferred from
   the free-text statement (migration 0029).
+- `preview` (migration 0030): when the last run filled the form, its time, the landed page URL,
+  how many fields the page showed back exactly as planned (`filled-values.ts`), which it could
+  not report back, how many requests the guard refused, and the key of a full-page screenshot
+  with every typed value masked. Screenshots are deleted after 30 days and the counts stay. A
+  value the page did not keep is not claimed: that field becomes a question again.
+- `payloadHash` (`application-payload.ts`, test-first): the identity of the exact payload. It
+  covers the job, the destination URL, the form's shape (each question, its kind, whether it is
+  required, its options), every field's value, and each attachment's document version and file
+  hash. Per-run field keys, label casing, notes, sources and field order are left out.
+  Milestone 4's approval binds to it, so any material change makes a new hash.
 
 ## SavedFormAnswer (Job Hunter)
 

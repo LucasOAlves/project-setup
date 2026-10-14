@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, isNotNull, sql } from "drizzle-orm";
 import type { Database } from "../../db/client.js";
 import { applicationEvents, applications } from "../../db/schema.js";
 
@@ -7,7 +7,7 @@ export type ApplicationRow = typeof applications.$inferSelect;
 export type ApplicationEventRow = typeof applicationEvents.$inferSelect;
 
 export type NewApplication = Pick<ApplicationRow, "jobId" | "status" | "mode" | "portal" | "destinationUrl">;
-export type ApplicationPatch = Partial<Pick<ApplicationRow, "mode" | "portal" | "destinationUrl" | "lastError" | "formSnapshot" | "fieldPlan">>;
+export type ApplicationPatch = Partial<Pick<ApplicationRow, "mode" | "portal" | "destinationUrl" | "lastError" | "formSnapshot" | "fieldPlan" | "preview" | "payloadHash">>;
 export type TransitionRecord = { actor: string; reason: string };
 
 // Every status write goes with its event in one transaction, and a transition only applies
@@ -71,6 +71,28 @@ export class ApplicationRepository {
       });
       return row;
     });
+  }
+
+  // Applications whose preview screenshot was taken before the cutoff (retention).
+  async withScreenshotsBefore(cutoff: Date): Promise<ApplicationRow[]> {
+    return this.db
+      .select()
+      .from(applications)
+      .where(
+        and(
+          isNotNull(applications.preview),
+          sql`${applications.preview}->>'screenshotKey' IS NOT NULL`,
+          sql`(${applications.preview}->>'capturedAt')::timestamptz < ${cutoff.toISOString()}::timestamptz`,
+        ),
+      );
+  }
+
+  // Not a status change: only the screenshot reference goes, the preview's counts stay.
+  async clearScreenshot(id: string): Promise<void> {
+    await this.db
+      .update(applications)
+      .set({ preview: sql`jsonb_set(${applications.preview}, '{screenshotKey}', 'null'::jsonb)` })
+      .where(eq(applications.id, id));
   }
 
   async events(applicationId: string): Promise<ApplicationEventRow[]> {

@@ -14,6 +14,8 @@ const base: ApplicationPublic = {
   lastError: "",
   form: null,
   plan: null,
+  preview: null,
+  payloadHash: null,
   createdAt: "2026-10-14T12:00:00.000Z",
   updatedAt: "2026-10-14T12:00:00.000Z",
   events: [],

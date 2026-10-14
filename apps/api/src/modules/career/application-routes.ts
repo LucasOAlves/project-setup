@@ -3,6 +3,7 @@ import type { FastifyInstance } from "fastify";
 import { notFound } from "../../app-error.js";
 import type { ApplicationDispatcher } from "./application-dispatcher.js";
 import type { ApplicationService } from "./application-service.js";
+import type { StorageProvider } from "../uploads/storage-provider.js";
 
 const idSchema = z.string().uuid();
 
@@ -18,6 +19,7 @@ export async function registerApplicationRoutes(
   app: FastifyInstance,
   applications: ApplicationService,
   dispatcher: Pick<ApplicationDispatcher, "dispatch" | "close">,
+  storage: Pick<StorageProvider, "get">,
 ): Promise<void> {
   app.addHook("onClose", async () => {
     await dispatcher.close();
@@ -32,6 +34,15 @@ export async function registerApplicationRoutes(
   app.get("/api/career/jobs/:id/application", async (request) => {
     const { id } = request.params as { id: string };
     return { application: await applications.getForJob(parseId(id, "Job")) };
+  });
+
+  // The last preview's screenshot, with every typed value masked. Kept for 30 days.
+  app.get("/api/career/applications/:id/preview.png", async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const key = await applications.screenshotKey(parseId(id, "Application"));
+    const file = key ? await storage.get(key) : null;
+    if (!file) throw notFound("No preview screenshot is kept for this application.");
+    return reply.header("content-type", "image/png").header("cache-control", "no-store").send(file.bytes);
   });
 
   app.post("/api/career/applications/:id/reject", async (request) => {

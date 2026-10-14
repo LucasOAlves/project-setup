@@ -41,7 +41,26 @@ const GREENHOUSE = `<!doctype html><html lang="en"><head><title>Job Application 
   <input type="text" name="website_url_confirm" tabindex="-1" autocomplete="off" style="display:none">
   <input type="hidden" name="fingerprint" value="mock">
   <button type="submit" class="btn btn--pill">Submit application</button>
-</form></main></body></html>`;
+</form>
+<div id="location-suggestions" role="listbox"></div>
+<script>
+  // Like Greenhouse's location autocomplete: suggestions appear as you type, a click picks one.
+  const field = document.getElementById("candidate-location");
+  const list = document.getElementById("location-suggestions");
+  field.addEventListener("input", () => {
+    list.innerHTML = "";
+    const city = field.value.split(",")[0].trim();
+    if (!city) return;
+    const option = document.createElement("div");
+    option.setAttribute("role", "option");
+    option.textContent = city + ", Mock State, " + (field.value.split(",")[1] || "").trim();
+    option.addEventListener("click", () => { field.value = option.textContent; list.innerHTML = ""; });
+    list.appendChild(option);
+  });
+  // A real portal posts the form here. The browser worker must never let this run.
+  document.getElementById("application-form").addEventListener("submit", () => { document.title = "SUBMITTED"; });
+</script>
+</main></body></html>`;
 
 const LEVER = `<!doctype html><html lang="en"><head><title>Acme Mock - Senior Backend Engineer</title></head><body>
 <div class="content"><div class="posting-headline"><h2>Senior Backend Engineer</h2></div>${INJECTION}
@@ -95,7 +114,18 @@ const ASHBY = `<!doctype html><html lang="en"><head><title>Staff Engineer @ Acme
   <div class="ashby-application-form-field-entry"><label class="ashby-application-form-question-title _required" for="a1b2-tz">Which time zone do you work in?<span>*</span></label>
     <select id="a1b2-tz" name="a1b2-tz" required><option value="">Select...</option><option>UTC-3</option><option>UTC-5</option><option>UTC+0</option><option>UTC+1</option></select></div>
   <button type="submit" class="ashby-application-form-submit-button">Submit Application</button>
-</div></div></body></html>`;
+</div></div>
+<script>
+  // Like Ashby's Yes/No buttons: the chosen one is marked pressed.
+  for (const group of document.querySelectorAll("._yesno_mock")) {
+    for (const button of group.querySelectorAll("button")) {
+      button.addEventListener("click", () => {
+        for (const other of group.querySelectorAll("button")) other.setAttribute("aria-pressed", String(other === button));
+      });
+    }
+  }
+</script>
+</body></html>`;
 
 const PAGES: Record<SupportedApplicationPortal, { url: string; html: string }> = {
   greenhouse: { url: MOCK_POSTINGS.greenhouse, html: GREENHOUSE },
