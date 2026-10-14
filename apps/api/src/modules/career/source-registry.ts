@@ -1,5 +1,10 @@
 import { eq } from "drizzle-orm";
-import type { SourcePublic } from "@studio/shared";
+import {
+  SUPPORTED_APPLICATION_PORTALS,
+  type SourceApplicationMode,
+  type SourcePublic,
+  type SupportedApplicationPortal,
+} from "@studio/shared";
 import { notFound, validationError } from "../../app-error.js";
 import type { Database } from "../../db/client.js";
 import { sources } from "../../db/schema.js";
@@ -31,6 +36,28 @@ export class SourceRegistry implements SourceGate {
       throw notFound("That source does not exist.");
     }
     return toPublic(row);
+  }
+
+  // How far application automation may go on a portal (Milestone 4). AUTOMATED is only offered
+  // for the portals the browser worker can fill.
+  async setApplicationMode(id: string, mode: SourceApplicationMode): Promise<SourcePublic> {
+    if (mode === "AUTOMATED" && !(SUPPORTED_APPLICATION_PORTALS as readonly string[]).includes(id)) {
+      throw validationError("Only Greenhouse, Lever and Ashby can submit applications automatically.");
+    }
+    const [row] = await this.db
+      .update(sources)
+      .set({ applicationMode: mode, updatedAt: new Date() })
+      .where(eq(sources.id, id))
+      .returning();
+    if (!row) {
+      throw notFound("That source does not exist.");
+    }
+    return toPublic(row);
+  }
+
+  async applicationPolicy(portal: SupportedApplicationPortal): Promise<{ enabled: boolean; applicationMode: SourceApplicationMode } | null> {
+    const [row] = await this.db.select().from(sources).where(eq(sources.id, portal)).limit(1);
+    return row ? { enabled: row.enabled, applicationMode: toPublic(row).applicationMode } : null;
   }
 
   async assertDiscoveryAllowed(sourceId: string): Promise<void> {

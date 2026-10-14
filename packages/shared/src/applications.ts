@@ -165,6 +165,8 @@ export const applicationPublicSchema = z.object({
   // approval is bound to it.
   payloadHash: z.string().nullable(),
   approval: approvalPublicSchema.nullable(),
+  // Whether the app would submit this application itself once approved, and if not, why.
+  submission: z.object({ allowed: z.boolean(), reason: z.string() }),
   createdAt: z.string(),
   updatedAt: z.string(),
   events: z.array(applicationEventPublicSchema),

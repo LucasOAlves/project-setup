@@ -26,8 +26,9 @@ export async function registerCareerRoutes(
   sources: SourceRegistry,
   documents?: Pick<ApplicationDocumentService, "deleteFilesForJob">,
 ): Promise<void> {
-  // Source settings (spec §8 GET /settings/sources). Only `enabled` is user-editable here,
-  // discovery permission and application mode change through reviewed migrations.
+  // Source settings (spec §8 GET /settings/sources). `enabled` and, for the three automated
+  // portals, the application mode are user-editable here; discovery permission changes through
+  // reviewed migrations.
   app.get("/api/career/sources", async () => {
     return { sources: await sources.list() };
   });
@@ -36,9 +37,11 @@ export async function registerCareerRoutes(
     const { id } = request.params as { id: string };
     const parsed = sourcePatchInputSchema.safeParse(request.body);
     if (!parsed.success) {
-      throw validationError("Send enabled as true or false.");
+      throw validationError("Send enabled as true or false, or applicationMode as MANUAL, ASSISTED or AUTOMATED.");
     }
-    return { source: await sources.setEnabled(id, parsed.data.enabled) };
+    let source = parsed.data.enabled !== undefined ? await sources.setEnabled(id, parsed.data.enabled) : null;
+    if (parsed.data.applicationMode !== undefined) source = await sources.setApplicationMode(id, parsed.data.applicationMode);
+    return { source };
   });
 
   // Talent-platform checklist for the job-site catalog (Milestone 1.5). The catalog itself is

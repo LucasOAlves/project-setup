@@ -126,6 +126,13 @@ approval lasts 24 hours. Preparing again, new answers, rejecting or **Withdraw a
 cancel it. Submitting an approved application is the next part of Milestone 4. Until then
 nothing is sent.
 
+Automatic submission stays off unless two settings agree: `APPLICATION_SUBMISSION_ENABLED=true`
+for the deployment, and the portal set to `AUTOMATED` in source settings
+(`PATCH /api/career/sources/greenhouse` with `{"applicationMode":"AUTOMATED"}`, likewise for
+`lever` and `ashby`). Greenhouse, Lever and Ashby start as `ASSISTED`: the app prepares, you
+submit. Check each portal's terms before turning it on. The application panel says which
+applies.
+
 Recruiters & contacts is a lightweight career CRM: add a contact under a company, optionally
 tie them to a tracked job, and track connection status (Not connected/Requested/Connected).
 "Score relevance" is a deterministic score (company match, role, job link — see

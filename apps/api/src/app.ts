@@ -55,6 +55,7 @@ import { ApplicationDocumentService } from "./modules/career/application-documen
 import { registerDocumentRoutes } from "./modules/career/document-routes.js";
 import { ApplicationRepository } from "./modules/career/application-repository.js";
 import { ApplicationService } from "./modules/career/application-service.js";
+import { submissionCheckFor } from "./modules/career/submission-permission.js";
 import { registerApplicationRoutes } from "./modules/career/application-routes.js";
 import { ApplicationDispatcher } from "./modules/career/application-dispatcher.js";
 import { ApplicationAnswerService } from "./modules/career/application-answer-service.js";
@@ -190,10 +191,16 @@ export async function buildApp(env: Env, db: Database) {
   const coverLetters = new CoverLetterGenerator(materialsDeps);
   const answers = new ApplicationAnswersGenerator(materialsDeps);
   const applicationRepo = new ApplicationRepository(db);
-  const applications = new ApplicationService(applicationRepo, new AuditRepository(db), async (jobId) => {
-    const job = await careerRepository.getJob(jobId);
-    return job ? { id: job.id, url: job.url } : null;
-  });
+  const applications = new ApplicationService(
+    applicationRepo,
+    new AuditRepository(db),
+    async (jobId) => {
+      const job = await careerRepository.getJob(jobId);
+      return job ? { id: job.id, url: job.url } : null;
+    },
+    () => new Date(),
+    submissionCheckFor(env.APPLICATION_SUBMISSION_ENABLED, (portal) => sourceRegistry.applicationPolicy(portal)),
+  );
 
   await registerAuth(app, authConfigFromEnv(env), new AuditRepository(db));
 

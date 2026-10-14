@@ -306,7 +306,11 @@ export const sourcePublicSchema = z.object({
 });
 export type SourcePublic = z.infer<typeof sourcePublicSchema>;
 
-export const sourcePatchInputSchema = z.object({ enabled: z.boolean() });
+// enabled turns a source on or off. applicationMode AUTOMATED lets the app submit approved
+// applications on that portal (Milestone 4); only Greenhouse, Lever and Ashby accept it.
+export const sourcePatchInputSchema = z
+  .object({ enabled: z.boolean().optional(), applicationMode: z.enum(SOURCE_APPLICATION_MODES).optional() })
+  .refine((input) => input.enabled !== undefined || input.applicationMode !== undefined);
 export type SourcePatchInput = z.infer<typeof sourcePatchInputSchema>;
 
 // Hard eligibility (Job Hunter, spec A03). UNKNOWN is never presented as ELIGIBLE.

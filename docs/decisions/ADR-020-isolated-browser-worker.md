@@ -82,3 +82,21 @@ endpoint. The default deny was chosen.
 
 Checking DNS before Chromium connects leaves a small rebinding window. Main-frame hosts are
 restricted to the ATS domains, which bounds what that window can reach.
+
+## Update (Milestone 4)
+
+Submission runs pass a submit gate to the guard (`SubmitGate` in `browser-guard.ts`). In such a
+run, exactly one write request may leave the browser: the approved posting's own submit request
+(Greenhouse: a POST under the posting's path; Lever: a POST to the posting's `/apply`; Ashby: the
+`ApiSubmitSingleApplicationFormAction` mutation naming the posting). It goes through only after
+the run has checked the approval again (`armSubmit`), and only once. Preparation runs pass no
+gate, so they still block every write, and they keep the in-page script that disables form
+submission. Submission runs leave that script out, because the one-shot gate outside the page is
+what decides. The real portals' submit requests were matched from their documented form actions
+and checked only against the mock portals. Ashby's real file upload in particular may need
+requests this gate does not yet allow, so the first real submission on each portal is a check.
+
+Automatic submission also needs `APPLICATION_SUBMISSION_ENABLED=true` and the portal's source
+row set to AUTOMATED (`submission-permission.ts`). Migration 0033 moves Greenhouse, Lever and
+Ashby from MANUAL to ASSISTED, which describes what Milestone 3 does. AUTOMATED is the user's
+choice per portal (`PATCH /api/career/sources/:id`), and only those three portals accept it.

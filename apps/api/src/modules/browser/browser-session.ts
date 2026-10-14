@@ -1,6 +1,6 @@
 import { lookup } from "node:dns/promises";
 import { chromium, type Browser, type BrowserContext, type Page } from "playwright-core";
-import { checkRequest, type PortalPolicy } from "./browser-guard.js";
+import { checkRequest, type PortalPolicy, type SubmitGate } from "./browser-guard.js";
 
 export type MockResponse = { status?: number; contentType: string; body: string };
 
@@ -12,16 +12,28 @@ export type BrowserSessionOptions = {
   // Tests serve mock portals through this hook. It runs only after the guard allowed the request.
   mockResponse?: (url: string, method: string) => MockResponse | null;
   resolveHost?: (hostname: string) => Promise<string[]>;
+  // Submission runs only (Milestone 4): the approved posting. Without it every write is blocked.
+  submit?: { destinationUrl: string };
 };
 
 export type GuardedSession = {
   page: Page;
   // Every request the guard refused in this run, for the run's record.
   blocked: string[];
+  // Submission runs only: opens the gate for one submit request. Call it right after the
+  // approval was checked again, just before the click.
+  armSubmit: () => void;
+  // The submit requests the guard let through (at most one), with their response status once
+  // one arrives.
+  submits: SubmitRecord[];
 };
 
-// Neutralizes form submission in every frame before any page script runs. Belt and braces:
-// the worker never clicks submit, and the network guard drops write requests anyway.
+export type SubmitRecord = { url: string; method: string; status: number | null };
+
+// Neutralizes form submission in every frame before any page script runs, in preparation runs.
+// Belt and braces: the worker never clicks submit there, and the network guard drops write
+// requests anyway. Submission runs leave it out: there the guard's armed, one-shot gate is
+// what lets the single submit request through, and it lives outside the page.
 const NO_SUBMIT_SCRIPT = `(() => {
   document.addEventListener("submit", (event) => { event.preventDefault(); event.stopImmediatePropagation(); }, true);
   HTMLFormElement.prototype.submit = function () {};
@@ -48,6 +60,8 @@ export async function withGuardedPage<T>(
   const resolveHost = options.resolveHost ?? resolveWithDns;
   const resolved = new Map<string, Promise<string[]>>();
   const blocked: string[] = [];
+  const submits: SubmitRecord[] = [];
+  const gate: SubmitGate | undefined = options.submit ? { destinationUrl: options.submit.destinationUrl, armed: false, used: 0 } : undefined;
 
   let browser: Browser | null = null;
   let context: BrowserContext | null = null;
@@ -78,7 +92,7 @@ export async function withGuardedPage<T>(
       viewport: { width: 1280, height: 900 },
     });
     context.setDefaultTimeout(options.navigationTimeoutMs ?? 30_000);
-    await context.addInitScript({ content: NO_SUBMIT_SCRIPT });
+    if (!gate) await context.addInitScript({ content: NO_SUBMIT_SCRIPT });
     // tsx compiles with esbuild's keepNames, which wraps functions in a __name() helper. The
     // functions we pass to page.evaluate carry those calls into the page, so define a no-op.
     await context.addInitScript({ content: "globalThis.__name = globalThis.__name || ((target) => target);" });
@@ -100,14 +114,23 @@ export async function withGuardedPage<T>(
       const decision = checkRequest(
         { url, method: request.method(), isNavigation: request.isNavigationRequest(), resolvedAddresses: addresses, postData: request.postData() },
         policy,
+        gate,
       );
       if (!decision.allow) {
         blocked.push(decision.reason);
         await route.abort("blockedbyclient");
         return;
       }
+      let record: SubmitRecord | null = null;
+      if (decision.submit && gate) {
+        // Counted before the request leaves, so a second one is refused even if it races.
+        gate.used += 1;
+        record = { url, method: request.method(), status: null };
+        submits.push(record);
+      }
       const mock = options.mockResponse?.(url, request.method());
       if (mock) {
+        if (record) record.status = mock.status ?? 200;
         await route.fulfill({ status: mock.status ?? 200, contentType: mock.contentType, body: mock.body });
         return;
       }
@@ -115,6 +138,16 @@ export async function withGuardedPage<T>(
         // Under test, nothing reaches the real network.
         await route.abort("internetdisconnected");
         return;
+      }
+      if (record) {
+        const sent = record;
+        // A request that fails after leaving keeps status null: sent or not, nobody can tell.
+        void request
+          .response()
+          .then((response) => {
+            sent.status = response?.status() ?? null;
+          })
+          .catch(() => undefined);
       }
       await route.continue();
     });
@@ -130,7 +163,10 @@ export async function withGuardedPage<T>(
         void page.close();
       }
     });
-    return run({ page, blocked });
+    const armSubmit = () => {
+      if (gate) gate.armed = true;
+    };
+    return run({ page, blocked, armSubmit, submits });
   };
 
   try {

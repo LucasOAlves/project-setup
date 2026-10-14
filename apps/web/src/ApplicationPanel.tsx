@@ -210,6 +210,7 @@ export function ApplicationPanel({ jobId, jobUrl }: { jobId: string; jobUrl: str
                 Approving allows exactly this form, with these values and files, to be sent to {new URL(application.destinationUrl).host}{" "}
                 within 24 hours. Any change withdraws the approval.
               </p>
+              <p className="status" data-testid="submission-permission">{application.submission.reason}</p>
               <button className="btn" type="button" disabled={busy} onClick={() => void act(() => approveApplication(application))}>
                 Approve this application
               </button>

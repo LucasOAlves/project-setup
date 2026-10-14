@@ -42,6 +42,12 @@ const envSchema = z.object({
   // Browser worker (Milestone 3). Empty uses Playwright's own Chromium.
   BROWSER_EXECUTABLE_PATH: z.string().default(""),
   BROWSER_RUN_TIMEOUT_MS: z.coerce.number().int().positive().default(120_000),
+  // Milestone 4: lets the browser worker submit approved applications on portals set to
+  // AUTOMATED in source settings. Off by default; approving then leads to the assisted path.
+  APPLICATION_SUBMISSION_ENABLED: z
+    .enum(["true", "false"])
+    .default("false")
+    .transform((value) => value === "true"),
   // Development only: serve the mock portals instead of the network, to try the flow locally.
   BROWSER_MOCK_PORTALS: z
     .enum(["true", "false"])

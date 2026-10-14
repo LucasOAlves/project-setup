@@ -149,3 +149,80 @@ test("a read-only query to a host that is not the portal is still a write and is
   );
   assert.equal(result.allow, false);
 });
+
+// Milestone 4: submit mode. Only a submission run opens the gate, only after it has rechecked
+// the approval, only once, and only for the approved posting's own submit request.
+
+const lever = portalPolicy("lever");
+const LEVER_POSTING = "https://jobs.lever.co/acmemock/0b6f2a1e-mock";
+const GREENHOUSE_POSTING = "https://job-boards.greenhouse.io/acmemock/jobs/4000001";
+const ASHBY_POSTING = "https://jobs.ashbyhq.com/acmemock/7c1d-mock";
+const armed = (destinationUrl: string, used = 0) => ({ destinationUrl, armed: true, used });
+
+function ashbySubmit(jobPostingId: string, operationName = "ApiSubmitSingleApplicationFormAction") {
+  return request({
+    url: `https://jobs.ashbyhq.com/api/non-user-graphql?op=${operationName}`,
+    method: "POST",
+    isNavigation: false,
+    postData: JSON.stringify({ operationName, query: `mutation ${operationName}($x: X) { y }`, variables: { jobPostingId } }),
+  });
+}
+
+test("an armed submission run lets the approved posting's submit request through once", () => {
+  const leverSubmit = request({ url: `${LEVER_POSTING}/apply`, method: "POST", isNavigation: true });
+  assert.deepEqual(checkRequest(leverSubmit, lever, armed(LEVER_POSTING)), { allow: true, submit: true });
+
+  const greenhouseSubmit = request({ url: `${GREENHOUSE_POSTING}/applications`, method: "POST", isNavigation: false });
+  assert.deepEqual(checkRequest(greenhouseSubmit, greenhouse, armed(GREENHOUSE_POSTING)), { allow: true, submit: true });
+
+  assert.deepEqual(checkRequest(ashbySubmit("7c1d-mock"), ashby, armed(ASHBY_POSTING)), { allow: true, submit: true });
+});
+
+test("a second submit request in the same run is blocked", () => {
+  const leverSubmit = request({ url: `${LEVER_POSTING}/apply`, method: "POST", isNavigation: true });
+  const result = checkRequest(leverSubmit, lever, armed(LEVER_POSTING, 1));
+  assert.equal(result.allow, false);
+  if (!result.allow) assert.match(result.reason, /already/i);
+});
+
+test("before the run rechecks the approval, the submit request is blocked", () => {
+  const leverSubmit = request({ url: `${LEVER_POSTING}/apply`, method: "POST", isNavigation: true });
+  const result = checkRequest(leverSubmit, lever, { destinationUrl: LEVER_POSTING, armed: false, used: 0 });
+  assert.equal(result.allow, false);
+  if (!result.allow) assert.match(result.reason, /approval/i);
+});
+
+test("without submit mode, a submit request is blocked as before", () => {
+  assert.equal(checkRequest(request({ url: `${LEVER_POSTING}/apply`, method: "POST", isNavigation: true }), lever).allow, false);
+  assert.equal(checkRequest(ashbySubmit("7c1d-mock"), ashby).allow, false);
+});
+
+test("a submit to another posting, or any other write, stays blocked in submit mode", () => {
+  const otherLever = request({ url: "https://jobs.lever.co/acmemock/another-posting/apply", method: "POST", isNavigation: true });
+  assert.equal(checkRequest(otherLever, lever, armed(LEVER_POSTING)).allow, false);
+
+  const otherGreenhouse = request({ url: "https://job-boards.greenhouse.io/acmemock/jobs/4000002/applications", method: "POST", isNavigation: false });
+  assert.equal(checkRequest(otherGreenhouse, greenhouse, armed(GREENHOUSE_POSTING)).allow, false);
+  const prefixTrick = request({ url: "https://job-boards.greenhouse.io/acmemock/jobs/40000019/applications", method: "POST", isNavigation: false });
+  assert.equal(checkRequest(prefixTrick, greenhouse, armed(GREENHOUSE_POSTING)).allow, false);
+
+  const leverOther = request({ url: `${LEVER_POSTING}/something-else`, method: "POST", isNavigation: false });
+  assert.equal(checkRequest(leverOther, lever, armed(LEVER_POSTING)).allow, false);
+  const leverPut = request({ url: `${LEVER_POSTING}/apply`, method: "PUT", isNavigation: false });
+  assert.equal(checkRequest(leverPut, lever, armed(LEVER_POSTING)).allow, false);
+
+  assert.equal(checkRequest(ashbySubmit("another-posting"), ashby, armed(ASHBY_POSTING)).allow, false);
+  assert.equal(checkRequest(ashbySubmit("7c1d-mock", "ApiDeleteSomething"), ashby, armed(ASHBY_POSTING)).allow, false);
+});
+
+test("a submit request to a host outside the portal is blocked even when armed", () => {
+  const offsite = request({ url: "https://evil.example.com/acmemock/0b6f2a1e-mock/apply", method: "POST", isNavigation: false });
+  assert.equal(checkRequest(offsite, lever, armed(LEVER_POSTING)).allow, false);
+  const privateHost = request({ url: `${LEVER_POSTING}/apply`, method: "POST", isNavigation: true, resolvedAddresses: ["10.0.0.5"] });
+  assert.equal(checkRequest(privateHost, lever, armed(LEVER_POSTING)).allow, false);
+});
+
+test("a Lever destination given as its /apply page still matches its submit request", () => {
+  const leverSubmit = request({ url: `${LEVER_POSTING}/apply`, method: "POST", isNavigation: true });
+  assert.deepEqual(checkRequest(leverSubmit, lever, armed(`${LEVER_POSTING}/apply`)), { allow: true, submit: true });
+});

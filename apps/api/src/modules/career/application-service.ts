@@ -22,10 +22,14 @@ import type {
 } from "./application-repository.js";
 import { APPROVAL_TTL_MS, checkApproval } from "./application-approval.js";
 import { checkTransition, initialApplicationState } from "./application-state.js";
+import { SUBMISSION_BLOCK_TEXT, type SubmissionPermission } from "./submission-permission.js";
 
 type Repo = Pick<ApplicationRepository, "get" | "findByJob" | "create" | "transition" | "events" | "approve" | "liveApproval">;
 type Audit = { record(input: AuditEventInput): Promise<void> };
 type JobLookup = (jobId: string) => Promise<{ id: string; url: string } | null>;
+type SubmissionCheck = (application: { mode: string; portal: string | null }) => Promise<SubmissionPermission>;
+
+const SWITCHED_OFF: SubmissionCheck = async () => ({ allowed: false, reason: "SWITCHED_OFF" });
 
 const SUPPORTED = new Set<string>(SUPPORTED_APPLICATION_PORTALS);
 
@@ -48,6 +52,7 @@ export class ApplicationService {
     private readonly audit: Audit,
     private readonly findJob: JobLookup,
     private readonly now: () => Date = () => new Date(),
+    private readonly submissionCheck: SubmissionCheck = SWITCHED_OFF,
   ) {}
 
   async getForJob(jobId: string): Promise<ApplicationPublic | null> {
@@ -231,6 +236,7 @@ export class ApplicationService {
   private async toPublic(row: ApplicationRow): Promise<ApplicationPublic> {
     const events = await this.repo.events(row.id);
     const approval = row.status === "APPROVED" || row.status === "SUBMITTING" ? await this.repo.liveApproval(row.id) : null;
+    const permission = await this.submissionCheck(row);
     return {
       id: row.id,
       jobId: row.jobId,
@@ -252,6 +258,9 @@ export class ApplicationService {
             expiresAt: approval.expiresAt.toISOString(),
           }
         : null,
+      submission: permission.allowed
+        ? { allowed: true, reason: "Once approved, the app submits this application and checks the result." }
+        : { allowed: false, reason: SUBMISSION_BLOCK_TEXT[permission.reason] },
       createdAt: row.createdAt.toISOString(),
       updatedAt: row.updatedAt.toISOString(),
       events: events.map(toPublicEvent),

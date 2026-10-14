@@ -73,3 +73,36 @@ test("a run that takes too long is stopped", { skip }, async () => {
     BrowserRunTimeout,
   );
 });
+
+test("a submission run lets exactly one submit through, and only after it is armed", { skip }, async () => {
+  const submitOptions = {
+    ...options,
+    submit: { destinationUrl: PAGE_URL },
+    mockResponse: (url: string, method: string) => {
+      if (url === PAGE_URL) return { contentType: "text/html", body: FORM };
+      if (method === "POST" && url === `${PAGE_URL}/applications`) {
+        return { contentType: "text/html", body: "<!doctype html><title>Thanks</title><h1>Thank you for applying</h1>" };
+      }
+      return null;
+    },
+  };
+  const result = await withGuardedPage(portalPolicy("greenhouse"), submitOptions, async ({ page, blocked, armSubmit, submits }) => {
+    await page.goto(PAGE_URL);
+    // Not armed yet: the page's own submit goes nowhere.
+    await page.evaluate(() => fetch("https://job-boards.greenhouse.io/acme/jobs/123/applications", { method: "POST", body: "x" }).catch(() => "blocked"));
+    const beforeArm = submits.length;
+    armSubmit();
+    await Promise.all([page.waitForURL(`${PAGE_URL}/applications`), page.click("button[type=submit]")]);
+    const heading = await page.locator("h1").innerText();
+    // A second submit in the same run is refused.
+    await page.evaluate(() => fetch("https://job-boards.greenhouse.io/acme/jobs/123/applications", { method: "POST", body: "again" }).catch(() => "blocked"));
+    await page.waitForTimeout(200);
+    return { beforeArm, heading, submits: [...submits], blocked: [...blocked] };
+  });
+
+  assert.equal(result.beforeArm, 0);
+  assert.equal(result.heading, "Thank you for applying");
+  assert.deepEqual(result.submits.map((record) => [record.method, record.status]), [["POST", 200]]);
+  assert.ok(result.blocked.some((reason) => /before the approval/.test(reason)), result.blocked.join("\n"));
+  assert.ok(result.blocked.some((reason) => /already sent the application once/.test(reason)), result.blocked.join("\n"));
+});
