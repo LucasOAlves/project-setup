@@ -1041,6 +1041,22 @@ export async function rejectApplication(applicationId: string): Promise<Applicat
   return ((await response.json()) as { application: ApplicationPublic }).application;
 }
 
+export async function approveApplication(application: Pick<ApplicationPublic, "id" | "payloadHash">): Promise<ApplicationPublic> {
+  const response = await fetch(`/api/career/applications/${application.id}/approve`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ payloadHash: application.payloadHash }),
+  });
+  if (!response.ok) throw await parseError(response);
+  return ((await response.json()) as { application: ApplicationPublic }).application;
+}
+
+export async function withdrawApproval(applicationId: string): Promise<ApplicationPublic> {
+  const response = await fetch(`/api/career/applications/${applicationId}/approval/withdraw`, { method: "POST" });
+  if (!response.ok) throw await parseError(response);
+  return ((await response.json()) as { application: ApplicationPublic }).application;
+}
+
 export function applicationPreviewUrl(application: Pick<ApplicationPublic, "id" | "preview">): string {
   return `/api/career/applications/${application.id}/preview.png?at=${encodeURIComponent(application.preview?.capturedAt ?? "")}`;
 }

@@ -5,7 +5,7 @@ import type { ApplicationService } from "./application-service.js";
 import type { SavedAnswer } from "./saved-answer-repository.js";
 
 type Deps = {
-  applications: Pick<ApplicationService, "get">;
+  applications: Pick<ApplicationService, "get" | "withdrawApproval">;
   saveAnswers: (answers: SavedAnswer[]) => Promise<void>;
   setAgreed: (applicationId: string, agreed: string[]) => Promise<void>;
   audit: { record(input: AuditEventInput): Promise<void> };
@@ -23,6 +23,9 @@ export class ApplicationAnswerService {
     const application = await this.deps.applications.get(applicationId).catch(() => null);
     if (!application) throw notFound("Application not found.");
     if (application.status === "PREPARING") throw conflict("Wait for the current preparation to finish.");
+    if (application.status === "SUBMITTING" || application.status === "SUBMITTED" || application.status === "SUBMISSION_UNKNOWN") {
+      throw conflict("This application was submitted or is being submitted, so its answers can no longer change.");
+    }
     const plan = application.plan ?? [];
     const byKey = new Map(plan.map((field) => [field.questionKey, field]));
 
@@ -45,6 +48,10 @@ export class ApplicationAnswerService {
       }
     }
 
+    // New answers mean the approved payload is no longer what you want sent.
+    if (application.status === "APPROVED") {
+      await this.deps.applications.withdrawApproval(application.id, "You changed your answers, so your approval was withdrawn.");
+    }
     await this.deps.saveAnswers(answers);
     await this.deps.setAgreed(application.id, parsed.data.agreed);
     // Counts only: answers can carry personal details.

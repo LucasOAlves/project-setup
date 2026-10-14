@@ -9,6 +9,8 @@ import type {
 } from "@studio/shared";
 import {
   applicationPreviewUrl,
+  approveApplication,
+  withdrawApproval,
   documentFileUrl,
   fetchApplication,
   fetchJobDocuments,
@@ -25,7 +27,15 @@ const STATE_LABELS: Record<ApplicationState, string> = {
   BLOCKED_BY_PLATFORM: "Blocked by the portal",
   FAILED: "Failed",
   USER_REJECTED: "Not applying",
+  APPROVED: "Approved",
+  SUBMITTING: "Submitting",
+  SUBMITTED: "Submitted",
+  SUBMISSION_UNKNOWN: "Result unknown",
+  EXPIRED: "Posting closed",
 };
+
+// While a submission runs or its result is unclear, nothing may start over.
+const SUBMISSION_LOCKED: ReadonlySet<ApplicationState> = new Set(["SUBMITTING", "SUBMITTED", "SUBMISSION_UNKNOWN"]);
 
 const SOURCE_LABELS: Record<FieldPlanSource, string> = {
   YOUR_DETAILS: "your details",
@@ -42,8 +52,8 @@ function isConsent(field: FieldPlan): boolean {
   return field.kind === "CHECKBOX" && field.options.length === 0;
 }
 
-// The application for one job (Milestone 3): prepare it in a private browser, answer what your
-// details do not cover, and review the filled form. Nothing is ever submitted from here.
+// The application for one job: prepare it in a private browser, answer what your details do not
+// cover, and review the filled form (Milestone 3), then approve exactly that form (Milestone 4).
 export function ApplicationPanel({ jobId, jobUrl }: { jobId: string; jobUrl: string }) {
   const [application, setApplication] = useState<ApplicationPublic | null>(null);
   const [loaded, setLoaded] = useState(false);
@@ -194,7 +204,30 @@ export function ApplicationPanel({ jobId, jobUrl }: { jobId: string; jobUrl: str
             </section>
           ) : null}
 
-          {settled ? (
+          {application.status === "READY_FOR_REVIEW" && application.mode === "AUTOMATED" && application.payloadHash ? (
+            <section className="approval">
+              <p className="status">
+                Approving allows exactly this form, with these values and files, to be sent to {new URL(application.destinationUrl).host}{" "}
+                within 24 hours. Any change withdraws the approval.
+              </p>
+              <button className="btn" type="button" disabled={busy} onClick={() => void act(() => approveApplication(application))}>
+                Approve this application
+              </button>
+            </section>
+          ) : null}
+          {application.status === "APPROVED" && application.approval ? (
+            <section className="approval">
+              <p className="status">
+                You approved this application on {new Date(application.approval.decidedAt).toLocaleString()}. The approval expires on{" "}
+                {new Date(application.approval.expiresAt).toLocaleString()}.
+              </p>
+              <button className="btn ghost" type="button" disabled={busy} onClick={() => void act(() => withdrawApproval(application.id))}>
+                Withdraw approval
+              </button>
+            </section>
+          ) : null}
+
+          {settled && !SUBMISSION_LOCKED.has(application.status) ? (
             <div className="actions" style={{ justifyContent: "flex-start" }}>
               <button className="btn ghost" type="button" disabled={busy} onClick={() => void prepare()}>
                 Prepare again

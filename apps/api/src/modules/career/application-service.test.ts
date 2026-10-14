@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { AppError } from "../../app-error.js";
 import type { AuditEventInput } from "../audit/audit-repository.js";
-import type { ApplicationEventRow, ApplicationRow } from "./application-repository.js";
+import type { ApplicationEventRow, ApplicationRow, ApprovalRow, NewApproval } from "./application-repository.js";
 import { ApplicationService, supportedPortal } from "./application-service.js";
 
 const JOB = "11111111-1111-4111-8111-111111111111";
@@ -12,6 +12,7 @@ function setup(jobUrl = "https://job-boards.greenhouse.io/acme/jobs/123", clock 
   const rows: ApplicationRow[] = [];
   const events: ApplicationEventRow[] = [];
   const audits: AuditEventInput[] = [];
+  const approvals: ApprovalRow[] = [];
   let ids = 0;
   const nextId = () => `00000000-0000-4000-8000-${String(++ids).padStart(12, "0")}`;
   const repo = {
@@ -33,8 +34,25 @@ function setup(jobUrl = "https://job-boards.greenhouse.io/acme/jobs/123", clock 
       const row = rows.find((candidate) => candidate.id === id && candidate.status === from);
       if (!row) return null;
       Object.assign(row, patch, { status: to, updatedAt: clock.now });
+      if (!["SUBMITTING", "SUBMITTED", "SUBMISSION_UNKNOWN"].includes(to)) {
+        for (const approval of approvals) {
+          if (approval.applicationId === id && !approval.invalidatedAt) Object.assign(approval, { invalidatedAt: clock.now, invalidationReason: record.reason });
+        }
+      }
       events.push({ id: nextId(), applicationId: id, fromStatus: from, toStatus: to, createdAt: new Date(), ...record });
       return row;
+    },
+    async approve(id: string, record: { actor: string; reason: string }, input: NewApproval) {
+      const row = rows.find((candidate) => candidate.id === id && candidate.status === "READY_FOR_REVIEW");
+      if (!row) return null;
+      Object.assign(row, { status: "APPROVED", updatedAt: clock.now });
+      const approval: ApprovalRow = { id: nextId(), applicationId: id, decision: "APPROVED", invalidatedAt: null, invalidationReason: "", ...input };
+      approvals.push(approval);
+      events.push({ id: nextId(), applicationId: id, fromStatus: "READY_FOR_REVIEW", toStatus: "APPROVED", createdAt: clock.now, ...record });
+      return { row, approval };
+    },
+    async liveApproval(applicationId: string) {
+      return approvals.filter((approval) => approval.applicationId === applicationId && !approval.invalidatedAt).at(-1) ?? null;
     },
     async events(applicationId: string) {
       return events.filter((event) => event.applicationId === applicationId);
@@ -46,7 +64,7 @@ function setup(jobUrl = "https://job-boards.greenhouse.io/acme/jobs/123", clock 
     },
   };
   const service = new ApplicationService(repo, audit, async (id) => (id === JOB ? { id, url: jobUrl } : null), () => clock.now);
-  return { service, rows, audits };
+  return { service, rows, audits, approvals, clock };
 }
 
 async function rejects(promise: Promise<unknown>, status: number, message?: RegExp) {
@@ -171,4 +189,103 @@ test("starting again over an abandoned run expires it first", async () => {
     restarted.events.map((event) => event.toStatus),
     ["PREPARING", "FAILED", "PREPARING"],
   );
+});
+
+// Milestone 4: approval.
+
+const HASH = "a".repeat(64);
+const CV = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+
+async function readyForReview(setupResult = setup()) {
+  const { service } = setupResult;
+  const started = await service.startPreparation(JOB);
+  await service.recordOutcome(started.id, "READY_FOR_REVIEW", "WORKER", "Prepared.", {
+    payloadHash: HASH,
+    fieldPlan: [
+      { key: "f1", questionKey: "resume", label: "Resume", kind: "FILE", required: true, options: [], status: "FILLED", value: "CV PDF", documentId: CV, source: "CV" },
+    ],
+    formSnapshot: { portal: "greenhouse", url: "https://job-boards.greenhouse.io/acme/jobs/123", title: "Engineer", fields: [], readAt: "2026-10-14T11:59:00.000Z" },
+  });
+  return { ...setupResult, id: started.id };
+}
+
+test("the user approves the exact payload they reviewed, with a 24-hour expiry and an audit event", async () => {
+  const { service, id, audits, approvals } = await readyForReview();
+  const approved = await service.approve(id, { payloadHash: HASH });
+  assert.equal(approved.status, "APPROVED");
+  assert.equal(approved.approval?.payloadHash, HASH);
+  assert.equal(approved.approval?.expiresAt, "2026-10-15T12:00:00.000Z");
+  assert.deepEqual(approvals[0]?.documentIds, [CV]);
+  assert.equal(approvals[0]?.formRevision, "2026-10-14T11:59:00.000Z");
+  const event = audits.find((audit) => audit.eventType === "APPLICATION_APPROVED");
+  assert.equal(event?.actor, "USER");
+  assert.equal(event?.payload?.payloadHash, HASH);
+});
+
+test("approving a hash other than the current one is refused", async () => {
+  const { service, id } = await readyForReview();
+  await rejects(service.approve(id, { payloadHash: "b".repeat(64) }), 409, /changed since you reviewed/);
+  await rejects(service.approve(id, { payloadHash: "not a hash" }), 400);
+});
+
+test("only an application ready for review can be approved", async () => {
+  const { service } = setup();
+  const started = await service.startPreparation(JOB);
+  await service.recordOutcome(started.id, "NEEDS_INFORMATION", "WORKER", "Questions.", { payloadHash: HASH });
+  await rejects(service.approve(started.id, { payloadHash: HASH }), 409, /ready for review/);
+});
+
+test("a manual application has nothing to approve", async () => {
+  const { service } = setup("https://acme.com/careers/1");
+  const started = await service.startPreparation(JOB);
+  await service.recordOutcome(started.id, "READY_FOR_REVIEW", "SYSTEM", "Manual.");
+  await rejects(service.approve(started.id, { payloadHash: HASH }), 409, /by hand/);
+});
+
+test("preparing again invalidates the approval", async () => {
+  const { service, id, approvals } = await readyForReview();
+  await service.approve(id, { payloadHash: HASH });
+  const again = await service.startPreparation(JOB);
+  assert.equal(again.status, "PREPARING");
+  assert.equal(again.approval, null);
+  assert.ok(approvals[0]?.invalidatedAt);
+});
+
+test("withdrawing returns the application to review and invalidates the approval", async () => {
+  const { service, id, approvals } = await readyForReview();
+  await service.approve(id, { payloadHash: HASH });
+  const withdrawn = await service.withdrawApproval(id);
+  assert.equal(withdrawn.status, "READY_FOR_REVIEW");
+  assert.equal(approvals[0]?.invalidationReason, "You withdrew your approval.");
+  await rejects(service.withdrawApproval(id), 409);
+});
+
+test("an approval past 24 hours lapses back to review when the application is read", async () => {
+  const setupResult = setup();
+  const { service, id, approvals, clock } = await readyForReview(setupResult);
+  await service.approve(id, { payloadHash: HASH });
+  clock.now = new Date("2026-10-15T12:00:00Z");
+  const read = await service.get(id);
+  assert.equal(read.status, "READY_FOR_REVIEW");
+  assert.equal(read.events.at(-1)?.actor, "SYSTEM");
+  assert.ok(approvals[0]?.invalidatedAt);
+});
+
+test("a submission run that stalls becomes SUBMISSION_UNKNOWN, not FAILED", async () => {
+  const setupResult = setup();
+  const { service, id, rows, clock } = await readyForReview(setupResult);
+  await service.approve(id, { payloadHash: HASH });
+  Object.assign(rows[0]!, { status: "SUBMITTING", updatedAt: clock.now });
+  clock.now = new Date(clock.now.getTime() + 11 * 60 * 1000);
+  const read = await service.get(id);
+  assert.equal(read.status, "SUBMISSION_UNKNOWN");
+  assert.equal(read.lastError, "ABANDONED");
+});
+
+test("a submission in progress cannot be rejected or prepared again", async () => {
+  const { service, id, rows } = await readyForReview();
+  await service.approve(id, { payloadHash: HASH });
+  rows[0]!.status = "SUBMITTING";
+  await rejects(service.reject(id), 409);
+  await rejects(service.startPreparation(JOB), 409);
 });

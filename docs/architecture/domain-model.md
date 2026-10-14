@@ -279,8 +279,12 @@ reach a text provider by accident. Validated by `applicationDetailsInputSchema` 
 
 The application for one `Job` (`applications`, migration 0027; spec §4 and §7). Each job has
 exactly one row (`job_id` UNIQUE). It records:
-- `status`: PREPARING, NEEDS_INFORMATION, READY_FOR_REVIEW, BLOCKED_BY_PLATFORM, FAILED or
-  USER_REJECTED;
+- `status`: PREPARING, NEEDS_INFORMATION, READY_FOR_REVIEW, BLOCKED_BY_PLATFORM, FAILED,
+  USER_REJECTED, and from Milestone 4 APPROVED, SUBMITTING, SUBMITTED, SUBMISSION_UNKNOWN and
+  EXPIRED (the posting closed). `application-state.ts` (test-first) enforces who may move it
+  where: only the user approves, only the worker moves APPROVED to SUBMITTING, SUBMITTED is
+  final, a stalled submission can only become SUBMISSION_UNKNOWN, and from there only the user
+  says whether it was sent;
 - `mode`: AUTOMATED when the posting is on a supported portal (Greenhouse, Lever, Ashby),
   otherwise MANUAL;
 - `portal`, `destinationUrl`, and the last run's error;
@@ -305,6 +309,21 @@ exactly one row (`job_id` UNIQUE). It records:
   Milestone 4's approval binds to it, so any material change makes a new hash.
 - `agreed` (migration 0031): the consent boxes the user ticked for this application. Unlike
   saved answers, they are never reused on another form.
+
+## Approval (Job Hunter)
+
+The user's approval of one exact application payload (`approvals`, migration 0032; spec A08
+and §7, ADR-022). Only the signed-in user can create one, only for an AUTOMATED application in
+READY_FOR_REVIEW, and only by sending back the payload hash they were shown. A row records the
+payload hash, destination URL, the attached document ids, the form revision (when the form was
+read), the decision time and an expiry 24 hours later. Rows are never edited except to record,
+once, when and why the approval was invalidated. A unique index allows one live approval per
+application. Every transition to a state other than SUBMITTING, SUBMITTED or
+SUBMISSION_UNKNOWN invalidates the live approval in the same transaction, so preparing again,
+rejecting, withdrawing, new answers and an expired approval all leave nothing a later run could
+use. `checkApproval` (`application-approval.ts`, test-first) is the one validity check: the
+application must be APPROVED or SUBMITTING, the approval live and unexpired, and the payload
+hash and destination unchanged.
 
 ## SavedFormAnswer (Job Hunter)
 

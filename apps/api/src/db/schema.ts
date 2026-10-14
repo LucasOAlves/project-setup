@@ -295,6 +295,22 @@ export const applications = pgTable("applications", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+export const approvals = pgTable("approvals", {
+  id: uuid("id").primaryKey(),
+  applicationId: uuid("application_id")
+    .notNull()
+    .references(() => applications.id, { onDelete: "cascade" }),
+  payloadHash: text("payload_hash").notNull(),
+  destinationUrl: text("destination_url").notNull(),
+  documentIds: jsonb("document_ids").$type<string[]>().notNull().default([]),
+  formRevision: text("form_revision").notNull().default(""),
+  decision: text("decision").notNull().default("APPROVED"),
+  decidedAt: timestamp("decided_at", { withTimezone: true }).notNull().defaultNow(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  invalidatedAt: timestamp("invalidated_at", { withTimezone: true }),
+  invalidationReason: text("invalidation_reason").notNull().default(""),
+});
+
 export const savedFormAnswers = pgTable("saved_form_answers", {
   questionKey: text("question_key").primaryKey(),
   label: text("label").notNull(),

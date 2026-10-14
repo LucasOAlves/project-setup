@@ -117,8 +117,14 @@ voluntary self-identification is never filled.
 
 A login, CAPTCHA or bot check stops the run as blocked. Nothing works around it. Any other
 portal, or a blocked one, shows the manual path instead: the posting link, the CV and the
-prepared answers to copy. Nothing is ever submitted from this screen. Submitting with your
-approval is Milestone 4.
+prepared answers to copy.
+
+When the review looks right, **Approve this application** records your approval of exactly
+that form: the same values, files and destination, identified by its payload hash
+([ADR-022](docs/decisions/ADR-022-payload-bound-approval.md)). Approving needs sign-in. The
+approval lasts 24 hours. Preparing again, new answers, rejecting or **Withdraw approval**
+cancel it. Submitting an approved application is the next part of Milestone 4. Until then
+nothing is sent.
 
 Recruiters & contacts is a lightweight career CRM: add a contact under a company, optionally
 tie them to a tracked job, and track connection status (Not connected/Requested/Connected).

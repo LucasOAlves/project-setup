@@ -1,10 +1,12 @@
 import { randomUUID } from "node:crypto";
-import { and, asc, eq, isNotNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, isNotNull, isNull, sql } from "drizzle-orm";
 import type { Database } from "../../db/client.js";
-import { applicationEvents, applications } from "../../db/schema.js";
+import { applicationEvents, applications, approvals } from "../../db/schema.js";
 
 export type ApplicationRow = typeof applications.$inferSelect;
 export type ApplicationEventRow = typeof applicationEvents.$inferSelect;
+export type ApprovalRow = typeof approvals.$inferSelect;
+export type NewApproval = Pick<ApprovalRow, "payloadHash" | "destinationUrl" | "documentIds" | "formRevision" | "decidedAt" | "expiresAt">;
 
 export type NewApplication = Pick<ApplicationRow, "jobId" | "status" | "mode" | "portal" | "destinationUrl">;
 export type ApplicationPatch = Partial<Pick<ApplicationRow, "mode" | "portal" | "destinationUrl" | "lastError" | "formSnapshot" | "fieldPlan" | "preview" | "payloadHash">>;
@@ -12,6 +14,12 @@ export type TransitionRecord = { actor: string; reason: string };
 
 // Every status write goes with its event in one transaction, and a transition only applies
 // when the row is still in the status it was read in, so two writers cannot both win.
+//
+// Approvals (Milestone 4): any transition to a state other than the submission's own
+// (SUBMITTING, SUBMITTED, SUBMISSION_UNKNOWN) invalidates the live approval in the same
+// transaction, so preparing again, rejecting, withdrawing or a mismatch found before the
+// click can never leave an approval behind that a later run could use.
+const KEEPS_APPROVAL = new Set(["SUBMITTING", "SUBMITTED", "SUBMISSION_UNKNOWN"]);
 export class ApplicationRepository {
   constructor(private readonly db: Database) {}
 
@@ -61,6 +69,12 @@ export class ApplicationRepository {
         .where(and(eq(applications.id, id), eq(applications.status, from)))
         .returning();
       if (!row) return null;
+      if (!KEEPS_APPROVAL.has(to)) {
+        await tx
+          .update(approvals)
+          .set({ invalidatedAt: new Date(), invalidationReason: record.reason })
+          .where(and(eq(approvals.applicationId, id), isNull(approvals.invalidatedAt)));
+      }
       await tx.insert(applicationEvents).values({
         id: randomUUID(),
         applicationId: id,
@@ -71,6 +85,40 @@ export class ApplicationRepository {
       });
       return row;
     });
+  }
+
+  // READY_FOR_REVIEW to APPROVED and the approval row, together. Returns null when the
+  // application left READY_FOR_REVIEW in the meantime.
+  async approve(id: string, record: TransitionRecord, approval: NewApproval): Promise<{ row: ApplicationRow; approval: ApprovalRow } | null> {
+    return this.db.transaction(async (tx) => {
+      const [row] = await tx
+        .update(applications)
+        .set({ status: "APPROVED", updatedAt: new Date() })
+        .where(and(eq(applications.id, id), eq(applications.status, "READY_FOR_REVIEW")))
+        .returning();
+      if (!row) return null;
+      const [created] = await tx.insert(approvals).values({ id: randomUUID(), applicationId: id, ...approval }).returning();
+      await tx.insert(applicationEvents).values({
+        id: randomUUID(),
+        applicationId: id,
+        fromStatus: "READY_FOR_REVIEW",
+        toStatus: "APPROVED",
+        actor: record.actor,
+        reason: record.reason,
+      });
+      return { row, approval: created! };
+    });
+  }
+
+  // The approval not yet invalidated, if any.
+  async liveApproval(applicationId: string): Promise<ApprovalRow | null> {
+    const [row] = await this.db
+      .select()
+      .from(approvals)
+      .where(and(eq(approvals.applicationId, applicationId), isNull(approvals.invalidatedAt)))
+      .orderBy(desc(approvals.decidedAt))
+      .limit(1);
+    return row ?? null;
   }
 
   // Not a status change: consent the user gave for this application's next run.

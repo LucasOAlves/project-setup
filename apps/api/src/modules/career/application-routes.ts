@@ -14,8 +14,8 @@ function parseId(raw: unknown, what: string): string {
   return parsed.data;
 }
 
-// Applications (Milestone 3): prepare one job's application, read it with its history, and
-// reject it. Preparing never submits anything.
+// Applications: prepare one job's application, read it with its history, reject it
+// (Milestone 3), and approve it or withdraw the approval (Milestone 4).
 export async function registerApplicationRoutes(
   app: FastifyInstance,
   applications: ApplicationService,
@@ -51,6 +51,18 @@ export async function registerApplicationRoutes(
   app.post("/api/career/applications/:id/answers", async (request) => {
     const { id } = request.params as { id: string };
     return answers.save(parseId(id, "Application"), request.body);
+  });
+
+  // Approving needs the signed-in user (Milestone 4, ADR-021). The body carries the payload
+  // hash the user reviewed.
+  app.post("/api/career/applications/:id/approve", { config: { signedIn: true } }, async (request) => {
+    const { id } = request.params as { id: string };
+    return { application: await applications.approve(parseId(id, "Application"), request.body) };
+  });
+
+  app.post("/api/career/applications/:id/approval/withdraw", async (request) => {
+    const { id } = request.params as { id: string };
+    return { application: await applications.withdrawApproval(parseId(id, "Application")) };
   });
 
   app.post("/api/career/applications/:id/reject", async (request) => {

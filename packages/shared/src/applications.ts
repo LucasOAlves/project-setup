@@ -1,7 +1,8 @@
 import { z } from "zod";
 
-// Job Hunter Milestone 3 (spec section 4): the application for one job, from preparation to
-// review. APPROVED, SUBMITTING, SUBMITTED and SUBMISSION_UNKNOWN arrive with Milestone 4.
+// Job Hunter (spec section 4): the application for one job, from preparation (Milestone 3)
+// to approval and submission (Milestone 4). EXPIRED means the posting no longer takes
+// applications.
 export const APPLICATION_STATES = [
   "PREPARING",
   "NEEDS_INFORMATION",
@@ -9,6 +10,11 @@ export const APPLICATION_STATES = [
   "BLOCKED_BY_PLATFORM",
   "FAILED",
   "USER_REJECTED",
+  "APPROVED",
+  "SUBMITTING",
+  "SUBMITTED",
+  "SUBMISSION_UNKNOWN",
+  "EXPIRED",
 ] as const;
 export type ApplicationState = (typeof APPLICATION_STATES)[number];
 
@@ -125,6 +131,23 @@ export const applicationPreviewSchema = z.object({
 });
 export type ApplicationPreview = z.infer<typeof applicationPreviewSchema>;
 
+// The live approval of an application (Milestone 4): bound to one payload hash and destination,
+// and valid until it expires or a change invalidates it.
+export const approvalPublicSchema = z.object({
+  id: z.string().uuid(),
+  payloadHash: z.string(),
+  destinationUrl: z.string(),
+  decidedAt: z.string(),
+  expiresAt: z.string(),
+});
+export type ApprovalPublic = z.infer<typeof approvalPublicSchema>;
+
+// The user approves the payload hash they were shown, so a change in between is caught.
+export const approveApplicationInputSchema = z.object({
+  payloadHash: z.string().regex(/^[0-9a-f]{64}$/),
+});
+export type ApproveApplicationInput = z.infer<typeof approveApplicationInputSchema>;
+
 export const applicationPublicSchema = z.object({
   id: z.string().uuid(),
   jobId: z.string().uuid(),
@@ -141,6 +164,7 @@ export const applicationPublicSchema = z.object({
   // Identifies the exact payload (destination, form, values, attachments). Milestone 4's
   // approval is bound to it.
   payloadHash: z.string().nullable(),
+  approval: approvalPublicSchema.nullable(),
   createdAt: z.string(),
   updatedAt: z.string(),
   events: z.array(applicationEventPublicSchema),

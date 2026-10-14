@@ -24,8 +24,15 @@ const application = {
 function setup(current: ApplicationPublic = application) {
   const saved: SavedAnswer[] = [];
   const agreed: string[][] = [];
+  const withdrawn: string[] = [];
   const service = new ApplicationAnswerService({
-    applications: { get: async () => current },
+    applications: {
+      get: async () => current,
+      withdrawApproval: async (id, reason) => {
+        withdrawn.push(`${id}: ${reason}`);
+        return current;
+      },
+    },
     saveAnswers: async (answers) => {
       saved.push(...answers);
     },
@@ -34,7 +41,7 @@ function setup(current: ApplicationPublic = application) {
     },
     audit: { record: async () => undefined },
   });
-  return { service, saved, agreed };
+  return { service, saved, agreed, withdrawn };
 }
 
 async function rejects(promise: Promise<unknown>, status: number) {
@@ -74,4 +81,19 @@ test("questions the form does not ask, files and consent-as-text are refused", a
 test("answers wait while a run is in progress", async () => {
   const { service } = setup({ ...application, status: "PREPARING" });
   await rejects(service.save(application.id, { answers: [] }), 409);
+});
+
+test("new answers withdraw a live approval first", async () => {
+  const { service, withdrawn, saved } = setup({ ...application, status: "APPROVED" } as ApplicationPublic);
+  await service.save(application.id, { answers: [{ questionKey: "how did you hear", answer: "Referral" }] });
+  assert.equal(withdrawn.length, 1);
+  assert.match(withdrawn[0]!, /approval was withdrawn/);
+  assert.equal(saved.length, 1);
+});
+
+test("answers cannot change during or after a submission", async () => {
+  for (const status of ["SUBMITTING", "SUBMITTED", "SUBMISSION_UNKNOWN"]) {
+    const { service } = setup({ ...application, status } as ApplicationPublic);
+    await rejects(service.save(application.id, { answers: [{ questionKey: "how did you hear", answer: "Referral" }] }), 409);
+  }
 });
