@@ -1,13 +1,14 @@
 import { randomUUID } from "node:crypto";
-import { and, count, desc, eq, gte, isNotNull, or } from "drizzle-orm";
+import { and, count, desc, eq, gte, inArray, isNotNull, or } from "drizzle-orm";
 import type { CompanyInput, JobInput, JobPatchInput, RecruiterInput, RecruiterPatchInput } from "@studio/shared";
 import type { Database } from "../../db/client.js";
 import type { DedupeKeys, ImportedJobFields } from "./job-import.js";
-import { companies, jobEvaluations, jobStatusEvents, jobs, profiles, recruiters } from "../../db/schema.js";
+import { companies, jobEvaluations, jobFeedback, jobStatusEvents, jobs, profiles, recruiters } from "../../db/schema.js";
 
 export type CompanyRow = typeof companies.$inferSelect;
 export type JobRow = typeof jobs.$inferSelect;
 export type JobEvaluationRow = typeof jobEvaluations.$inferSelect;
+export type JobFeedbackRow = typeof jobFeedback.$inferSelect;
 export type RecruiterRow = typeof recruiters.$inferSelect;
 export type JobStatusEventRow = typeof jobStatusEvents.$inferSelect;
 
@@ -205,6 +206,42 @@ export class CareerRepository {
       latest: new Map(latestRows.map((row) => [row.jobId, row])),
       explained: new Map(explainedRows.map((row) => [row.jobId, row])),
     };
+  }
+
+  async getJobEvaluation(id: string): Promise<JobEvaluationRow | null> {
+    const [row] = await this.db.select().from(jobEvaluations).where(eq(jobEvaluations.id, id)).limit(1);
+    return row ?? null;
+  }
+
+  async getJobEvaluations(ids: string[]): Promise<JobEvaluationRow[]> {
+    if (ids.length === 0) return [];
+    return this.db.select().from(jobEvaluations).where(inArray(jobEvaluations.id, ids));
+  }
+
+  async insertJobFeedback(input: {
+    jobId: string;
+    evaluationId: string;
+    verdict: string;
+    reasons: string[];
+    note: string;
+  }): Promise<JobFeedbackRow> {
+    const [row] = await this.db
+      .insert(jobFeedback)
+      .values({ id: randomUUID(), ...input })
+      .returning();
+    if (!row) {
+      throw new Error("job feedback insert failed");
+    }
+    return row;
+  }
+
+  // The current verdict per job: its newest feedback row.
+  async latestFeedbackByJob(): Promise<Map<string, JobFeedbackRow>> {
+    const rows = await this.db
+      .selectDistinctOn([jobFeedback.jobId])
+      .from(jobFeedback)
+      .orderBy(jobFeedback.jobId, desc(jobFeedback.createdAt));
+    return new Map(rows.map((row) => [row.jobId, row]));
   }
 
   // Explanations written since `since`, for the daily model-cost limit.

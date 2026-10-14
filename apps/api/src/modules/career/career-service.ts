@@ -19,8 +19,15 @@ import type {
   ResumeTailoringPlan,
   TextProviderName,
   JobFeedItem,
+  FeedbackSummary,
+  JobFeedbackPublic,
 } from "@studio/shared";
-import { jobFeedQuerySchema, outreachMessageSchema, resumeTailoringPlanSchema } from "@studio/shared";
+import {
+  jobFeedbackInputSchema,
+  jobFeedQuerySchema,
+  outreachMessageSchema,
+  resumeTailoringPlanSchema,
+} from "@studio/shared";
 import { malformedAiOutput, notFound, validationError } from "../../app-error.js";
 import { parseJsonObject } from "../ai/parse-json.js";
 import {
@@ -43,6 +50,7 @@ import type {
   CareerRepository,
   CompanyRow,
   JobEvaluationRow,
+  JobFeedbackRow,
   JobRow,
   RecruiterRow,
 } from "./career-repository.js";
@@ -53,6 +61,7 @@ import { computeJobFit } from "./job-fit.js";
 import { prepareImportedJob } from "./job-import.js";
 import { JobExplainer } from "./job-explanation.js";
 import { buildJobFeed } from "./job-feed.js";
+import { summarizeFeedback, type RatedEvaluation } from "./job-feedback.js";
 import { DEFAULT_EVALUATION_SETTINGS, JobIntake, type EvaluationSettings } from "./job-intake.js";
 import { scoreRecruiterRelevance } from "./recruiter-scoring.js";
 import { applyTailoringPlan, groundTailoringPlan } from "./resume-tailoring.js";
@@ -279,10 +288,11 @@ export class CareerService {
     if (!parsed.success) {
       throw validationError("The feed filters are invalid.");
     }
-    const [jobRows, companyRows, evaluations] = await Promise.all([
+    const [jobRows, companyRows, evaluations, feedback] = await Promise.all([
       this.repo.listJobs(),
       this.repo.listCompanies(),
       this.repo.latestEvaluationsByJob(),
+      this.repo.latestFeedbackByJob(),
     ]);
     const companyNames = new Map(companyRows.map((company) => [company.id, company.name]));
     const items = jobRows.map((row): JobFeedItem => {
@@ -295,9 +305,43 @@ export class CareerService {
         evaluation: latest ? evaluationToPublic(latest) : null,
         explanation: explained ? evaluationToPublic(explained).explanation : null,
         explainedAt: explained ? explained.createdAt.toISOString() : null,
+        feedback: feedback.has(row.id) ? feedbackToPublic(feedback.get(row.id)!) : null,
       };
     });
     return buildJobFeed(items, parsed.data, now);
+  }
+
+  // Relevance feedback (JOB-014) on one evaluation of this job. Insert-only: a new verdict
+  // replaces the current one without erasing the history.
+  async submitFeedback(jobId: string, payload: unknown): Promise<JobFeedbackPublic> {
+    const parsed = jobFeedbackInputSchema.safeParse(payload);
+    if (!parsed.success) {
+      throw validationError("The feedback is invalid.");
+    }
+    const evaluation = await this.repo.getJobEvaluation(parsed.data.evaluationId);
+    if (!evaluation || evaluation.jobId !== jobId) {
+      throw notFound("That evaluation does not exist for this job.");
+    }
+    const row = await this.repo.insertJobFeedback({ jobId, ...parsed.data });
+    return feedbackToPublic(row);
+  }
+
+  async getFeedbackSummary(): Promise<FeedbackSummary> {
+    const latest = [...(await this.repo.latestFeedbackByJob()).values()];
+    const evaluations = new Map(
+      (await this.repo.getJobEvaluations(latest.map((row) => row.evaluationId))).map((row) => [row.id, row]),
+    );
+    const entries = latest.map((row): RatedEvaluation => {
+      const evaluation = evaluations.get(row.evaluationId);
+      const breakdown = evaluation?.score === null || !evaluation ? null : evaluationToPublic(evaluation).match;
+      return {
+        verdict: row.verdict as RatedEvaluation["verdict"],
+        reasons: row.reasons as RatedEvaluation["reasons"],
+        score: evaluation?.score ?? null,
+        dimensions: breakdown?.dimensions ?? null,
+      };
+    });
+    return summarizeFeedback(entries, this.evaluationSettings.explanationMinScore);
   }
 
   async getLatestEvaluation(id: string): Promise<JobEvaluationPublic | null> {
@@ -525,6 +569,18 @@ export class CareerService {
       updatedAt: row.updatedAt.toISOString(),
     };
   }
+}
+
+function feedbackToPublic(row: JobFeedbackRow): JobFeedbackPublic {
+  return {
+    id: row.id,
+    jobId: row.jobId,
+    evaluationId: row.evaluationId,
+    verdict: row.verdict as JobFeedbackPublic["verdict"],
+    reasons: row.reasons as JobFeedbackPublic["reasons"],
+    note: row.note,
+    createdAt: row.createdAt.toISOString(),
+  };
 }
 
 function evaluationToPublic(row: JobEvaluationRow): JobEvaluationPublic {

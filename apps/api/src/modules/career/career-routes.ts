@@ -100,6 +100,17 @@ export async function registerCareerRoutes(
     return { items: await service.getJobFeed(request.query) };
   });
 
+  // Relevance feedback (JOB-014). Body: { evaluationId, verdict, reasons?, note? }.
+  app.post("/api/career/jobs/:id/feedback", async (request, reply) => {
+    const { id } = request.params as { id: string };
+    reply.code(201);
+    return { feedback: await service.submitFeedback(id, request.body) };
+  });
+
+  app.get("/api/career/feedback/summary", async () => {
+    return { summary: await service.getFeedbackSummary() };
+  });
+
   app.get("/api/career/jobs", async () => {
     const jobs = await service.listJobs();
     return { jobs };

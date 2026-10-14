@@ -343,6 +343,20 @@ export const jobEvaluations = pgTable("job_evaluations", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+export const jobFeedback = pgTable("job_feedback", {
+  id: uuid("id").primaryKey(),
+  jobId: uuid("job_id")
+    .notNull()
+    .references(() => jobs.id, { onDelete: "cascade" }),
+  evaluationId: uuid("evaluation_id")
+    .notNull()
+    .references(() => jobEvaluations.id, { onDelete: "cascade" }),
+  verdict: text("verdict").notNull(),
+  reasons: jsonb("reasons").$type<string[]>().notNull().default([]),
+  note: text("note").notNull().default(""),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 export const auditEvents = pgTable("audit_events", {
   id: uuid("id").primaryKey(),
   eventType: text("event_type").notNull(),

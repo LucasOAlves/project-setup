@@ -430,6 +430,56 @@ export const jobFeedQuerySchema = z.object({
 });
 export type JobFeedQuery = z.infer<typeof jobFeedQuerySchema>;
 
+// Relevance feedback (JOB-014): the user's verdict on one evaluation, used to calibrate the
+// match weights. Reasons are a fixed list so they can be counted.
+export const FEEDBACK_VERDICTS = ["RELEVANT", "NOT_RELEVANT"] as const;
+export const FEEDBACK_REASONS = [
+  "GREAT_MATCH",
+  "WRONG_STACK",
+  "WRONG_SENIORITY",
+  "PAY_TOO_LOW",
+  "LOCATION",
+  "ROLE_TYPE",
+  "COMPANY",
+  "OTHER",
+] as const;
+export type FeedbackReason = (typeof FEEDBACK_REASONS)[number];
+
+export const jobFeedbackInputSchema = z.object({
+  evaluationId: z.string().uuid(),
+  verdict: z.enum(FEEDBACK_VERDICTS),
+  reasons: z.array(z.enum(FEEDBACK_REASONS)).max(FEEDBACK_REASONS.length).default([]),
+  note: z.string().trim().max(500).default(""),
+});
+export type JobFeedbackInput = z.infer<typeof jobFeedbackInputSchema>;
+
+export const jobFeedbackPublicSchema = z.object({
+  id: z.string(),
+  jobId: z.string(),
+  evaluationId: z.string(),
+  verdict: z.enum(FEEDBACK_VERDICTS),
+  reasons: z.array(z.enum(FEEDBACK_REASONS)),
+  note: z.string(),
+  createdAt: z.string(),
+});
+export type JobFeedbackPublic = z.infer<typeof jobFeedbackPublicSchema>;
+
+// How the user's verdicts line up with the match score. agreementRate is the share of rated,
+// scored jobs where "relevant" sits at or above the threshold and "not relevant" below it.
+export const feedbackSummarySchema = z.object({
+  threshold: z.number(),
+  rated: z.number(),
+  relevant: z.number(),
+  notRelevant: z.number(),
+  agreementRate: z.number().nullable(),
+  dimensions: z.record(
+    z.enum(MATCH_DIMENSIONS),
+    z.object({ relevantAverage: z.number().nullable(), notRelevantAverage: z.number().nullable() }),
+  ),
+  reasons: z.array(z.object({ reason: z.enum(FEEDBACK_REASONS), count: z.number() })),
+});
+export type FeedbackSummary = z.infer<typeof feedbackSummarySchema>;
+
 export const jobFeedItemSchema = z.object({
   job: jobPublicSchema,
   companyName: z.string(),
@@ -438,6 +488,7 @@ export const jobFeedItemSchema = z.object({
   evaluation: jobEvaluationPublicSchema.nullable(),
   explanation: groundedJobExplanationSchema.nullable(),
   explainedAt: z.string().nullable(),
+  feedback: jobFeedbackPublicSchema.nullable(),
 });
 export type JobFeedItem = z.infer<typeof jobFeedItemSchema>;
 

@@ -1204,3 +1204,62 @@ test("evaluateJob rejects an unknown job", async () => {
   );
   await assert.rejects(() => service.evaluateJob("missing"), /does not exist/);
 });
+
+function feedbackService(evaluationJobId: string, inserted: Array<Record<string, unknown>>) {
+  return new CareerService(
+    {
+      async getJobEvaluation(id: string) {
+        return { id, jobId: evaluationJobId };
+      },
+      async insertJobFeedback(input: Record<string, unknown>) {
+        inserted.push(input);
+        return { id: "fb-1", createdAt: new Date("2026-10-14T00:00:00Z"), ...input };
+      },
+    } as never,
+    {} as never,
+    textMap(noTextCalls),
+    "openai",
+    noBoardProviders(),
+    noSearchProviders(),
+  );
+}
+
+const EVALUATION_ID = "00000000-0000-4000-8000-0000000000e1";
+
+test("submitFeedback stores the verdict and reasons for the job's evaluation", async () => {
+  const inserted: Array<Record<string, unknown>> = [];
+  const feedback = await feedbackService("job-1", inserted).submitFeedback("job-1", {
+    evaluationId: EVALUATION_ID,
+    verdict: "NOT_RELEVANT",
+    reasons: ["PAY_TOO_LOW"],
+  });
+  assert.equal(feedback.verdict, "NOT_RELEVANT");
+  assert.deepEqual(inserted[0], {
+    jobId: "job-1",
+    evaluationId: EVALUATION_ID,
+    verdict: "NOT_RELEVANT",
+    reasons: ["PAY_TOO_LOW"],
+    note: "",
+  });
+});
+
+test("submitFeedback rejects an evaluation that belongs to another job", async () => {
+  const inserted: Array<Record<string, unknown>> = [];
+  await assert.rejects(
+    () => feedbackService("job-2", inserted).submitFeedback("job-1", { evaluationId: EVALUATION_ID, verdict: "RELEVANT" }),
+    /does not exist for this job/,
+  );
+  assert.equal(inserted.length, 0);
+});
+
+test("submitFeedback rejects an unknown reason", async () => {
+  await assert.rejects(
+    () =>
+      feedbackService("job-1", []).submitFeedback("job-1", {
+        evaluationId: EVALUATION_ID,
+        verdict: "RELEVANT",
+        reasons: ["BECAUSE"],
+      }),
+    /invalid/,
+  );
+});

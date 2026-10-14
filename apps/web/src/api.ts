@@ -41,7 +41,10 @@ import type {
   TextProviderName,
   WritingTone,
   FeedEligibilityFilter,
+  FeedbackSummary,
   JobEvaluationPublic,
+  JobFeedbackInput,
+  JobFeedbackPublic,
   JobFeedItem,
 } from "@studio/shared";
 import { profileInputSchema } from "@studio/shared";
@@ -842,5 +845,27 @@ export async function runDiscoveryNow(): Promise<Array<{ sourceId: string; statu
     results: Array<{ sourceId: string; status: "QUEUED" | "ALREADY_RAN_TODAY" }>;
   };
   return body.results;
+}
+
+export async function submitJobFeedback(jobId: string, input: JobFeedbackInput): Promise<JobFeedbackPublic> {
+  const response = await fetch(`/api/career/jobs/${jobId}/feedback`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!response.ok) {
+    throw await parseError(response);
+  }
+  const body = (await response.json()) as { feedback: JobFeedbackPublic };
+  return body.feedback;
+}
+
+export async function fetchFeedbackSummary(): Promise<FeedbackSummary> {
+  const response = await fetch("/api/career/feedback/summary");
+  if (!response.ok) {
+    throw await parseError(response);
+  }
+  const body = (await response.json()) as { summary: FeedbackSummary };
+  return body.summary;
 }
 

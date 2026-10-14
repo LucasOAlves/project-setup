@@ -224,6 +224,17 @@ the grounded explanation, the surviving quotes in `evidence`, `promptVersion`
 Only professional evidence from the profile is sent: no name, contact details or employer
 names. If the model call fails, the score is still stored without an explanation.
 
+## JobFeedback (Job Hunter)
+
+The user's relevance verdict on one `JobEvaluation` (JOB-014): `RELEVANT` or `NOT_RELEVANT`,
+reasons from a fixed list (great match, wrong stack, wrong seniority, pay too low, location,
+role type, company, other) and an optional note. Insert-only: the newest row for a job is the
+current verdict, and a verdict on an older evaluation no longer shows once the job is
+re-evaluated. `GET /api/career/feedback/summary` (`job-feedback.ts`) compares the verdicts
+with the match score: how often they agree at the shortlist threshold, the average of each
+dimension for relevant and not-relevant jobs, and the most given reasons. It informs a change
+to the match weights and never changes them by itself.
+
 ## AuditEvent (Job Hunter)
 
 Insert-only trail of who (`USER` / `SYSTEM` / `WORKER`) did what to which entity, with a

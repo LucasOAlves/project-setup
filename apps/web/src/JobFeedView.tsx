@@ -1,13 +1,22 @@
 import { useCallback, useEffect, useState } from "react";
 import type {
   ExplanationClaim,
+  FeedbackReason,
+  FeedbackSummary,
   FeedEligibilityFilter,
   GroundedJobExplanation,
   JobFeedItem,
   MatchDimensionName,
 } from "@studio/shared";
 import { JOB_SOURCES, MATCH_DIMENSIONS } from "@studio/shared";
-import { evaluateJob, fetchJobFeed, runDiscoveryNow, type JobFeedFilters } from "./api";
+import {
+  evaluateJob,
+  fetchFeedbackSummary,
+  fetchJobFeed,
+  runDiscoveryNow,
+  submitJobFeedback,
+  type JobFeedFilters,
+} from "./api";
 
 // Ranked job feed (Job Hunter JOB-008): every tracked or discovered job with its eligibility
 // verdict, match score and, for shortlisted jobs, the evidence-checked explanation.
@@ -53,6 +62,30 @@ const EXPLANATION_SECTIONS: Array<[keyof GroundedJobExplanation, string]> = [
   ["applicationRisks", "Application risks"],
 ];
 
+const REASON_LABELS: Record<FeedbackReason, string> = {
+  GREAT_MATCH: "Great match",
+  WRONG_STACK: "Wrong stack",
+  WRONG_SENIORITY: "Wrong seniority",
+  PAY_TOO_LOW: "Pay too low",
+  LOCATION: "Location",
+  ROLE_TYPE: "Not my kind of role",
+  COMPANY: "Company",
+  OTHER: "Other",
+};
+
+const RELEVANT_REASONS: FeedbackReason[] = ["GREAT_MATCH", "OTHER"];
+const NOT_RELEVANT_REASONS: FeedbackReason[] = [
+  "WRONG_STACK",
+  "WRONG_SENIORITY",
+  "PAY_TOO_LOW",
+  "LOCATION",
+  "ROLE_TYPE",
+  "COMPANY",
+  "OTHER",
+];
+
+type Verdict = "RELEVANT" | "NOT_RELEVANT";
+
 const DEFAULT_FILTERS: JobFeedFilters = {
   eligibility: ["ELIGIBLE", "UNKNOWN", "NOT_EVALUATED"],
   minScore: 0,
@@ -76,12 +109,15 @@ export function JobFeedView() {
   const [evaluatingId, setEvaluatingId] = useState<string | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
   const [discovering, setDiscovering] = useState(false);
+  const [summary, setSummary] = useState<FeedbackSummary | null>(null);
 
   const load = useCallback(async (next: JobFeedFilters) => {
     setLoading(true);
     setError(null);
     try {
-      setItems(await fetchJobFeed(next));
+      const [feed, feedbackSummary] = await Promise.all([fetchJobFeed(next), fetchFeedbackSummary()]);
+      setItems(feed);
+      setSummary(feedbackSummary);
     } catch (caught) {
       setError((caught as { message?: string }).message ?? "The job feed could not be loaded.");
     } finally {
@@ -114,6 +150,25 @@ export function JobFeedView() {
       setError((caught as { message?: string }).message ?? "The job could not be evaluated.");
     } finally {
       setEvaluatingId(null);
+    }
+  }
+
+  async function handleFeedback(item: JobFeedItem, verdict: Verdict, reasons: FeedbackReason[]) {
+    if (!item.evaluation) return;
+    setError(null);
+    try {
+      const feedback = await submitJobFeedback(item.job.id, {
+        evaluationId: item.evaluation.id,
+        verdict,
+        reasons,
+        note: "",
+      });
+      setItems((current) =>
+        current.map((entry) => (entry.job.id === item.job.id ? { ...entry, feedback } : entry)),
+      );
+      setSummary(await fetchFeedbackSummary());
+    } catch (caught) {
+      setError((caught as { message?: string }).message ?? "The feedback could not be saved.");
     }
   }
 
@@ -216,6 +271,8 @@ export function JobFeedView() {
         </div>
       </section>
 
+      {summary && summary.rated > 0 ? <CalibrationSummary summary={summary} /> : null}
+
       {loading ? <p className="empty">Loading jobs…</p> : null}
       {!loading && items.length === 0 ? (
         <p className="empty">No jobs match these filters yet.</p>
@@ -230,6 +287,7 @@ export function JobFeedView() {
           evaluating={evaluatingId === item.job.id}
           onToggle={() => setOpenId(openId === item.job.id ? null : item.job.id)}
           onEvaluate={() => void handleEvaluate(item.job.id)}
+            onFeedback={(verdict, reasons) => void handleFeedback(item, verdict, reasons)}
           />
         ))}
       </div>
@@ -243,14 +301,18 @@ function FeedCard({
   evaluating,
   onToggle,
   onEvaluate,
+  onFeedback,
 }: {
   item: JobFeedItem;
   open: boolean;
   evaluating: boolean;
   onToggle: () => void;
   onEvaluate: () => void;
+  onFeedback: (verdict: Verdict, reasons: FeedbackReason[]) => void;
 }) {
-  const { job, evaluation, explanation } = item;
+  const { job, evaluation, explanation, feedback } = item;
+  // Feedback is tied to one evaluation: after a re-evaluation the earlier verdict no longer applies.
+  const current = feedback && evaluation && feedback.evaluationId === evaluation.id ? feedback : null;
   const eligibility: FeedEligibilityFilter = evaluation?.eligibility ?? "NOT_EVALUATED";
 
   return (
@@ -293,6 +355,47 @@ function FeedCard({
           </button>
         ) : null}
       </div>
+
+      {evaluation ? (
+        <div className="actions" style={{ justifyContent: "flex-start" }} role="group" aria-label="Is this job relevant?">
+          {(["RELEVANT", "NOT_RELEVANT"] as Verdict[]).map((verdict) => (
+            <button
+              key={verdict}
+              type="button"
+              className={`pill${current?.verdict === verdict ? " selected" : ""}`}
+              aria-pressed={current?.verdict === verdict}
+              onClick={() => {
+                if (current?.verdict !== verdict) onFeedback(verdict, []);
+              }}
+            >
+              {verdict === "RELEVANT" ? "Relevant" : "Not relevant"}
+            </button>
+          ))}
+        </div>
+      ) : null}
+      {current ? (
+        <div className="pills" role="group" aria-label="Why?" style={{ marginTop: 4 }}>
+          {(current.verdict === "RELEVANT" ? RELEVANT_REASONS : NOT_RELEVANT_REASONS).map((reason) => {
+            const selected = current.reasons.includes(reason);
+            return (
+              <button
+                key={reason}
+                type="button"
+                className={`pill${selected ? " selected" : ""}`}
+                aria-pressed={selected}
+                onClick={() =>
+                  onFeedback(
+                    current.verdict,
+                    selected ? current.reasons.filter((item) => item !== reason) : [...current.reasons, reason],
+                  )
+                }
+              >
+                {REASON_LABELS[reason]}
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
 
       {open && evaluation ? (
         <div className="notice">
@@ -407,3 +510,43 @@ function ExplanationDetail({
     </>
   );
 }
+
+function CalibrationSummary({ summary }: { summary: FeedbackSummary }) {
+  const agreement = summary.agreementRate === null ? null : Math.round(summary.agreementRate * 100);
+  const gaps = MATCH_DIMENSIONS.flatMap((key) => {
+    const { relevantAverage, notRelevantAverage } = summary.dimensions[key] ?? {};
+    if (relevantAverage == null || notRelevantAverage == null) return [];
+    return [{ key, difference: relevantAverage - notRelevantAverage }];
+  }).sort((a, b) => Math.abs(b.difference) - Math.abs(a.difference));
+  const strongest = gaps[0];
+
+  return (
+    <div className="notice">
+      <p>
+        <strong>Your feedback.</strong> {summary.rated} rated ({summary.relevant} relevant, {summary.notRelevant} not).
+        {agreement !== null
+          ? ` The match score agrees with you ${agreement}% of the time (relevant at ${summary.threshold}+, not relevant below).`
+          : ""}
+      </p>
+      {summary.reasons.length > 0 ? (
+        <p className="status">
+          Most given reasons:{" "}
+          {summary.reasons
+            .slice(0, 3)
+            .map((entry) => `${REASON_LABELS[entry.reason]} (${entry.count})`)
+            .join(", ")}
+          .
+        </p>
+      ) : null}
+      {/* Too few verdicts on either side say nothing about the weights. */}
+      {strongest && Math.abs(strongest.difference) >= 10 && summary.relevant >= 5 && summary.notRelevant >= 5 ? (
+        <p className="status">
+          {DIMENSION_LABELS[strongest.key]} separates relevant from not relevant jobs the most (
+          {strongest.difference > 0 ? "+" : ""}
+          {strongest.difference} points), so it may deserve more weight.
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
