@@ -1,7 +1,6 @@
 import {
   ERROR_CODES,
   type ImageProviderName,
-  type JobBoardSource,
   type TextProviderName,
 } from "@studio/shared";
 import cors from "@fastify/cors";
@@ -16,15 +15,11 @@ import type { TextGenerationProvider } from "./modules/ai/text-generation-provid
 import { registerCareerRoutes } from "./modules/career/career-routes.js";
 import { CareerRepository } from "./modules/career/career-repository.js";
 import { CareerService } from "./modules/career/career-service.js";
-import { GreenhouseJobProvider } from "./modules/career/greenhouse-job-provider.js";
-import { LeverJobProvider } from "./modules/career/lever-job-provider.js";
-import { AshbyJobProvider } from "./modules/career/ashby-job-provider.js";
-import { SmartRecruitersJobProvider } from "./modules/career/smartrecruiters-job-provider.js";
-import { WorkableJobProvider } from "./modules/career/workable-job-provider.js";
-import type { JobProvider } from "./modules/career/job-provider.js";
 import { SourceRegistry } from "./modules/career/source-registry.js";
 import { createSearchProviders } from "./modules/career/search-providers.js";
 import { registerDiscoveryRoutes } from "./modules/career/discovery-routes.js";
+import { CompanyWatchService } from "./modules/career/company-watch-service.js";
+import { createBoardProviders } from "./modules/career/board-providers.js";
 import { registerContentPlanRoutes } from "./modules/content-plan/content-plan-routes.js";
 import { ContentPlanRepository } from "./modules/content-plan/content-plan-repository.js";
 import { ContentPlanService } from "./modules/content-plan/content-plan-service.js";
@@ -133,13 +128,7 @@ export async function buildApp(env: Env, db: Database) {
     opportunities,
     new CustomTopicRepository(db),
   );
-  const boardProviders: Record<JobBoardSource, JobProvider> = {
-    greenhouse: new GreenhouseJobProvider(),
-    lever: new LeverJobProvider(),
-    ashby: new AshbyJobProvider(),
-    workable: new WorkableJobProvider(),
-    smartrecruiters: new SmartRecruitersJobProvider(),
-  };
+  const boardProviders = createBoardProviders();
   const searchProviders = createSearchProviders(env);
   const sourceRegistry = new SourceRegistry(db);
   const career = new CareerService(
@@ -175,7 +164,7 @@ export async function buildApp(env: Env, db: Database) {
   await registerCustomTopicRoutes(app, customTopics);
   await registerImageRoutes(app, images);
   await registerCareerRoutes(app, career, sourceRegistry);
-  await registerDiscoveryRoutes(app, env);
+  await registerDiscoveryRoutes(app, env, new CompanyWatchService(new CareerRepository(db)));
 
   app.setErrorHandler((error, _request, reply) => {
     if (error instanceof AppError) {

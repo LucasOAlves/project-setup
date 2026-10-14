@@ -17,3 +17,9 @@ export function discoveryJobId(sourceId: string, at: Date): string {
 export function evaluationJobId(jobId: string, profileVersion: number): string {
   return `evaluation.${safe(jobId)}.v${profileVersion}`;
 }
+
+// One watchlist poll per company per UTC hour, the same courtesy limit isPollDue enforces:
+// "Check now" pressed twice, or a retried daily tick, adds nothing within the hour.
+export function watchJobId(companyId: string, at: Date): string {
+  return `watch.${safe(companyId)}.${at.toISOString().slice(0, 13)}`;
+}

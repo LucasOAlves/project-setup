@@ -82,6 +82,10 @@ the older `boards.greenhouse.io/<token>`, `jobs.lever.co/<token>`, `jobs.ashbyhq
 or paste a board or job URL and let the app work out the source and token, and "Import from…"
 pulls every open posting from that board's real, public, unauthenticated Job Board API — no
 OAuth, no LinkedIn. Ashby imports include the published pay range (`includeCompensation=true`).
+"Watch daily" puts the company on the watchlist instead: the worker reads its board every day
+at `DISCOVERY_CRON` (never more than once an hour per company, "Check now" included), imports
+new postings, runs them through eligibility and scoring like discovered jobs, and shows the
+open roles, how many were posted in the last 30 days and a "Hiring fast" badge at five or more.
 Re-running an import only adds postings not already tracked (matched by source + external id);
 nothing is re-created or overwritten. See
 [ADR-011](docs/decisions/ADR-011-career-domain-boundaries.md)'s update notes for why Greenhouse,

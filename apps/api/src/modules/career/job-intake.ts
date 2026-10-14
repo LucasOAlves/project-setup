@@ -113,6 +113,26 @@ export class JobIntake {
     return { job, outcome: "CREATED" };
   }
 
+  // A posting from one company's own board (board import and the watchlist): the company is
+  // already known, so nothing is created on the fly.
+  async importBoardPosting(
+    source: string,
+    posting: NormalizedJobPosting,
+    company: { id: string; name: string },
+  ): Promise<IntakeOutcome> {
+    const existing = await this.repo.getJobByExternalId(source, posting.externalId);
+    if (existing) {
+      return { job: existing, outcome: "ALREADY_IMPORTED" };
+    }
+    const { fields, dedupe } = prepareImportedJob(source, posting, company.name);
+    const duplicate = await this.repo.findJobByProvenance(dedupe);
+    if (duplicate) {
+      return { job: duplicate, outcome: "DUPLICATE" };
+    }
+    const job = await this.repo.createImportedJob({ companyId: company.id, ...fields });
+    return { job, outcome: "CREATED" };
+  }
+
   // ANALYZE-level per ADR-012: deterministic rules, no model call. Each run appends a
   // job_evaluations row, so earlier verdicts stay inspectable. Rules read the source's own
   // text (rawDescription) when present, not a description the user may have edited.

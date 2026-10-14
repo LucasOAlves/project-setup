@@ -1,6 +1,6 @@
 import { Queue, type JobsOptions } from "bullmq";
 import { Redis } from "ioredis";
-import { discoveryJobId, evaluationJobId } from "./job-ids.js";
+import { discoveryJobId, evaluationJobId, watchJobId } from "./job-ids.js";
 
 // Queue names are the contract between whoever enqueues (API routes, schedulers) and the
 // worker process that consumes them — see ADR-015. New pipelines add their queue here
@@ -18,6 +18,9 @@ export const SYSTEM_JOBS = {
 } as const;
 
 export type DiscoveryJobData = { sourceId: string; correlationId: string };
+// Watchlist jobs share the discovery queue: "watchlist" fans out one "watch-company" per company.
+export type WatchCompanyJobData = { companyId: string; correlationId: string };
+export const WATCH_JOBS = { run: "watchlist", company: "watch-company" } as const;
 export type EvaluationJobData = { jobId: string; profileVersion: number; correlationId: string };
 
 // Retries for transient failures (a source API timing out, a model rate limit): 3 attempts,
@@ -48,4 +51,9 @@ export async function enqueueDiscovery(queue: Queue, data: DiscoveryJobData, at 
 
 export async function enqueueEvaluation(queue: Queue, data: EvaluationJobData) {
   return queue.add("evaluate", data, { jobId: evaluationJobId(data.jobId, data.profileVersion) });
+}
+
+// Spaced a few seconds apart so a long watchlist never bursts the boards' hosts.
+export async function enqueueWatchCompany(queue: Queue, data: WatchCompanyJobData, at = new Date(), delayMs = 0) {
+  return queue.add(WATCH_JOBS.company, data, { jobId: watchJobId(data.companyId, at), delay: delayMs });
 }

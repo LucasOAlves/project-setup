@@ -58,7 +58,6 @@ import type { JobProvider } from "./job-provider.js";
 import type { JobSearchProvider } from "./job-search-provider.js";
 import { ALLOW_ALL_SOURCES, type SourceGate } from "./source-registry.js";
 import { computeJobFit } from "./job-fit.js";
-import { prepareImportedJob } from "./job-import.js";
 import { JobExplainer } from "./job-explanation.js";
 import { buildJobFeed } from "./job-feed.js";
 import { summarizeFeedback, type RatedEvaluation } from "./job-feedback.js";
@@ -134,19 +133,11 @@ export class CareerService {
     const postings = await this.boardProviders[source].listJobs(boardToken);
     const imported: JobPublic[] = [];
     let skipped = 0;
+    const intake = this.intake;
     for (const posting of postings) {
-      const existing = await this.repo.getJobByExternalId(source, posting.externalId);
-      if (existing) {
-        skipped += 1;
-        continue;
-      }
-      const { fields, dedupe } = prepareImportedJob(source, posting, company.name);
-      if (await this.repo.findJobByProvenance(dedupe)) {
-        skipped += 1;
-        continue;
-      }
-      const row = await this.repo.createImportedJob({ companyId, ...fields });
-      imported.push(this.jobToPublic(row));
+      const { job, outcome } = await intake.importBoardPosting(source, posting, company);
+      if (outcome === "CREATED") imported.push(this.jobToPublic(job));
+      else skipped += 1;
     }
     return { imported, skipped };
   }

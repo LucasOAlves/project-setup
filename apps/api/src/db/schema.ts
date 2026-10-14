@@ -182,6 +182,23 @@ export const companies = pgTable("companies", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+// Target-company watchlist (Milestone 1.5): the ATS board polled daily for one company.
+export const companyWatches = pgTable("company_watches", {
+  companyId: uuid("company_id")
+    .primaryKey()
+    .references(() => companies.id, { onDelete: "cascade" }),
+  source: text("source").notNull(),
+  boardToken: text("board_token").notNull(),
+  lastPolledAt: timestamp("last_polled_at", { withTimezone: true }),
+  lastStatus: text("last_status").notNull().default("NEVER"),
+  lastError: text("last_error").notNull().default(""),
+  openPostings: integer("open_postings"),
+  recentPostings: integer("recent_postings"),
+  newPostings: integer("new_postings"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 export const jobs = pgTable("jobs", {
   id: uuid("id").primaryKey(),
   companyId: uuid("company_id")

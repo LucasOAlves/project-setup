@@ -10,6 +10,7 @@ import {
   TEXT_PROVIDERS,
   TEXT_PROVIDER_LABELS,
   type CompanyPublic,
+  type CompanyWatchPublic,
   type JobBoardSource,
   type JobEmploymentType,
   type JobFitResult,
@@ -42,6 +43,10 @@ import {
   generateOutreachMessage,
   generateResumeTailoringPlan,
   importFromBoard,
+  fetchWatchlist,
+  watchCompany,
+  unwatchCompany,
+  checkWatchNow,
   importSearchResult,
   patchJob,
   patchRecruiter,
@@ -137,6 +142,8 @@ export function CareerView({
   const [analytics, setAnalytics] = useState<CareerAnalytics | null>(null);
   const [importingCompanyId, setImportingCompanyId] = useState<string | null>(null);
   const [importResults, setImportResults] = useState<Record<string, { imported: number; skipped: number }>>({});
+  const [watches, setWatches] = useState<Record<string, CompanyWatchPublic>>({});
+  const [watchNotices, setWatchNotices] = useState<Record<string, string>>({});
   const [contentSuggestions, setContentSuggestions] = useState<ContentTopicSuggestion[]>([]);
   const [searchSource, setSearchSource] = useState<JobSearchSource>("remoteok");
   const [searchKeywords, setSearchKeywords] = useState("");
@@ -176,6 +183,59 @@ export function CareerView({
       cancelled = true;
     };
   }, []);
+
+  // The watchlist loads on its own so a failure there never blocks the rest of the page.
+  useEffect(() => {
+    let cancelled = false;
+    fetchWatchlist()
+      .then((list) => {
+        if (!cancelled) setWatches(Object.fromEntries(list.map((watch) => [watch.companyId, watch])));
+      })
+      .catch((err: ApiError) => {
+        if (!cancelled) setError(err.message);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  async function startWatching(companyId: string, source: JobBoardSource, boardToken: string) {
+    setError(null);
+    try {
+      const watch = await watchCompany(companyId, source, boardToken);
+      setWatches((current) => ({ ...current, [companyId]: watch }));
+      setWatchNotices((current) => ({ ...current, [companyId]: "Watching. The worker checks this board every day." }));
+    } catch (err) {
+      setError((err as ApiError).message);
+    }
+  }
+
+  async function stopWatching(companyId: string) {
+    setError(null);
+    try {
+      await unwatchCompany(companyId);
+      setWatches(({ [companyId]: _removed, ...rest }) => rest);
+      setWatchNotices(({ [companyId]: _notice, ...rest }) => rest);
+    } catch (err) {
+      setError((err as ApiError).message);
+    }
+  }
+
+  async function checkNow(companyId: string) {
+    setError(null);
+    try {
+      const result = await checkWatchNow(companyId);
+      setWatchNotices((current) => ({
+        ...current,
+        [companyId]:
+          result === "QUEUED"
+            ? "Check queued. New jobs show up in the Job feed once the worker has read the board."
+            : "Already checked this hour. Boards are read at most once an hour.",
+      }));
+    } catch (err) {
+      setError((err as ApiError).message);
+    }
+  }
 
   async function refreshAnalytics() {
     try {
@@ -570,6 +630,11 @@ export function CareerView({
               importing={importingCompanyId === company.id}
               importResult={importResults[company.id] ?? null}
               onImport={(source, boardToken) => void importBoard(company.id, source, boardToken)}
+              watch={watches[company.id] ?? null}
+              watchNotice={watchNotices[company.id] ?? null}
+              onWatch={(source, boardToken) => void startWatching(company.id, source, boardToken)}
+              onUnwatch={() => void stopWatching(company.id)}
+              onCheckNow={() => void checkNow(company.id)}
             />
           ))}
         </div>
@@ -1203,11 +1268,21 @@ function CompanyCard({
   importing,
   importResult,
   onImport,
+  watch,
+  watchNotice,
+  onWatch,
+  onUnwatch,
+  onCheckNow,
 }: {
   company: CompanyPublic;
   importing: boolean;
   importResult: { imported: number; skipped: number } | null;
   onImport: (source: JobBoardSource, boardToken: string) => void;
+  watch: CompanyWatchPublic | null;
+  watchNotice: string | null;
+  onWatch: (source: JobBoardSource, boardToken: string) => void;
+  onUnwatch: () => void;
+  onCheckNow: () => void;
 }) {
   const [source, setSource] = useState<JobBoardSource>("greenhouse");
   const [boardToken, setBoardToken] = useState("");
@@ -1254,12 +1329,24 @@ function CompanyCard({
         >
           {importing ? "Importing…" : `Import from ${BOARD_SOURCE_LABELS[effectiveSource]}`}
         </button>
+        {watch ? null : (
+          <button
+            className="btn ghost"
+            type="button"
+            disabled={!effectiveToken}
+            onClick={() => onWatch(effectiveSource, effectiveToken)}
+          >
+            Watch daily
+          </button>
+        )}
       </div>
       {detected ? (
         <p className="status">
-          Recognized a {BOARD_SOURCE_LABELS[detected.source]} board: <code>{detected.token}</code>
+          Recognized {BOARD_SOURCE_LABELS[detected.source]} board: <code>{detected.token}</code>
         </p>
       ) : null}
+      {watch ? <WatchStatus watch={watch} onUnwatch={onUnwatch} onCheckNow={onCheckNow} /> : null}
+      {watchNotice ? <p className="status">{watchNotice}</p> : null}
       {importResult ? (
         <p className="status">
           Imported {importResult.imported} new job{importResult.imported === 1 ? "" : "s"}
@@ -1267,6 +1354,46 @@ function CompanyCard({
         </p>
       ) : null}
     </article>
+  );
+}
+
+function WatchStatus({
+  watch,
+  onUnwatch,
+  onCheckNow,
+}: {
+  watch: CompanyWatchPublic;
+  onUnwatch: () => void;
+  onCheckNow: () => void;
+}) {
+  let summary = "Not checked yet. The worker reads the board on its next daily run.";
+  if (watch.lastStatus === "FAILED") {
+    summary = `Last check failed: ${watch.lastError || "the board could not be read."}`;
+  } else if (watch.lastStatus === "OK") {
+    summary = `${watch.openPostings ?? 0} open roles, ${watch.recentPostings ?? 0} posted in the last 30 days, ${
+      watch.newPostings ?? 0
+    } new on the last check.`;
+  }
+
+  return (
+    <div className="notice">
+      <p>
+        <strong>Watching</strong> {BOARD_SOURCE_LABELS[watch.source]} · <code>{watch.boardToken}</code>
+        {watch.hiringFast ? <span className="tag" style={{ marginLeft: 8 }}>Hiring fast</span> : null}
+      </p>
+      <p>
+        {summary}
+        {watch.lastPolledAt ? ` Checked ${new Date(watch.lastPolledAt).toLocaleString()}.` : ""}
+      </p>
+      <div className="actions" style={{ justifyContent: "flex-start" }}>
+        <button className="btn ghost" type="button" onClick={onCheckNow}>
+          Check now
+        </button>
+        <button className="btn ghost" type="button" onClick={onUnwatch}>
+          Stop watching
+        </button>
+      </div>
+    </div>
   );
 }
 

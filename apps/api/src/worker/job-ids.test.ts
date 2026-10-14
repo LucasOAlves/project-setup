@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { discoveryJobId, evaluationJobId } from "./job-ids.ts";
+import { discoveryJobId, evaluationJobId, watchJobId } from "./job-ids.ts";
 
 test("discoveryJobId is one id per source per UTC day", () => {
   const morning = discoveryJobId("remoteok", new Date("2026-10-14T01:00:00Z"));
@@ -31,4 +31,12 @@ test("evaluationJobId is one id per job per profile version", () => {
 test("job ids never contain a colon, which BullMQ rejects", () => {
   assert.equal(discoveryJobId("custom:source", new Date("2026-10-14T00:00:00Z")).includes(":"), false);
   assert.equal(evaluationJobId("a:b", 1).includes(":"), false);
+});
+
+test("watchJobId is one id per company per UTC hour", () => {
+  const id = "3f2a9c1e-5b7d-4e8a-9c21-7d4e5f6a8b90";
+  assert.equal(watchJobId(id, new Date("2026-10-14T12:05:00Z")), `watch.${id}.2026-10-14T12`);
+  assert.equal(watchJobId(id, new Date("2026-10-14T12:59:00Z")), watchJobId(id, new Date("2026-10-14T12:01:00Z")));
+  assert.notEqual(watchJobId(id, new Date("2026-10-14T13:00:00Z")), watchJobId(id, new Date("2026-10-14T12:59:00Z")));
+  assert.equal(watchJobId(id, new Date("2026-10-14T12:05:00Z")).includes(":"), false);
 });

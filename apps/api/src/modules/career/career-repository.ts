@@ -3,12 +3,13 @@ import { and, count, desc, eq, gte, inArray, isNotNull, or } from "drizzle-orm";
 import type { CompanyInput, JobInput, JobPatchInput, RecruiterInput, RecruiterPatchInput } from "@studio/shared";
 import type { Database } from "../../db/client.js";
 import type { DedupeKeys, ImportedJobFields } from "./job-import.js";
-import { companies, jobEvaluations, jobFeedback, jobStatusEvents, jobs, profiles, recruiters } from "../../db/schema.js";
+import { companies, companyWatches, jobEvaluations, jobFeedback, jobStatusEvents, jobs, profiles, recruiters } from "../../db/schema.js";
 
 export type CompanyRow = typeof companies.$inferSelect;
 export type JobRow = typeof jobs.$inferSelect;
 export type JobEvaluationRow = typeof jobEvaluations.$inferSelect;
 export type JobFeedbackRow = typeof jobFeedback.$inferSelect;
+export type CompanyWatchRow = typeof companyWatches.$inferSelect;
 export type RecruiterRow = typeof recruiters.$inferSelect;
 export type JobStatusEventRow = typeof jobStatusEvents.$inferSelect;
 
@@ -233,6 +234,70 @@ export class CareerRepository {
       throw new Error("job feedback insert failed");
     }
     return row;
+  }
+
+  async listCompanyWatches(): Promise<CompanyWatchRow[]> {
+    return this.db.select().from(companyWatches).orderBy(companyWatches.createdAt);
+  }
+
+  async getCompanyWatch(companyId: string): Promise<CompanyWatchRow | null> {
+    const [row] = await this.db.select().from(companyWatches).where(eq(companyWatches.companyId, companyId)).limit(1);
+    return row ?? null;
+  }
+
+  // Watching a company again with another board starts its poll history over.
+  async upsertCompanyWatch(input: { companyId: string; source: string; boardToken: string }): Promise<CompanyWatchRow> {
+    const reset = {
+      source: input.source,
+      boardToken: input.boardToken,
+      lastPolledAt: null,
+      lastStatus: "NEVER",
+      lastError: "",
+      openPostings: null,
+      recentPostings: null,
+      newPostings: null,
+      updatedAt: new Date(),
+    };
+    const [row] = await this.db
+      .insert(companyWatches)
+      .values({ companyId: input.companyId, ...reset })
+      .onConflictDoUpdate({ target: companyWatches.companyId, set: reset })
+      .returning();
+    if (!row) {
+      throw new Error("company watch upsert failed");
+    }
+    return row;
+  }
+
+  async deleteCompanyWatch(companyId: string): Promise<boolean> {
+    const rows = await this.db.delete(companyWatches).where(eq(companyWatches.companyId, companyId)).returning();
+    return rows.length > 0;
+  }
+
+  async recordCompanyWatchPoll(
+    companyId: string,
+    result:
+      | { status: "OK"; polledAt: Date; openPostings: number; recentPostings: number; newPostings: number }
+      | { status: "FAILED"; polledAt: Date; error: string },
+  ): Promise<CompanyWatchRow | null> {
+    const set =
+      result.status === "OK"
+        ? {
+            lastPolledAt: result.polledAt,
+            lastStatus: "OK",
+            lastError: "",
+            openPostings: result.openPostings,
+            recentPostings: result.recentPostings,
+            newPostings: result.newPostings,
+            updatedAt: new Date(),
+          }
+        : { lastPolledAt: result.polledAt, lastStatus: "FAILED", lastError: result.error, updatedAt: new Date() };
+    const [row] = await this.db
+      .update(companyWatches)
+      .set(set)
+      .where(eq(companyWatches.companyId, companyId))
+      .returning();
+    return row ?? null;
   }
 
   // The current verdict per job: its newest feedback row.

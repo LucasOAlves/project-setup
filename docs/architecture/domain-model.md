@@ -240,6 +240,16 @@ with the match score: how often they agree at the shortlist threshold, the avera
 dimension for relevant and not-relevant jobs, and the most given reasons. It informs a change
 to the match weights and never changes them by itself.
 
+## CompanyWatch (Job Hunter)
+
+One row per watched `Company` (`company_watches`, migration 0021): the ATS board to read
+(`source` and `boardToken`, any of the five board adapters) and what the last poll found:
+`lastPolledAt`, `lastStatus` (`NEVER` / `OK` / `FAILED` with `lastError`), open roles, roles
+posted in the last 30 days and roles new to the tracker. The worker polls it daily and never
+more than once an hour (`company-watch.ts`). Five or more roles posted in 30 days shows as
+"Hiring fast". Deleting the company deletes its watch. Watching again with another board resets
+the poll history.
+
 ## AuditEvent (Job Hunter)
 
 Insert-only trail of who (`USER` / `SYSTEM` / `WORKER`) did what to which entity, with a

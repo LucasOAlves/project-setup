@@ -8,6 +8,8 @@ import { waitForDatabase } from "./db/wait.js";
 import { loadEnv, type Env } from "./env.js";
 import { CareerRepository } from "./modules/career/career-repository.js";
 import { DiscoveryService } from "./modules/career/discovery.js";
+import { CompanyWatchPoller } from "./modules/career/company-watch-service.js";
+import { createBoardProviders } from "./modules/career/board-providers.js";
 import { JobIntake } from "./modules/career/job-intake.js";
 import { evaluationSettingsFromEnv } from "./modules/career/job-intake.js";
 import { JobExplainer } from "./modules/career/job-explanation.js";
@@ -24,7 +26,10 @@ import {
   createQueue,
   createRedisConnection,
   enqueueEvaluation,
+  enqueueWatchCompany,
   type DiscoveryJobData,
+  type WatchCompanyJobData,
+  WATCH_JOBS,
   type EvaluationJobData,
   QUEUE_NAMES,
   SYSTEM_JOBS,
@@ -63,6 +68,11 @@ async function main() {
   const evaluationQueue = createQueue(QUEUE_NAMES.evaluation, connection);
   const discoveryQueue = createQueue(QUEUE_NAMES.discovery, connection);
   await scheduleDiscovery(discoveryQueue, env, logger);
+  await discoveryQueue.upsertJobScheduler(
+    WATCH_JOBS.run,
+    { pattern: env.DISCOVERY_CRON, tz: env.DISCOVERY_TZ },
+    { name: WATCH_JOBS.run, data: { correlationId: "scheduled.watchlist" } },
+  );
 
   const careerRepo = new CareerRepository(db);
   const profileRepo = new ProfileRepository(db);
@@ -80,8 +90,35 @@ async function main() {
     },
   });
 
+  const watchPoller = new CompanyWatchPoller({
+    repo: careerRepo,
+    intake,
+    providers: createBoardProviders(),
+    sourceGate: new SourceRegistry(db),
+    queueEvaluation: async (jobId, profileVersion) => {
+      await enqueueEvaluation(evaluationQueue, { jobId, profileVersion, correlationId: "watchlist" });
+    },
+  });
+
   const processors: Partial<Record<QueueName, Processor>> = {
     [QUEUE_NAMES.discovery]: async (job) => {
+      if (job.name === WATCH_JOBS.run) {
+        // Fan out: one poll per watched company, a few seconds apart.
+        const now = new Date();
+        const companyIds = await watchPoller.watchedCompanyIds();
+        for (const [index, companyId] of companyIds.entries()) {
+          await enqueueWatchCompany(
+            discoveryQueue,
+            { companyId, correlationId: "scheduled.watchlist" },
+            now,
+            index * WATCH_SPACING_MS,
+          );
+        }
+        return { queued: companyIds.length };
+      }
+      if (job.name === WATCH_JOBS.company) {
+        return watchPoller.poll((job.data as WatchCompanyJobData).companyId);
+      }
       const data = job.data as DiscoveryJobData;
       return discovery.runSource(data.sourceId, env.DISCOVERY_KEYWORDS);
     },
@@ -136,6 +173,8 @@ async function main() {
   process.on("SIGTERM", shutdown);
   process.on("SIGINT", shutdown);
 }
+
+const WATCH_SPACING_MS = 5_000;
 
 // Explanations use the configured default text provider. Without its API key they are off,
 // and evaluations store the score alone.

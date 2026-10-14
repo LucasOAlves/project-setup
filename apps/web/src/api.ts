@@ -2,6 +2,7 @@ import type {
   AngleType,
   CompanyInput,
   CompanyPublic,
+  CompanyWatchPublic,
   ContentPlanStatus,
   ContentPlanTopic,
   ContentPlanTopicPublic,
@@ -564,6 +565,45 @@ export async function importFromBoard(
     throw await parseError(response);
   }
   return (await response.json()) as { imported: JobPublic[]; skipped: number };
+}
+
+export async function fetchWatchlist(): Promise<CompanyWatchPublic[]> {
+  const response = await fetch("/api/career/watchlist");
+  if (!response.ok) {
+    throw await parseError(response);
+  }
+  return ((await response.json()) as { watches: CompanyWatchPublic[] }).watches;
+}
+
+export async function watchCompany(
+  companyId: string,
+  source: JobBoardSource,
+  boardToken: string,
+): Promise<CompanyWatchPublic> {
+  const response = await fetch(`/api/career/companies/${companyId}/watch`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ source, boardToken }),
+  });
+  if (!response.ok) {
+    throw await parseError(response);
+  }
+  return ((await response.json()) as { watch: CompanyWatchPublic }).watch;
+}
+
+export async function unwatchCompany(companyId: string): Promise<void> {
+  const response = await fetch(`/api/career/companies/${companyId}/watch`, { method: "DELETE" });
+  if (!response.ok) {
+    throw await parseError(response);
+  }
+}
+
+export async function checkWatchNow(companyId: string): Promise<"QUEUED" | "ALREADY_QUEUED_THIS_HOUR"> {
+  const response = await fetch(`/api/career/companies/${companyId}/watch/check`, { method: "POST" });
+  if (!response.ok) {
+    throw await parseError(response);
+  }
+  return ((await response.json()) as { status: "QUEUED" | "ALREADY_QUEUED_THIS_HOUR" }).status;
 }
 
 export async function searchJobs(

@@ -492,3 +492,30 @@ export const jobFeedItemSchema = z.object({
 });
 export type JobFeedItem = z.infer<typeof jobFeedItemSchema>;
 
+
+// Target-company watchlist (Milestone 1.5): a company's ATS board polled daily.
+export const COMPANY_WATCH_STATUSES = ["NEVER", "OK", "FAILED"] as const;
+export type CompanyWatchStatus = (typeof COMPANY_WATCH_STATUSES)[number];
+
+export const companyWatchInputSchema = z.object({
+  source: z.enum(JOB_BOARD_SOURCES),
+  boardToken: z.string().trim().min(1).max(100),
+});
+export type CompanyWatchInput = z.infer<typeof companyWatchInputSchema>;
+
+export const companyWatchPublicSchema = z.object({
+  companyId: z.string().uuid(),
+  companyName: z.string(),
+  source: z.enum(JOB_BOARD_SOURCES),
+  boardToken: z.string(),
+  lastPolledAt: z.string().nullable(),
+  lastStatus: z.enum(COMPANY_WATCH_STATUSES),
+  lastError: z.string(),
+  // From the last successful poll: postings on the board, how many were published in the last
+  // 30 days, and how many were new to the tracker.
+  openPostings: z.number().nullable(),
+  recentPostings: z.number().nullable(),
+  newPostings: z.number().nullable(),
+  hiringFast: z.boolean(),
+});
+export type CompanyWatchPublic = z.infer<typeof companyWatchPublicSchema>;

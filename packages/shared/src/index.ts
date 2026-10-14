@@ -124,6 +124,9 @@ export {
 } from "./custom-topic.js";
 export {
   JOB_BOARD_SOURCES,
+  COMPANY_WATCH_STATUSES,
+  companyWatchInputSchema,
+  companyWatchPublicSchema,
   JOB_EMPLOYMENT_TYPES,
   JOB_FIT_RECOMMENDATIONS,
   JOB_SEARCH_SOURCES,
@@ -201,6 +204,9 @@ export {
   type ContentTopicSuggestion,
   type CompanyPublic,
   type JobBoardSource,
+  type CompanyWatchStatus,
+  type CompanyWatchInput,
+  type CompanyWatchPublic,
   type JobEmploymentType,
   type JobFitDimensions,
   type JobFitRecommendation,
