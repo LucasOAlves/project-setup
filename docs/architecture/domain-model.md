@@ -157,8 +157,22 @@ Provenance (Job Hunter, migration 0016): imported jobs also store `rawDescriptio
 exactly as the source returned it, kept apart from the user-editable `description`),
 `canonicalUrl` and `contentHash` (from `job-provenance.ts`: tracking params, fragment and
 trailing slash removed; sha256 of normalized title + company + description), and
-`sourcePostedAt` when a source reports it. These feed cross-source dedupe (JOB-006); today's
-idempotency is still `source` + `externalId`.
+`sourcePostedAt` when a source reports it.
+
+Cross-source dedupe (JOB-006): before creating an imported job, `CareerService` asks
+`CareerRepository.findJobByProvenance()` for a job with the same canonical URL or, when the
+description has 50+ characters of real text, the same content hash. A match is skipped (board
+import) or returned instead of a new row (search import). `source` + `externalId` still makes
+re-importing from the same source idempotent. Board import hashes with the tracked company's
+name, so a board posting and an aggregator copy under a differently spelled company name only
+dedupe through the canonical URL.
+
+`normalizedData` (migration 0018) holds what `job-normalization.ts` derives at import:
+salary in USD per month (`usdMonthlyMin`/`usdMonthlyMax`, `approximate` when converted from
+another currency with the static rates in that file, `null` when undisclosed), region tokens
+from the location text (`WORLDWIDE`, `LATAM`, `BRAZIL`, `USA`, ...), and employment type. The
+original salary range and currency also go into `salaryMin`/`salaryMax`/`salaryCurrency`.
+Rows imported before 0018 keep `{}`.
 
 ## Source (Job Hunter)
 

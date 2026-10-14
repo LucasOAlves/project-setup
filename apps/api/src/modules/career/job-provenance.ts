@@ -51,3 +51,10 @@ export function jobContentHash(input: {
   const parts = [input.title, input.companyName, input.description].map(normalizeText);
   return createHash("sha256").update(parts.join("\u0000")).digest("hex");
 }
+
+// Two different postings with the same title and company but a missing or stub description
+// would hash identically, so the hash only counts as a duplicate signal when the description
+// has real content (50+ characters once markup is gone).
+export function isContentHashReliable(description: string): boolean {
+  return normalizeText(description).length >= 50;
+}

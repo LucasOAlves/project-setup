@@ -72,3 +72,17 @@ test("searchJobs reports a rate limit distinctly", async () => {
   const provider = new HimalayasJobSearchProvider(async () => new Response("slow down", { status: 429 }));
   await assert.rejects(() => provider.searchJobs({ keywords: "node" }), /rate limiting/);
 });
+
+test("normalizeHimalayasEntry carries structured salary and employment type", () => {
+  const posting = normalizeHimalayasEntry({
+    ...SAMPLE,
+    minSalary: 120000,
+    maxSalary: 160000,
+    currency: "USD",
+    salaryPeriod: "annual",
+    employmentType: "Full Time",
+  });
+  assert.deepEqual(posting?.salary, { min: 120000, max: 160000, currency: "USD", period: "annual" });
+  assert.equal(posting?.employmentType, "Full Time");
+  assert.equal(normalizeHimalayasEntry(SAMPLE)?.salary, undefined);
+});

@@ -129,6 +129,19 @@ export const jobSearchResultSchema = z.object({
   location: z.string(),
   description: z.string(),
   companyName: z.string(),
+  // Normalization inputs some sources report (JOB-006), round-tripped through the client
+  // between search and import.
+  salary: z
+    .object({
+      min: z.number().nullable().optional(),
+      max: z.number().nullable().optional(),
+      currency: z.string().nullable().optional(),
+      period: z.string().nullable().optional(),
+      text: z.string().nullable().optional(),
+    })
+    .optional(),
+  employmentType: z.string().nullable().optional(),
+  postedAt: z.string().nullable().optional(),
 });
 export type JobSearchResult = z.infer<typeof jobSearchResultSchema>;
 

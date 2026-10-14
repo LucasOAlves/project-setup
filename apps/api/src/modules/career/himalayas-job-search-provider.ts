@@ -19,6 +19,11 @@ type HimalayasEntry = {
   excerpt?: string | null;
   locationRestrictions?: HimalayasLocation[] | null;
   pubDate?: number | string | null;
+  minSalary?: number | null;
+  maxSalary?: number | null;
+  currency?: string | null;
+  salaryPeriod?: string | null;
+  employmentType?: string | null;
 };
 
 // No location restriction means Himalayas lists the role as open worldwide.
@@ -45,6 +50,12 @@ export function normalizeHimalayasEntry(raw: HimalayasEntry): NormalizedJobPosti
     description: stripHtml(raw.description ?? raw.excerpt ?? "").slice(0, 20_000),
     companyNameFromSource: decodeEntities(raw.companyName?.trim() ?? ""),
     updatedAt: parseDate(raw.pubDate),
+    postedAt: raw.pubDate ? parseDate(raw.pubDate) : null,
+    salary:
+      raw.minSalary || raw.maxSalary
+        ? { min: raw.minSalary, max: raw.maxSalary, currency: raw.currency, period: raw.salaryPeriod }
+        : undefined,
+    employmentType: raw.employmentType ?? null,
   };
 }
 

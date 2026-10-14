@@ -11,6 +11,17 @@ export type NormalizedJobPosting = {
   description: string;
   companyNameFromSource: string;
   updatedAt: Date;
+  // Optional facts some sources report (Job Hunter normalization, JOB-006). Left undefined
+  // when a source does not say; never filled with a guess.
+  salary?: {
+    min?: number | null;
+    max?: number | null;
+    currency?: string | null;
+    period?: string | null;
+    text?: string | null;
+  };
+  employmentType?: string | null;
+  postedAt?: Date | null;
 };
 
 export interface JobProvider {

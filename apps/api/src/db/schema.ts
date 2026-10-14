@@ -212,6 +212,7 @@ export const jobs = pgTable("jobs", {
   rawDescription: text("raw_description").notNull().default(""),
   contentHash: text("content_hash").notNull().default(""),
   sourcePostedAt: timestamp("source_posted_at", { withTimezone: true }),
+  normalizedData: jsonb("normalized_data").$type<Record<string, unknown>>().notNull().default({}),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

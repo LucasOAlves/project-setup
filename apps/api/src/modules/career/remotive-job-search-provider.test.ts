@@ -54,3 +54,11 @@ test("searchJobs maps an HTTP error to provider unavailable", async () => {
   const provider = new RemotiveJobSearchProvider(async () => new Response("nope", { status: 500 }));
   await assert.rejects(() => provider.searchJobs({ keywords: "dev" }), /Remotive is unavailable/);
 });
+
+test("normalizeRemotiveEntry carries salary text, job type and posting date", () => {
+  const posting = normalizeRemotiveEntry({ ...SAMPLE, salary: "$80k - $100k", job_type: "full_time" });
+  assert.deepEqual(posting?.salary, { text: "$80k - $100k" });
+  assert.equal(posting?.employmentType, "full_time");
+  assert.equal(posting?.postedAt?.getUTCFullYear(), 2026);
+  assert.equal(normalizeRemotiveEntry({ ...SAMPLE, salary: "  " })?.salary, undefined);
+});

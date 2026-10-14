@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { canonicalizeJobUrl, jobContentHash } from "./job-provenance.ts";
+import { canonicalizeJobUrl, isContentHashReliable, jobContentHash } from "./job-provenance.ts";
 
 test("canonicalizeJobUrl lowercases scheme and host but keeps path case", () => {
   assert.equal(
@@ -84,4 +84,13 @@ test("jobContentHash keeps field boundaries distinct", () => {
   const a = jobContentHash({ title: "ab", companyName: "c", description: "" });
   const b = jobContentHash({ title: "a", companyName: "bc", description: "" });
   assert.notEqual(a, b);
+});
+
+test("isContentHashReliable needs a real description, not a stub", () => {
+  assert.equal(isContentHashReliable(""), false);
+  assert.equal(isContentHashReliable("<p>Apply now</p>"), false);
+  assert.equal(
+    isContentHashReliable("We are hiring a senior engineer to build our payments platform in TypeScript."),
+    true,
+  );
 });

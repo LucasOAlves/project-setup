@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, or } from "drizzle-orm";
 import type { CompanyInput, JobInput, JobPatchInput, RecruiterInput, RecruiterPatchInput } from "@studio/shared";
 import type { Database } from "../../db/client.js";
-import { canonicalizeJobUrl, jobContentHash } from "./job-provenance.js";
+import type { DedupeKeys, ImportedJobFields } from "./job-import.js";
 import { companies, jobStatusEvents, jobs, recruiters } from "../../db/schema.js";
 
 export type CompanyRow = typeof companies.$inferSelect;
@@ -122,34 +122,27 @@ export class CareerRepository {
     return row ?? null;
   }
 
-  async createImportedJob(input: {
-    companyId: string;
-    source: string;
-    externalId: string;
-    title: string;
-    url: string;
-    location: string;
-    description: string;
-    companyName: string;
-  }): Promise<JobRow> {
+  // Cross-source duplicate lookup (JOB-006): the same posting seen through another source
+  // shares its canonical URL, or, when the description is substantial, its content hash.
+  async findJobByProvenance(keys: DedupeKeys): Promise<JobRow | null> {
+    const conditions = [];
+    if (keys.canonicalUrl) conditions.push(eq(jobs.canonicalUrl, keys.canonicalUrl));
+    if (keys.contentHash) conditions.push(eq(jobs.contentHash, keys.contentHash));
+    if (conditions.length === 0) return null;
+    const [row] = await this.db
+      .select()
+      .from(jobs)
+      .where(or(...conditions))
+      .limit(1);
+    return row ?? null;
+  }
+
+  async createImportedJob(input: ImportedJobFields & { companyId: string }): Promise<JobRow> {
     const [row] = await this.db
       .insert(jobs)
       .values({
         id: randomUUID(),
-        companyId: input.companyId,
-        source: input.source,
-        externalId: input.externalId,
-        title: input.title,
-        url: input.url,
-        location: input.location,
-        description: input.description,
-        rawDescription: input.description,
-        canonicalUrl: canonicalizeJobUrl(input.url),
-        contentHash: jobContentHash({
-          title: input.title,
-          companyName: input.companyName,
-          description: input.description,
-        }),
+        ...input,
       })
       .returning();
     if (!row) {

@@ -16,6 +16,8 @@ type RemotiveEntry = {
   candidate_required_location?: string | null;
   description?: string | null;
   publication_date?: string | null;
+  salary?: string | null;
+  job_type?: string | null;
 };
 
 export function normalizeRemotiveEntry(raw: RemotiveEntry): NormalizedJobPosting | null {
@@ -34,6 +36,9 @@ export function normalizeRemotiveEntry(raw: RemotiveEntry): NormalizedJobPosting
     description: stripHtml(raw.description ?? "").slice(0, 20_000),
     companyNameFromSource: decodeEntities(raw.company_name?.trim() ?? ""),
     updatedAt: parseDate(raw.publication_date),
+    postedAt: raw.publication_date ? parseDate(raw.publication_date) : null,
+    salary: raw.salary?.trim() ? { text: raw.salary.trim() } : undefined,
+    employmentType: raw.job_type ?? null,
   };
 }
 

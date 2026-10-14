@@ -665,6 +665,9 @@ test("importFromBoard skips postings already imported and only creates the new o
       async getCompany() {
         return fakeCompany();
       },
+      async findJobByProvenance() {
+        return null;
+      },
       async getJobByExternalId(_source: string, externalId: string) {
         return externalId === "1" ? fakeJob({ externalId: "1" }) : null;
       },
@@ -767,6 +770,9 @@ test("importSearchResult reuses an existing company matched case-insensitively",
   let createCompanyCalled = false;
   const service = new CareerService(
     {
+      async findJobByProvenance() {
+        return null;
+      },
       async getJobByExternalId() {
         return null;
       },
@@ -804,6 +810,9 @@ test("importSearchResult creates a new company when none matches", async () => {
   let createdCompanyName: string | undefined;
   const service = new CareerService(
     {
+      async findJobByProvenance() {
+        return null;
+      },
       async getJobByExternalId() {
         return null;
       },
@@ -837,10 +846,93 @@ test("importSearchResult creates a new company when none matches", async () => {
   assert.equal(createdCompanyName, "Acme GmbH");
 });
 
+test("importSearchResult returns the job already tracked through another source", async () => {
+  let created = false;
+  const service = new CareerService(
+    {
+      async getJobByExternalId() {
+        return null;
+      },
+      async findJobByProvenance(keys: { canonicalUrl: string }) {
+        return keys.canonicalUrl === "https://jobs.lever.co/nimbus/42" ? fakeJob({ id: "existing" }) : null;
+      },
+      async createImportedJob() {
+        created = true;
+        return fakeJob();
+      },
+    } as never,
+    {} as never,
+    textMap(noTextCalls),
+    "openai",
+    noBoardProviders(),
+    noSearchProviders(),
+  );
+
+  const job = await service.importSearchResult("remotive", {
+    externalId: "r-42",
+    title: "Backend Engineer",
+    url: "https://jobs.lever.co/nimbus/42/?utm_source=remotive",
+    location: "LATAM",
+    description: "Build things.",
+    companyName: "Nimbus",
+  });
+
+  assert.equal(job.id, "existing");
+  assert.equal(created, false);
+});
+
+test("importSearchResult stores normalized salary, regions and type", async () => {
+  let stored: Record<string, unknown> = {};
+  const service = new CareerService(
+    {
+      async getJobByExternalId() {
+        return null;
+      },
+      async findJobByProvenance() {
+        return null;
+      },
+      async findCompanyByName() {
+        return fakeCompany();
+      },
+      async createImportedJob(input: Record<string, unknown>) {
+        stored = input;
+        return fakeJob();
+      },
+    } as never,
+    {} as never,
+    textMap(noTextCalls),
+    "openai",
+    noBoardProviders(),
+    noSearchProviders(),
+  );
+
+  await service.importSearchResult("himalayas", {
+    externalId: "h-1",
+    title: "Staff Engineer",
+    url: "https://himalayas.app/companies/nimbus/jobs/staff-engineer",
+    location: "Brazil, Mexico",
+    description: "Lead our TypeScript platform.",
+    companyName: "Nimbus",
+    salary: { min: 96000, max: 120000, currency: "USD", period: "annual" },
+    employmentType: "Full Time",
+    postedAt: "2026-10-01T00:00:00.000Z",
+  });
+
+  const normalized = stored.normalizedData as { salary: { usdMonthlyMin: number }; regions: string[] };
+  assert.equal(normalized.salary.usdMonthlyMin, 8000);
+  assert.deepEqual(normalized.regions, ["BRAZIL", "LATAM"]);
+  assert.equal(stored.employmentType, "FULL_TIME");
+  assert.equal(stored.salaryCurrency, "USD");
+  assert.equal((stored.sourcePostedAt as Date).toISOString(), "2026-10-01T00:00:00.000Z");
+});
+
 test("importSearchResult is idempotent on re-import", async () => {
   let createImportedJobCalls = 0;
   const service = new CareerService(
     {
+      async findJobByProvenance() {
+        return null;
+      },
       async getJobByExternalId() {
         return fakeJob({ externalId: "42", source: "remoteok" });
       },

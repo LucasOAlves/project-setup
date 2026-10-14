@@ -42,6 +42,7 @@ import type { JobProvider } from "./job-provider.js";
 import type { JobSearchProvider } from "./job-search-provider.js";
 import { ALLOW_ALL_SOURCES, type SourceGate } from "./source-registry.js";
 import { computeJobFit } from "./job-fit.js";
+import { prepareImportedJob } from "./job-import.js";
 import { scoreRecruiterRelevance } from "./recruiter-scoring.js";
 import { applyTailoringPlan, groundTailoringPlan } from "./resume-tailoring.js";
 
@@ -114,16 +115,12 @@ export class CareerService {
         skipped += 1;
         continue;
       }
-      const row = await this.repo.createImportedJob({
-        companyId,
-        source,
-        externalId: posting.externalId,
-        title: posting.title,
-        url: posting.url,
-        location: posting.location,
-        description: posting.description,
-        companyName: company.name,
-      });
+      const { fields, dedupe } = prepareImportedJob(source, posting, company.name);
+      if (await this.repo.findJobByProvenance(dedupe)) {
+        skipped += 1;
+        continue;
+      }
+      const row = await this.repo.createImportedJob({ companyId, ...fields });
       imported.push(this.jobToPublic(row));
     }
     return { imported, skipped };
@@ -146,6 +143,9 @@ export class CareerService {
       location: posting.location,
       description: posting.description,
       companyName: posting.companyNameFromSource,
+      salary: posting.salary,
+      employmentType: posting.employmentType ?? null,
+      postedAt: posting.postedAt?.toISOString() ?? null,
     }));
   }
 
@@ -156,6 +156,20 @@ export class CareerService {
     }
 
     const companyName = posting.companyName.trim() || "Unknown company";
+    const { fields, dedupe } = prepareImportedJob(
+      source,
+      {
+        ...posting,
+        postedAt: posting.postedAt ? new Date(posting.postedAt) : null,
+      },
+      companyName,
+    );
+    // The same role already tracked through another source: return it rather than add a twin.
+    const duplicate = await this.repo.findJobByProvenance(dedupe);
+    if (duplicate) {
+      return this.jobToPublic(duplicate);
+    }
+
     let company = await this.repo.findCompanyByName(companyName);
     if (!company) {
       company = await this.repo.createCompany({
@@ -170,16 +184,7 @@ export class CareerService {
       });
     }
 
-    const row = await this.repo.createImportedJob({
-      companyId: company.id,
-      source,
-      externalId: posting.externalId,
-      title: posting.title,
-      url: posting.url,
-      location: posting.location,
-      description: posting.description,
-      companyName: company.name,
-    });
+    const row = await this.repo.createImportedJob({ companyId: company.id, ...fields });
     return this.jobToPublic(row);
   }
 
