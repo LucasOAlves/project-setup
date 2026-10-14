@@ -13,7 +13,7 @@ import type { NormalizedJobPosting } from "./job-provider.js";
 import type { JobExplainer } from "./job-explanation.js";
 
 // Recorded on each evaluation so a verdict can be traced to the rule set that produced it.
-export const ELIGIBILITY_RULES_VERSION = "eligibility-rules@1";
+export const ELIGIBILITY_RULES_VERSION = "eligibility-rules@2";
 
 export type IntakePosting = Omit<NormalizedJobPosting, "companyNameFromSource" | "updatedAt"> & {
   companyName: string;
@@ -135,6 +135,7 @@ export class JobIntake {
             job: toMatchJob(job, description),
             profile,
             eligibility: eligibility.status,
+            eligibilitySupported: eligibility.reasons.some((reason) => reason.effect === "SUPPORTS"),
             preferences: this.settings.matchPreferences,
             now,
           })

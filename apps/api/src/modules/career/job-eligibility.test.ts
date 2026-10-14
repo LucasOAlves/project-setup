@@ -148,3 +148,68 @@ test("an on-site role at home stays eligible even when the description says on-s
   const result = check({ location: "São Paulo, Brazil", description: "This role is on-site in our São Paulo office." });
   assert.equal(result.status, "ELIGIBLE");
 });
+
+// --- Signals from the job-hunting guide review (Milestone 1.5) ------------------------------
+
+test("a 'Remote (US)' location is excluded by the region rule", () => {
+  const result = check({ location: "Remote (US)" });
+  assert.equal(result.status, "EXCLUDED");
+  assert.equal(result.reasons[0]?.rule, "REGION_RESTRICTED");
+});
+
+test("a requirement to live in US time zones excludes, quoting the sentence", () => {
+  for (const text of [
+    "Candidates must be located in US time zones.",
+    "US time zones only.",
+    "This role is open to North American time zones only.",
+    "You must reside within the Pacific time zone.",
+    "Remote, PST only.",
+  ]) {
+    const result = check({ location: "Remote", description: text });
+    assert.equal(result.status, "EXCLUDED", text);
+    assert.deepEqual(result.reasons[0], { rule: "TIMEZONE_RESTRICTED", effect: "EXCLUDES", field: "description", quote: text });
+  }
+});
+
+test("asking for overlap with US hours does not exclude, since Brazil can work them", () => {
+  for (const text of [
+    "You should have at least 4 hours of overlap with US time zones.",
+    "We collaborate mostly during EST business hours.",
+    "Our team works across time zones.",
+  ]) {
+    assert.notEqual(check({ location: "Remote", description: text }).status, "EXCLUDED", text);
+  }
+});
+
+test("hiring through an EOR or as contractors supports eligibility without confirming it", () => {
+  for (const text of [
+    "We hire internationally through Deel.",
+    "Outside the US we employ people through an Employer of Record.",
+    "International hires join through our EOR partner Remote.com.",
+    "This is an independent contractor role.",
+  ]) {
+    const result = check({ location: "Remote", description: text });
+    assert.equal(result.status, "UNKNOWN", text);
+    assert.deepEqual(result.reasons, [
+      { rule: "FOREIGN_HIRE_STRUCTURE", effect: "SUPPORTS", field: "description", quote: text },
+    ]);
+  }
+});
+
+test("an EOR mention does not undo an exclusion or change a confirmation", () => {
+  assert.equal(
+    check({ location: "Remote", description: "Paid through Deel. You must be located in the United States." }).status,
+    "EXCLUDED",
+  );
+  assert.equal(check({ location: "LATAM", description: "Paid through Deel." }).status, "ELIGIBLE");
+});
+
+test("ordinary words close to the EOR names do not count as a signal", () => {
+  for (const text of [
+    "You will deal with complex systems.",
+    "We sign a contract with every customer.",
+    "Our remote team ships weekly.",
+  ]) {
+    assert.deepEqual(check({ location: "Remote", description: text }).reasons, [], text);
+  }
+});

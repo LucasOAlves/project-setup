@@ -1049,7 +1049,7 @@ test("evaluateJob judges the source text and stores the verdict with its evidenc
   // Excluded jobs are not ranked.
   assert.equal(evaluation.score, null);
   assert.equal(evaluation.match, null);
-  assert.equal(stored.modelVersion, "eligibility-rules@1");
+  assert.equal(stored.modelVersion, "eligibility-rules@2");
 });
 
 const SCORED_JOB_TEXT = "Fully remote, open to candidates in Brazil. Node.js and PostgreSQL.";
@@ -1130,7 +1130,7 @@ test("evaluateJob scores a job the rules did not exclude against the saved profi
   assert.equal(evaluation.match?.version, "matching@2");
   assert.deepEqual(evaluation.match?.matchedSkills, ["Node.js", "PostgreSQL"]);
   assert.equal(evaluation.explanation, null);
-  assert.equal(stored.input.modelVersion, "eligibility-rules@1+matching@2");
+  assert.equal(stored.input.modelVersion, "eligibility-rules@2+matching@2");
 });
 
 test("evaluateJob explains a shortlisted job and keeps only quotes the texts back up", async () => {
@@ -1165,7 +1165,7 @@ test("evaluateJob explains a shortlisted job and keeps only quotes the texts bac
   assert.equal(evaluation.explanation?.grounding.droppedClaims, 1);
   assert.equal(evaluation.explanation?.geographicEligibility[0]?.kind, "FACT");
   assert.equal(evaluation.promptVersion, "job-explanation.v1");
-  assert.equal(stored.input.modelVersion, "eligibility-rules@1+matching@2+test-model");
+  assert.equal(stored.input.modelVersion, "eligibility-rules@2+matching@2+test-model");
   assert.equal(stored.input.inputTokens, 1200);
   assert.equal(stored.input.outputTokens, 300);
 });
@@ -1186,7 +1186,7 @@ test("evaluateJob still stores the score when the model call fails", async () =>
   const evaluation = await service.evaluateJob("job-10");
   assert.equal(typeof evaluation.score, "number");
   assert.equal(evaluation.explanation, null);
-  assert.equal(stored.input.modelVersion, "eligibility-rules@1+matching@2");
+  assert.equal(stored.input.modelVersion, "eligibility-rules@2+matching@2");
 });
 
 test("evaluateJob rejects an unknown job", async () => {

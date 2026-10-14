@@ -102,7 +102,9 @@ to the original posting, which Remotive's and Himalayas's terms require.
 
 Eligibility rules (Job Hunter) run with `POST /api/career/jobs/:id/evaluate`: a job comes back
 `ELIGIBLE`, `EXCLUDED` or `UNKNOWN` for a Brazil-based remote candidate, with the exact sentence
-or location text behind each verdict. Jobs that are not excluded also get a 0-100 match score
+or location text behind each verdict. A requirement to live in a US time zone excludes; hiring
+through an EOR such as Deel is shown as a supporting signal that never confirms eligibility on its
+own. Jobs that are not excluded also get a 0-100 match score
 over the spec's six weighted dimensions, a confidence (how much of the score the posting
 actually supports) and flags such as undisclosed compensation; the worker does the same for
 every job discovery finds. Jobs scoring 60 or more are also explained by the configured text

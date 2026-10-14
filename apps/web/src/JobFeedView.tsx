@@ -7,6 +7,7 @@ import type {
   GroundedJobExplanation,
   JobFeedItem,
   MatchDimensionName,
+  EligibilityReasonPublic,
 } from "@studio/shared";
 import { JOB_SOURCES, MATCH_DIMENSIONS } from "@studio/shared";
 import {
@@ -26,6 +27,12 @@ const ELIGIBILITY_LABELS: Record<FeedEligibilityFilter, string> = {
   UNKNOWN: "Eligibility unknown",
   NOT_EVALUATED: "Not evaluated",
   EXCLUDED: "Excluded",
+};
+
+const EFFECT_LABELS: Record<EligibilityReasonPublic["effect"], string> = {
+  EXCLUDES: "Excludes",
+  CONFIRMS: "Confirms",
+  SUPPORTS: "Suggests it hires abroad",
 };
 
 const DIMENSION_LABELS: Record<MatchDimensionName, string> = {
@@ -407,7 +414,7 @@ function FeedCard({
               <ul>
                 {evaluation.eligibilityReasons.map((reason, index) => (
                   <li key={index}>
-                    {reason.effect === "EXCLUDES" ? "Excludes" : "Confirms"}: “{reason.quote}”
+                    {EFFECT_LABELS[reason.effect]}: “{reason.quote}”
                   </li>
                 ))}
               </ul>

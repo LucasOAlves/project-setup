@@ -315,7 +315,7 @@ export type JobEligibilityStatus = (typeof JOB_ELIGIBILITY_STATUSES)[number];
 
 export const eligibilityReasonSchema = z.object({
   rule: z.string(),
-  effect: z.enum(["EXCLUDES", "CONFIRMS"]),
+  effect: z.enum(["EXCLUDES", "CONFIRMS", "SUPPORTS"]),
   field: z.enum(["title", "location", "description"]),
   quote: z.string(),
 });

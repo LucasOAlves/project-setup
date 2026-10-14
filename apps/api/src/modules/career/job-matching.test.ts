@@ -236,6 +236,23 @@ test("unknown eligibility scores half on geography and lowers confidence", () =>
   assert.equal(result.confidence, 85);
 });
 
+test("unknown eligibility with an EOR or contractor signal scores higher but stays unknown", () => {
+  const plain = run({}, {}, "UNKNOWN");
+  const supported = matchJob({ job: job(), profile: profile(), eligibility: "UNKNOWN", eligibilitySupported: true, now: NOW });
+  assert.equal(supported.dimensions.geography.score, 65);
+  assert.equal(supported.dimensions.geography.known, false);
+  assert.ok(supported.flags.includes("ELIGIBILITY_UNKNOWN"));
+  assert.equal(supported.confidence, plain.confidence);
+  assert.ok(supported.dimensions.geography.notes.some((note) => /EOR|contractor/i.test(note)));
+});
+
+test("the EOR signal does not change a confirmed or excluded geography score", () => {
+  const eligible = matchJob({ job: job(), profile: profile(), eligibility: "ELIGIBLE", eligibilitySupported: true, now: NOW });
+  assert.equal(eligible.dimensions.geography.score, 100);
+  const excluded = matchJob({ job: job(), profile: profile(), eligibility: "EXCLUDED", eligibilitySupported: true, now: NOW });
+  assert.equal(excluded.dimensions.geography.score, 0);
+});
+
 test("an internship scores lower on contract fit than a full-time role", () => {
   const fullTime = run();
   const internship = run({ employmentType: "INTERNSHIP" });

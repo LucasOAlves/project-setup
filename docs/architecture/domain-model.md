@@ -194,11 +194,15 @@ token counts behind it. Re-evaluating adds a row.
 Today `POST /api/career/jobs/:id/evaluate` writes the eligibility part: `job-eligibility.ts`
 (JOB-007) reads the job's title, location and `rawDescription` and returns `EXCLUDED` (US
 residency or citizenship, work authorization in a country the candidate lacks, location limited
-to regions outside LATAM/Americas/Brazil/worldwide, on-site or hybrid abroad), `ELIGIBLE` (an
-accepted region in the location, or wording like "from anywhere in the world"), or `UNKNOWN`.
-Each reason quotes the exact text that decided it; an exclusion always wins over a
-confirmation, and `UNKNOWN` is never shown as eligible. `modelVersion` is
-`eligibility-rules@1`.
+to regions outside LATAM/Americas/Brazil/worldwide, on-site or hybrid abroad, a requirement to
+live in a US time zone), `ELIGIBLE` (an accepted region in the location, or wording like "from
+anywhere in the world"), or `UNKNOWN`. Each reason quotes the exact text that decided it; an
+exclusion always wins over a confirmation, and `UNKNOWN` is never shown as eligible. Asking for
+overlap with US hours does not exclude, since a Brazil-based candidate can work them. A third
+kind of reason, `SUPPORTS`, records hiring through an EOR (Deel, Remote.com, "employer of
+record") or as an independent contractor: it never changes the status, and on an `UNKNOWN` job
+it raises the geography score from 50 to 65 while the dimension stays unknown. `modelVersion`
+is `eligibility-rules@2` (`@1` before the time-zone and EOR rules).
 
 Jobs the rules did not exclude are then scored by matching v2 (`job-matching.ts`, JOB-011),
 when a profile is saved: six weighted dimensions from the spec (technical stack 30%, seniority
@@ -209,7 +213,7 @@ carry no structured technology list. `confidence` is the share of weight the pos
 enough to score, so an undisclosed salary is an uncertainty (`COMPENSATION_UNDISCLOSED`, score
 50, confidence 90) rather than an exclusion. `score`, `confidence` and the breakdown
 (`scoreBreakdown`: dimensions, matched and missing skills, flags) are stored on the row and
-`modelVersion` becomes `eligibility-rules@1+matching@2`. Excluded jobs keep a null score. The
+`modelVersion` becomes `eligibility-rules@2+matching@2`. Excluded jobs keep a null score. The
 compensation target is `MATCH_TARGET_USD_MONTHLY` (default 6000). This is separate from the
 user-triggered Job Fit score on `Job.fitScore`, which reads fields typed on a tracked job.
 Jobs scoring at least `EXPLANATION_MIN_SCORE` (default 60) are shortlisted and explained by

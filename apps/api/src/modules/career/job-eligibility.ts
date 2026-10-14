@@ -9,6 +9,8 @@ import { extractRegions, type Region } from "./job-normalization.js";
 //               be represented as confirmed")
 // An exclusion always wins over a confirmation: "Worldwide" in the location does not undo
 // "must be authorized to work in the United States" in the description.
+// A SUPPORTS reason is evidence that never changes the status: hiring through an EOR such as
+// Deel says the company can employ people abroad, not that it hires from Brazil.
 
 export type EligibilityStatus = "ELIGIBLE" | "EXCLUDED" | "UNKNOWN";
 
@@ -18,11 +20,13 @@ export type EligibilityRule =
   | "ONSITE_ABROAD"
   | "US_RESIDENCY"
   | "WORK_AUTHORIZATION"
-  | "OPEN_TO_CANDIDATE";
+  | "TIMEZONE_RESTRICTED"
+  | "OPEN_TO_CANDIDATE"
+  | "FOREIGN_HIRE_STRUCTURE";
 
 export type EligibilityReason = {
   rule: EligibilityRule;
-  effect: "EXCLUDES" | "CONFIRMS";
+  effect: "EXCLUDES" | "CONFIRMS" | "SUPPORTS";
   field: "title" | "location" | "description";
   quote: string;
 };
@@ -60,6 +64,25 @@ const US_RESIDENCY = [
   /\b(residents|citizens) of the (US|U\.S\.|USA|United States) only\b/i,
 ];
 
+// Living in a US time zone, not working its hours: "4 hours of overlap with EST" is something a
+// Brazil-based candidate can do, so it is deliberately not matched.
+const US_TIME_ZONE = String.raw`(US|U\.S\.|North American?|Pacific|Eastern|Central|Mountain|PST|EST|CST|MST|PT|ET|CT|MT)`;
+const TIMEZONE_RESTRICTED = [
+  new RegExp(String.raw`\b${US_TIME_ZONE} time ?zones? only\b`, "i"),
+  new RegExp(
+    String.raw`\b(must|should|need to|required to) (be )?(based|located|reside|residing|live|living) (in|within) (a |the )?${US_TIME_ZONE} time ?zones?\b`,
+    "i",
+  ),
+  /\b(PST|EST|CST|MST|PT|ET|CT|MT) only\b/,
+];
+
+// Case-sensitive where the name is also a common word ("Deel" is Dutch for "part").
+const FOREIGN_HIRE_STRUCTURE = [
+  /\bDeel\b/,
+  /\bEOR\b/,
+  /\b(remote\.com|oyster hr|papaya global|employer of record|independent contractor)\b/i,
+];
+
 const US_STATUS = [/\bU\.?S\.? citizen(ship)?\b/, /\bsecurity clearance\b/i, /\bgreen card\b/i];
 
 // "Authorized to work in <country>": explicit country names only, so ordinary phrases like
@@ -80,6 +103,7 @@ export function evaluateEligibility(job: JobText, candidate: CandidateEligibilit
     ...textReasons("description", sentences(job.description), candidate, atHome),
   ];
 
+  // SUPPORTS reasons are recorded but never decide the status.
   const status: EligibilityStatus = reasons.some((r) => r.effect === "EXCLUDES")
     ? "EXCLUDED"
     : reasons.some((r) => r.effect === "CONFIRMS")
@@ -129,9 +153,11 @@ function textReasons(
       add("WORK_AUTHORIZATION", "EXCLUDES", part);
     }
     if (US_STATUS.some((pattern) => pattern.test(part))) add("WORK_AUTHORIZATION", "EXCLUDES", part);
+    if (TIMEZONE_RESTRICTED.some((pattern) => pattern.test(part))) add("TIMEZONE_RESTRICTED", "EXCLUDES", part);
 
     if (field === "description" && !atHome && ONSITE_DESCRIPTION.test(part)) add("ONSITE_ABROAD", "EXCLUDES", part);
     if (OPEN_TO_CANDIDATE.test(part)) add("OPEN_TO_CANDIDATE", "CONFIRMS", part);
+    if (FOREIGN_HIRE_STRUCTURE.some((pattern) => pattern.test(part))) add("FOREIGN_HIRE_STRUCTURE", "SUPPORTS", part);
   }
   return reasons;
 }

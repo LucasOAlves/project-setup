@@ -358,10 +358,15 @@ const CONTRACT_FACTOR: Partial<Record<JobEmploymentType, number>> = {
   INTERNSHIP: 0.3,
 };
 
-function scoreGeography(job: MatchJob, eligibility: JobEligibilityStatus): Scored {
+// An EOR or contractor signal (eligibility SUPPORTS reason) raises an unknown geography score
+// but leaves it unknown: the company can hire abroad, not necessarily from Brazil.
+function scoreGeography(job: MatchJob, eligibility: JobEligibilityStatus, supported: boolean): Scored {
   const notes: string[] = [];
-  const geo = eligibility === "ELIGIBLE" ? 100 : eligibility === "UNKNOWN" ? 50 : 0;
+  const geo = eligibility === "ELIGIBLE" ? 100 : eligibility === "UNKNOWN" ? (supported ? 65 : 50) : 0;
   if (eligibility === "UNKNOWN") notes.push("The posting does not confirm it hires from the candidate's region.");
+  if (eligibility === "UNKNOWN" && supported) {
+    notes.push("It mentions an EOR or contractor hiring, so it can employ people abroad.");
+  }
   if (eligibility === "EXCLUDED") notes.push("Excluded by the eligibility rules.");
   const factor = job.employmentType ? (CONTRACT_FACTOR[job.employmentType] ?? 1) : 1;
   if (factor < 1 && job.employmentType) notes.push(`Contract type is ${job.employmentType.toLowerCase().replace("_", "-")}.`);
@@ -404,6 +409,8 @@ export function matchJob(input: {
   job: MatchJob;
   profile: MatchProfile;
   eligibility: JobEligibilityStatus;
+  // True when the eligibility rules found an EOR or contractor signal.
+  eligibilitySupported?: boolean;
   now: Date;
   preferences?: MatchPreferences;
   weights?: MatchWeights;
@@ -420,7 +427,7 @@ export function matchJob(input: {
     technical: technical.result,
     seniority: scoreSeniority(job, profile),
     experience: scoreExperience(job, profile, required),
-    geography: scoreGeography(job, eligibility),
+    geography: scoreGeography(job, eligibility, input.eligibilitySupported ?? false),
     compensation: scoreCompensation(job, preferences),
     preferences: scorePreferences(job, preferences, now),
   };
