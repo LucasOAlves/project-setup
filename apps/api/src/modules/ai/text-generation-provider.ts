@@ -7,6 +7,8 @@ export type TextGenerationRequest = {
 export type TextGenerationResult = {
   text: string;
   model: string;
+  // Token counts when the provider reports them, for cost tracking (spec: AI subsystem).
+  usage?: { inputTokens: number; outputTokens: number };
 };
 
 export interface TextGenerationProvider {

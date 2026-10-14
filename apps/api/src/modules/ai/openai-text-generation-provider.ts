@@ -45,6 +45,12 @@ export class OpenAITextGenerationProvider implements TextGenerationProvider {
       return {
         text,
         model: completion.model || this.model,
+        ...(completion.usage && {
+          usage: {
+            inputTokens: completion.usage.prompt_tokens,
+            outputTokens: completion.usage.completion_tokens,
+          },
+        }),
       };
     } catch (error) {
       throw mapOpenAiError(error);

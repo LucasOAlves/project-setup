@@ -50,8 +50,8 @@ import type { JobSearchProvider } from "./job-search-provider.js";
 import { ALLOW_ALL_SOURCES, type SourceGate } from "./source-registry.js";
 import { computeJobFit } from "./job-fit.js";
 import { prepareImportedJob } from "./job-import.js";
-import { DEFAULT_MATCH_PREFERENCES, type MatchPreferences } from "./job-matching.js";
-import { JobIntake } from "./job-intake.js";
+import { JobExplainer } from "./job-explanation.js";
+import { DEFAULT_EVALUATION_SETTINGS, JobIntake, type EvaluationSettings } from "./job-intake.js";
 import { scoreRecruiterRelevance } from "./recruiter-scoring.js";
 import { applyTailoringPlan, groundTailoringPlan } from "./resume-tailoring.js";
 
@@ -74,11 +74,11 @@ export class CareerService {
     private readonly boardProviders: Record<JobBoardSource, JobProvider>,
     private readonly searchProviders: Record<JobSearchSource, JobSearchProvider>,
     private readonly sourceGate: SourceGate = ALLOW_ALL_SOURCES,
-    private readonly matchPreferences: MatchPreferences = DEFAULT_MATCH_PREFERENCES,
+    private readonly evaluationSettings: EvaluationSettings = DEFAULT_EVALUATION_SETTINGS,
   ) {}
 
   private get intake(): JobIntake {
-    return new JobIntake(this.repo, this.matchPreferences);
+    return new JobIntake(this.repo, this.evaluationSettings);
   }
 
   async listCompanies(): Promise<CompanyPublic[]> {
@@ -262,8 +262,14 @@ export class CareerService {
     if (!job) {
       throw notFound("That job does not exist.");
     }
-    // Eligibility rules, then matching v2 for jobs the rules did not exclude (JOB-011).
-    return evaluationToPublic(await this.intake.evaluateJob(job, await this.profiles.getProfile()));
+    // Eligibility rules, matching v2 for jobs the rules did not exclude (JOB-011), and an
+    // explanation for shortlisted ones (JOB-012). A failed model call still stores the score:
+    // the explanation stays empty and evaluating again retries it.
+    const { evaluation } = await this.intake.evaluateJob(job, await this.profiles.getProfile(), {
+      explainer: new JobExplainer(resolveTextProvider(this.textProviders, this.defaultTextProvider)),
+      onExplanationFailure: "skip",
+    });
+    return evaluationToPublic(evaluation);
   }
 
   async getLatestEvaluation(id: string): Promise<JobEvaluationPublic | null> {
@@ -503,7 +509,9 @@ function evaluationToPublic(row: JobEvaluationRow): JobEvaluationPublic {
     score: row.score,
     confidence: row.confidence,
     match: row.score === null ? null : (row.scoreBreakdown as JobEvaluationPublic["match"]),
+    explanation: (row.explanation ?? null) as JobEvaluationPublic["explanation"],
     modelVersion: row.modelVersion,
+    promptVersion: row.promptVersion,
     createdAt: row.createdAt.toISOString(),
   };
 }

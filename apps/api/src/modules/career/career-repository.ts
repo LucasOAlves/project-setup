@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, desc, eq, or } from "drizzle-orm";
+import { and, count, desc, eq, gte, isNotNull, or } from "drizzle-orm";
 import type { CompanyInput, JobInput, JobPatchInput, RecruiterInput, RecruiterPatchInput } from "@studio/shared";
 import type { Database } from "../../db/client.js";
 import type { DedupeKeys, ImportedJobFields } from "./job-import.js";
@@ -168,6 +168,11 @@ export class CareerRepository {
     score?: number | null;
     confidence?: number | null;
     scoreBreakdown?: Record<string, unknown>;
+    explanation?: unknown;
+    evidence?: unknown[];
+    promptVersion?: string;
+    inputTokens?: number;
+    outputTokens?: number;
   }): Promise<JobEvaluationRow> {
     const [row] = await this.db
       .insert(jobEvaluations)
@@ -177,6 +182,15 @@ export class CareerRepository {
       throw new Error("job evaluation insert failed");
     }
     return row;
+  }
+
+  // Explanations written since `since`, for the daily model-cost limit.
+  async countExplanationsSince(since: Date): Promise<number> {
+    const [row] = await this.db
+      .select({ value: count() })
+      .from(jobEvaluations)
+      .where(and(isNotNull(jobEvaluations.explanation), gte(jobEvaluations.createdAt, since)));
+    return row?.value ?? 0;
   }
 
   async getLatestJobEvaluation(jobId: string): Promise<JobEvaluationRow | null> {

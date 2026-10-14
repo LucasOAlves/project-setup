@@ -5,6 +5,7 @@ import type { TextGenerationProvider } from "../ai/text-generation-provider.ts";
 import type { JobProvider } from "./job-provider.ts";
 import type { JobSearchProvider } from "./job-search-provider.ts";
 import { CareerService } from "./career-service.ts";
+import { DEFAULT_EVALUATION_SETTINGS } from "./job-intake.ts";
 
 const textMap = (text: TextGenerationProvider) => ({ openai: text, anthropic: text }) as const;
 const noTextCalls: TextGenerationProvider = {
@@ -1051,8 +1052,13 @@ test("evaluateJob judges the source text and stores the verdict with its evidenc
   assert.equal(stored.modelVersion, "eligibility-rules@1");
 });
 
-test("evaluateJob scores a job the rules did not exclude against the saved profile", async () => {
-  let stored: Record<string, unknown> = {};
+const SCORED_JOB_TEXT = "Fully remote, open to candidates in Brazil. Node.js and PostgreSQL.";
+
+function scoredJobService(
+  text: TextGenerationProvider,
+  options: { explanationsToday?: number; minScore?: number } = {},
+) {
+  const stored: { input: Record<string, unknown> } = { input: {} };
   const service = new CareerService(
     {
       async getJob() {
@@ -1060,7 +1066,7 @@ test("evaluateJob scores a job the rules did not exclude against the saved profi
           id: "job-10",
           title: "Senior Backend Engineer",
           location: "Remote - LATAM",
-          rawDescription: "Fully remote, open to candidates in Brazil. Node.js and PostgreSQL.",
+          rawDescription: SCORED_JOB_TEXT,
           normalizedData: {
             version: 1,
             salary: { usdMonthlyMin: 7000, usdMonthlyMax: 9000, approximate: false },
@@ -1072,21 +1078,50 @@ test("evaluateJob scores a job the rules did not exclude against the saved profi
       async getProfileVersion() {
         return 4;
       },
+      async countExplanationsSince() {
+        return options.explanationsToday ?? 0;
+      },
       async insertJobEvaluation(input: Record<string, unknown>) {
-        stored = input;
-        return { id: "eval-2", createdAt: new Date("2026-10-14T00:00:00Z"), score: null, confidence: null, scoreBreakdown: {}, ...input };
+        stored.input = input;
+        return {
+          id: "eval-2",
+          createdAt: new Date("2026-10-14T00:00:00Z"),
+          score: null,
+          confidence: null,
+          scoreBreakdown: {},
+          explanation: null,
+          promptVersion: "",
+          ...input,
+        };
       },
     } as never,
     {
       async getProfile() {
-        return { ...fakeProfileForTailoring(), yearsOfExperience: 9, architectureExperience: "", leadershipExperience: "", experiences: [] };
+        return {
+          ...fakeProfileForTailoring(),
+          yearsOfExperience: 9,
+          architectureExperience: "",
+          leadershipExperience: "",
+          experiences: [],
+        };
       },
     } as never,
-    textMap(noTextCalls),
+    textMap(text),
     "openai",
     noBoardProviders(),
     noSearchProviders(),
+    undefined,
+    {
+      matchPreferences: DEFAULT_EVALUATION_SETTINGS.matchPreferences,
+      explanationMinScore: options.minScore ?? 60,
+      explanationDailyLimit: 5,
+    },
   );
+  return { service, stored };
+}
+
+test("evaluateJob scores a job the rules did not exclude against the saved profile", async () => {
+  const { service, stored } = scoredJobService(noTextCalls, { minScore: 101 });
 
   const evaluation = await service.evaluateJob("job-10");
 
@@ -1094,7 +1129,64 @@ test("evaluateJob scores a job the rules did not exclude against the saved profi
   assert.equal(typeof evaluation.score, "number");
   assert.equal(evaluation.match?.version, "matching@2");
   assert.deepEqual(evaluation.match?.matchedSkills, ["Node.js", "PostgreSQL"]);
-  assert.equal(stored.modelVersion, "eligibility-rules@1+matching@2");
+  assert.equal(evaluation.explanation, null);
+  assert.equal(stored.input.modelVersion, "eligibility-rules@1+matching@2");
+});
+
+test("evaluateJob explains a shortlisted job and keeps only quotes the texts back up", async () => {
+  let prompt = "";
+  const { service, stored } = scoredJobService({
+    async generateText(request) {
+      prompt = request.user;
+      return {
+        model: "test-model",
+        usage: { inputTokens: 1200, outputTokens: 300 },
+        text: JSON.stringify({
+          executiveSummary: "Backend role on a stack the candidate knows.",
+          whyShortlisted: [{ statement: "Uses Node.js.", kind: "FACT", evidence: [{ source: "JOB", quote: "Node.js and PostgreSQL" }] }],
+          matchedRequirements: [
+            { statement: "Knows Node.js.", kind: "FACT", evidence: [{ source: "PROFILE", quote: "Top skills: Kubernetes, Node.js" }] },
+            { statement: "Ran Kafka at scale.", kind: "FACT", evidence: [{ source: "PROFILE", quote: "Ran Kafka clusters at scale" }] },
+          ],
+          geographicEligibility: [
+            { statement: "Hires from Brazil.", kind: "FACT", evidence: [{ source: "JOB", quote: "open to candidates in Brazil" }] },
+          ],
+          recommendedAction: "APPLY",
+          confidence: "HIGH",
+        }),
+      };
+    },
+  });
+
+  const evaluation = await service.evaluateJob("job-10");
+
+  assert.ok(prompt.includes(SCORED_JOB_TEXT));
+  assert.equal(evaluation.explanation?.matchedRequirements.length, 1);
+  assert.equal(evaluation.explanation?.grounding.droppedClaims, 1);
+  assert.equal(evaluation.explanation?.geographicEligibility[0]?.kind, "FACT");
+  assert.equal(evaluation.promptVersion, "job-explanation.v1");
+  assert.equal(stored.input.modelVersion, "eligibility-rules@1+matching@2+test-model");
+  assert.equal(stored.input.inputTokens, 1200);
+  assert.equal(stored.input.outputTokens, 300);
+});
+
+test("evaluateJob stops explaining once the daily limit is reached", async () => {
+  const { service } = scoredJobService(noTextCalls, { explanationsToday: 5 });
+  const evaluation = await service.evaluateJob("job-10");
+  assert.equal(typeof evaluation.score, "number");
+  assert.equal(evaluation.explanation, null);
+});
+
+test("evaluateJob still stores the score when the model call fails", async () => {
+  const { service, stored } = scoredJobService({
+    async generateText() {
+      return { model: "test-model", text: "not json at all" };
+    },
+  });
+  const evaluation = await service.evaluateJob("job-10");
+  assert.equal(typeof evaluation.score, "number");
+  assert.equal(evaluation.explanation, null);
+  assert.equal(stored.input.modelVersion, "eligibility-rules@1+matching@2");
 });
 
 test("evaluateJob rejects an unknown job", async () => {

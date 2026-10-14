@@ -10,6 +10,7 @@ import {
   type MatchProfile,
 } from "./job-matching.js";
 import type { NormalizedJobPosting } from "./job-provider.js";
+import type { JobExplainer } from "./job-explanation.js";
 
 // Recorded on each evaluation so a verdict can be traced to the rule set that produced it.
 export const ELIGIBILITY_RULES_VERSION = "eligibility-rules@1";
@@ -28,10 +29,51 @@ export type IntakeOutcome = {
 // The one path by which a posting from a search source becomes a tracked job, shared by the
 // user's "Add to tracker" (CareerService) and scheduled discovery in the worker, so both
 // apply the same normalization, dedupe and eligibility rules.
+export type EvaluationSettings = {
+  matchPreferences: MatchPreferences;
+  // A job is shortlisted for an explanation from this match score up (JOB-012).
+  explanationMinScore: number;
+  // At most this many explanations per UTC day, the model-cost limit (spec criterion 12).
+  explanationDailyLimit: number;
+};
+
+export const DEFAULT_EVALUATION_SETTINGS: EvaluationSettings = {
+  matchPreferences: DEFAULT_MATCH_PREFERENCES,
+  explanationMinScore: 60,
+  explanationDailyLimit: 25,
+};
+
+export function evaluationSettingsFromEnv(env: {
+  MATCH_TARGET_USD_MONTHLY: number;
+  EXPLANATION_MIN_SCORE: number;
+  EXPLANATION_DAILY_LIMIT: number;
+}): EvaluationSettings {
+  return {
+    matchPreferences: { ...DEFAULT_MATCH_PREFERENCES, targetUsdMonthly: env.MATCH_TARGET_USD_MONTHLY },
+    explanationMinScore: env.EXPLANATION_MIN_SCORE,
+    explanationDailyLimit: env.EXPLANATION_DAILY_LIMIT,
+  };
+}
+
+export type ExplanationStatus =
+  | "EXPLAINED"
+  | "NOT_SHORTLISTED"
+  | "DAILY_LIMIT_REACHED"
+  | "DISABLED"
+  | "FAILED";
+
+export type EvaluateOptions = {
+  now?: Date;
+  explainer?: JobExplainer | null;
+  // "throw" lets a queue retry a failed model call; "skip" stores the evaluation without an
+  // explanation (the API, and a worker job on its last attempt).
+  onExplanationFailure?: "throw" | "skip";
+};
+
 export class JobIntake {
   constructor(
     private readonly repo: CareerRepository,
-    private readonly matchPreferences: MatchPreferences = DEFAULT_MATCH_PREFERENCES,
+    private readonly settings: EvaluationSettings = DEFAULT_EVALUATION_SETTINGS,
   ) {}
 
   async importSearchPosting(source: string, posting: IntakePosting): Promise<IntakeOutcome> {
@@ -69,13 +111,19 @@ export class JobIntake {
   // job_evaluations row, so earlier verdicts stay inspectable. Rules read the source's own
   // text (rawDescription) when present, not a description the user may have edited.
   async evaluateEligibility(job: JobRow): Promise<JobEvaluationRow> {
-    return this.evaluateJob(job, null);
+    return (await this.evaluateJob(job, null)).evaluation;
   }
 
-  // Eligibility, then matching v2 (JOB-011) for jobs the rules did not exclude: hard
-  // exclusions are applied before ranking (spec A03). Without a saved profile there is
-  // nothing to match against, so only the eligibility verdict is recorded.
-  async evaluateJob(job: JobRow, profile: MatchProfile | null, now = new Date()): Promise<JobEvaluationRow> {
+  // Eligibility, then matching v2 (JOB-011) for jobs the rules did not exclude, hard
+  // exclusions before ranking (spec A03). A job scoring at least explanationMinScore is
+  // shortlisted and explained (JOB-012), within the daily limit. Without a saved profile
+  // there is nothing to match against, so only the eligibility verdict is recorded.
+  async evaluateJob(
+    job: JobRow,
+    profile: MatchProfile | null,
+    options: EvaluateOptions = {},
+  ): Promise<{ evaluation: JobEvaluationRow; explanation: ExplanationStatus }> {
+    const now = options.now ?? new Date();
     const description = job.rawDescription || job.description;
     const eligibility = evaluateEligibility(
       { title: job.title, location: job.location, description },
@@ -87,17 +135,44 @@ export class JobIntake {
             job: toMatchJob(job, description),
             profile,
             eligibility: eligibility.status,
-            preferences: this.matchPreferences,
+            preferences: this.settings.matchPreferences,
             now,
           })
         : null;
 
-    return this.repo.insertJobEvaluation({
+    let status: ExplanationStatus = "NOT_SHORTLISTED";
+    let explained: Awaited<ReturnType<JobExplainer["explain"]>> | null = null;
+    if (profile && match && match.score >= this.settings.explanationMinScore) {
+      if (!options.explainer) {
+        status = "DISABLED";
+      } else if ((await this.repo.countExplanationsSince(startOfUtcDay(now))) >= this.settings.explanationDailyLimit) {
+        status = "DAILY_LIMIT_REACHED";
+      } else {
+        try {
+          explained = await options.explainer.explain({
+            job: { title: job.title, location: job.location, description },
+            profile,
+            eligibility,
+            match,
+          });
+          status = "EXPLAINED";
+        } catch (error) {
+          if (options.onExplanationFailure !== "skip") throw error;
+          status = "FAILED";
+        }
+      }
+    }
+
+    const versions = [ELIGIBILITY_RULES_VERSION];
+    if (match) versions.push(MATCHING_VERSION);
+    if (explained) versions.push(explained.model);
+
+    const evaluation = await this.repo.insertJobEvaluation({
       jobId: job.id,
       profileVersion: await this.repo.getProfileVersion(),
       eligibility: eligibility.status,
       eligibilityReasons: eligibility.reasons,
-      modelVersion: match ? `${ELIGIBILITY_RULES_VERSION}+${MATCHING_VERSION}` : ELIGIBILITY_RULES_VERSION,
+      modelVersion: versions.join("+"),
       ...(match && {
         score: match.score,
         confidence: match.confidence,
@@ -109,8 +184,20 @@ export class JobIntake {
           flags: match.flags,
         },
       }),
+      ...(explained && {
+        explanation: explained.explanation,
+        evidence: explained.evidence,
+        promptVersion: explained.promptVersion,
+        inputTokens: explained.inputTokens,
+        outputTokens: explained.outputTokens,
+      }),
     });
+    return { evaluation, explanation: status };
   }
+}
+
+function startOfUtcDay(now: Date): Date {
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
 }
 
 function toMatchJob(job: JobRow, description: string): MatchJob {

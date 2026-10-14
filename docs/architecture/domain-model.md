@@ -212,7 +212,17 @@ enough to score, so an undisclosed salary is an uncertainty (`COMPENSATION_UNDIS
 `modelVersion` becomes `eligibility-rules@1+matching@2`. Excluded jobs keep a null score. The
 compensation target is `MATCH_TARGET_USD_MONTHLY` (default 6000). This is separate from the
 user-triggered Job Fit score on `Job.fitScore`, which reads fields typed on a tracked job.
-The explanation stays empty until ticket 9.
+Jobs scoring at least `EXPLANATION_MIN_SCORE` (default 60) are shortlisted and explained by
+the configured text provider (`job-explanation.ts`, JOB-012/013), at most
+`EXPLANATION_DAILY_LIMIT` per UTC day. The explanation follows spec A05 (summary, why
+shortlisted, matched requirements, gaps, geographic eligibility, compensation, technical
+relevance, risks, CV emphasis, interview topics, recommended action, confidence). Each claim
+is a `FACT` or an `INFERENCE` with quoted evidence, and `job-explanation-grounding.ts` keeps
+only quotes found in the job text or the profile text that were sent (ADR-016). The row stores
+the grounded explanation, the surviving quotes in `evidence`, `promptVersion`
+(`job-explanation.v1`), the model name appended to `modelVersion`, and the token counts.
+Only professional evidence from the profile is sent: no name, contact details or employer
+names. If the model call fails, the score is still stored without an explanation.
 
 ## AuditEvent (Job Hunter)
 

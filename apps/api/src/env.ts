@@ -39,6 +39,9 @@ const envSchema = z.object({
   DISCOVERY_TZ: z.string().min(1).default("America/Sao_Paulo"),
   // Matching v2 compensation target, in USD per month (JOB-011).
   MATCH_TARGET_USD_MONTHLY: z.coerce.number().int().positive().default(6000),
+  // Explanation agent (JOB-012): shortlist threshold and the daily model-cost limit.
+  EXPLANATION_MIN_SCORE: z.coerce.number().int().min(0).max(100).default(60),
+  EXPLANATION_DAILY_LIMIT: z.coerce.number().int().min(0).default(25),
 });
 
 export type Env = z.infer<typeof envSchema>;

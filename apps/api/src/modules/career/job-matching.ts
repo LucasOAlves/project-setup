@@ -45,10 +45,6 @@ export const DEFAULT_MATCH_PREFERENCES: MatchPreferences = {
   maxPostingAgeDays: 30,
 };
 
-export function matchPreferencesFromEnv(env: { MATCH_TARGET_USD_MONTHLY: number }): MatchPreferences {
-  return { ...DEFAULT_MATCH_PREFERENCES, targetUsdMonthly: env.MATCH_TARGET_USD_MONTHLY };
-}
-
 export type MatchJob = {
   title: string;
   description: string;

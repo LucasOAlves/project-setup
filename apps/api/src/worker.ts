@@ -9,7 +9,11 @@ import { loadEnv, type Env } from "./env.js";
 import { CareerRepository } from "./modules/career/career-repository.js";
 import { DiscoveryService } from "./modules/career/discovery.js";
 import { JobIntake } from "./modules/career/job-intake.js";
-import { matchPreferencesFromEnv, type MatchProfile } from "./modules/career/job-matching.js";
+import { evaluationSettingsFromEnv } from "./modules/career/job-intake.js";
+import { JobExplainer } from "./modules/career/job-explanation.js";
+import type { MatchProfile } from "./modules/career/job-matching.js";
+import { AnthropicTextGenerationProvider } from "./modules/ai/anthropic-text-generation-provider.js";
+import { OpenAITextGenerationProvider } from "./modules/ai/openai-text-generation-provider.js";
 import { ProfileRepository } from "./modules/profile/profile-repository.js";
 import { createSearchProviders } from "./modules/career/search-providers.js";
 import { SourceRegistry } from "./modules/career/source-registry.js";
@@ -62,7 +66,11 @@ async function main() {
 
   const careerRepo = new CareerRepository(db);
   const profileRepo = new ProfileRepository(db);
-  const intake = new JobIntake(careerRepo, matchPreferencesFromEnv(env));
+  const intake = new JobIntake(careerRepo, evaluationSettingsFromEnv(env));
+  const explainer = createExplainer(env);
+  if (!explainer) {
+    logger.warn("explanations disabled", { reason: `no API key for TEXT_PROVIDER=${env.TEXT_PROVIDER}` });
+  }
   const discovery = new DiscoveryService({
     intake,
     providers: createSearchProviders(env),
@@ -84,13 +92,22 @@ async function main() {
         // Deleted since it was queued: nothing to evaluate, and retrying would not help.
         return { jobId: data.jobId, skipped: "JOB_NOT_FOUND" };
       }
-      const evaluation = await intake.evaluateJob(jobRow, await loadMatchProfile(profileRepo));
+      // A failed model call is retried by the queue; on the last attempt the score is
+      // stored without an explanation instead of losing the evaluation.
+      const lastAttempt = job.attemptsMade + 1 >= (job.opts.attempts ?? 1);
+      const { evaluation, explanation } = await intake.evaluateJob(jobRow, await loadMatchProfile(profileRepo), {
+        explainer,
+        onExplanationFailure: lastAttempt ? "skip" : "throw",
+      });
       return {
         jobId: data.jobId,
         evaluationId: evaluation.id,
         eligibility: evaluation.eligibility,
         score: evaluation.score,
         confidence: evaluation.confidence,
+        explanation,
+        inputTokens: evaluation.inputTokens,
+        outputTokens: evaluation.outputTokens,
       };
     },
     [QUEUE_NAMES.system]: async (job) => {
@@ -118,6 +135,19 @@ async function main() {
   };
   process.on("SIGTERM", shutdown);
   process.on("SIGINT", shutdown);
+}
+
+// Explanations use the configured default text provider. Without its API key they are off,
+// and evaluations store the score alone.
+function createExplainer(env: Env): JobExplainer | null {
+  if (env.TEXT_PROVIDER === "anthropic") {
+    return env.ANTHROPIC_API_KEY
+      ? new JobExplainer(new AnthropicTextGenerationProvider(env.ANTHROPIC_API_KEY, env.ANTHROPIC_TEXT_MODEL))
+      : null;
+  }
+  return env.OPENAI_API_KEY
+    ? new JobExplainer(new OpenAITextGenerationProvider(env.OPENAI_API_KEY, env.OPENAI_TEXT_MODEL))
+    : null;
 }
 
 // The worker reads the profile straight from the repository: the API's ProfileService also

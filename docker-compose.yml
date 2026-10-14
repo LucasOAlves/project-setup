@@ -52,6 +52,8 @@ services:
       REDIS_URL: redis://redis:6379
       DISCOVERY_SOURCES: ${DISCOVERY_SOURCES:-remotive,himalayas,remoteok,arbeitnow}
       MATCH_TARGET_USD_MONTHLY: ${MATCH_TARGET_USD_MONTHLY:-6000}
+      EXPLANATION_MIN_SCORE: ${EXPLANATION_MIN_SCORE:-60}
+      EXPLANATION_DAILY_LIMIT: ${EXPLANATION_DAILY_LIMIT:-25}
     volumes:
       - media_data:/data/storage
       - ./apps/api/src:/app/apps/api/src
@@ -81,11 +83,18 @@ services:
       WORKER_HEARTBEAT_MS: ${WORKER_HEARTBEAT_MS:-300000}
       DISCOVERY_SOURCES: ${DISCOVERY_SOURCES:-remotive,himalayas,remoteok,arbeitnow}
       MATCH_TARGET_USD_MONTHLY: ${MATCH_TARGET_USD_MONTHLY:-6000}
+      EXPLANATION_MIN_SCORE: ${EXPLANATION_MIN_SCORE:-60}
+      EXPLANATION_DAILY_LIMIT: ${EXPLANATION_DAILY_LIMIT:-25}
       DISCOVERY_KEYWORDS: ${DISCOVERY_KEYWORDS:-typescript,node.js,angular,tech lead}
       DISCOVERY_CRON: ${DISCOVERY_CRON:-0 9 * * *}
       DISCOVERY_TZ: ${DISCOVERY_TZ:-America/Sao_Paulo}
       ADZUNA_APP_ID: ${ADZUNA_APP_ID:-}
       ADZUNA_APP_KEY: ${ADZUNA_APP_KEY:-}
+      TEXT_PROVIDER: ${TEXT_PROVIDER:-openai}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_TEXT_MODEL: ${OPENAI_TEXT_MODEL:-gpt-4.1}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      ANTHROPIC_TEXT_MODEL: ${ANTHROPIC_TEXT_MODEL:-claude-opus-5}
     volumes:
       - ./apps/api/src:/app/apps/api/src
       - ./packages/shared/src:/app/packages/shared/src

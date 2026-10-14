@@ -349,6 +349,50 @@ export const matchBreakdownSchema = z.object({
 });
 export type MatchBreakdown = z.infer<typeof matchBreakdownSchema>;
 
+// Explanation agent (spec A05, JOB-012/013). Every claim says whether it is a confirmed FACT
+// or an INFERENCE and quotes its evidence. The server checks each quote against the job's
+// own text or the saved profile before storing it (job-explanation-grounding.ts).
+export const EXPLANATION_EVIDENCE_SOURCES = ["JOB", "PROFILE"] as const;
+export const EXPLANATION_CLAIM_KINDS = ["FACT", "INFERENCE"] as const;
+export const EXPLANATION_ACTIONS = ["APPLY", "CONSIDER", "SKIP"] as const;
+export const EXPLANATION_CONFIDENCE_LEVELS = ["HIGH", "MEDIUM", "LOW"] as const;
+
+export const explanationEvidenceSchema = z.object({
+  source: z.enum(EXPLANATION_EVIDENCE_SOURCES),
+  quote: z.string().trim().min(1).max(400),
+});
+export type ExplanationEvidence = z.infer<typeof explanationEvidenceSchema>;
+
+export const explanationClaimSchema = z.object({
+  statement: z.string().trim().min(1).max(600),
+  kind: z.enum(EXPLANATION_CLAIM_KINDS),
+  evidence: z.array(explanationEvidenceSchema).max(4).default([]),
+});
+export type ExplanationClaim = z.infer<typeof explanationClaimSchema>;
+
+const claimList = (max: number) => z.array(explanationClaimSchema).max(max).default([]);
+
+export const jobExplanationSchema = z.object({
+  executiveSummary: z.string().trim().min(1).max(800),
+  whyShortlisted: claimList(6),
+  matchedRequirements: claimList(10),
+  gaps: claimList(10),
+  geographicEligibility: claimList(4),
+  compensation: claimList(4),
+  technicalRelevance: claimList(4),
+  applicationRisks: claimList(6),
+  cvEmphasis: z.array(z.string().trim().min(1).max(300)).max(6).default([]),
+  interviewTopics: z.array(z.string().trim().min(1).max(300)).max(8).default([]),
+  recommendedAction: z.enum(EXPLANATION_ACTIONS),
+  confidence: z.enum(EXPLANATION_CONFIDENCE_LEVELS),
+});
+export type JobExplanation = z.infer<typeof jobExplanationSchema>;
+
+export const groundedJobExplanationSchema = jobExplanationSchema.extend({
+  grounding: z.object({ droppedClaims: z.number(), downgradedClaims: z.number(), droppedQuotes: z.number() }),
+});
+export type GroundedJobExplanation = z.infer<typeof groundedJobExplanationSchema>;
+
 export const jobEvaluationPublicSchema = z.object({
   id: z.string(),
   jobId: z.string(),
@@ -359,7 +403,10 @@ export const jobEvaluationPublicSchema = z.object({
   score: z.number().nullable(),
   confidence: z.number().nullable(),
   match: matchBreakdownSchema.nullable(),
+  // Null unless the job was shortlisted and explained (JOB-012).
+  explanation: groundedJobExplanationSchema.nullable(),
   modelVersion: z.string(),
+  promptVersion: z.string(),
   createdAt: z.string(),
 });
 export type JobEvaluationPublic = z.infer<typeof jobEvaluationPublicSchema>;

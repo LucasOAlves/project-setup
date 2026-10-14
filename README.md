@@ -103,7 +103,10 @@ Eligibility rules (Job Hunter) run with `POST /api/career/jobs/:id/evaluate`: a 
 or location text behind each verdict. Jobs that are not excluded also get a 0-100 match score
 over the spec's six weighted dimensions, a confidence (how much of the score the posting
 actually supports) and flags such as undisclosed compensation; the worker does the same for
-every job discovery finds. `GET /api/career/jobs/:id/evaluation` returns the latest.
+every job discovery finds. Jobs scoring 60 or more are also explained by the configured text
+provider (why they fit, matched requirements, gaps, eligibility, pay, risks, what to stress
+in the CV), and every quote in the explanation is checked against the posting or your
+profile before it is kept ([ADR-016](docs/decisions/ADR-016-verified-explanation-evidence.md)). `GET /api/career/jobs/:id/evaluation` returns the latest.
 There is no UI for it yet; the ranked job feed (ticket 10) will show it.
 
 Content ideas from your job search close the Content↔Career loop, one direction of it: the
