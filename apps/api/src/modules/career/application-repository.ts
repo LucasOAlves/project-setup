@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
-import { and, asc, desc, eq, isNotNull, isNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import type { Database } from "../../db/client.js";
-import { applicationEvents, applications, approvals, executions } from "../../db/schema.js";
+import { applicationEvents, applications, approvals, companies, executions, jobs } from "../../db/schema.js";
 
 export type ApplicationRow = typeof applications.$inferSelect;
 export type ApplicationEventRow = typeof applicationEvents.$inferSelect;
@@ -28,6 +28,19 @@ export class ApplicationRepository {
   async get(id: string): Promise<ApplicationRow | null> {
     const [row] = await this.db.select().from(applications).where(eq(applications.id, id)).limit(1);
     return row ?? null;
+  }
+
+  // Applications in the given states with their job's title and company, most recently
+  // changed first (the approval inbox).
+  async listWithJobs(statuses: readonly string[]): Promise<Array<{ row: ApplicationRow; title: string; company: string }>> {
+    const found = await this.db
+      .select({ row: applications, title: jobs.title, company: companies.name })
+      .from(applications)
+      .innerJoin(jobs, eq(jobs.id, applications.jobId))
+      .innerJoin(companies, eq(companies.id, jobs.companyId))
+      .where(inArray(applications.status, [...statuses]))
+      .orderBy(desc(applications.updatedAt));
+    return found;
   }
 
   async findByJob(jobId: string): Promise<ApplicationRow | null> {

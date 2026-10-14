@@ -12,6 +12,7 @@ import {
 import { CareerView } from "./CareerView";
 import { JobFeedView } from "./JobFeedView";
 import { JobSitesView } from "./JobSitesView";
+import { ApplicationsView } from "./ApplicationsView";
 import { ApplicationDetailsView } from "./ApplicationDetailsView";
 import { ContentPlanView } from "./ContentPlanView";
 import { CustomTopicsView, type CustomTopicDraft } from "./CustomTopicsView";
@@ -48,6 +49,7 @@ const STEPS = [
   { id: "history", label: "History" },
   { id: "career", label: "Career" },
   { id: "feed", label: "Job feed" },
+  { id: "applications", label: "Applications" },
   { id: "sites", label: "Job sites" },
   { id: "application", label: "Application details" },
 ] as const;
@@ -200,7 +202,7 @@ export function App() {
                           ? "Career tracker"
                           : step === "feed"
                             ? "Job Hunter"
-                            : step === "sites" || step === "application"
+                            : step === "sites" || step === "application" || step === "applications"
                               ? "Job Hunter"
                               : "Professional profile"}
           </p>
@@ -225,6 +227,8 @@ export function App() {
                               ? "Every job site, and how each one is covered"
                               : step === "application"
                                 ? "What application forms will ask you"
+                                : step === "applications"
+                                  ? "Review, approve and follow each application"
                                 : "Tell the system who you actually are"}
           </h2>
           <nav className="steps" aria-label="Profile sections">
@@ -255,6 +259,7 @@ export function App() {
           step !== "history" &&
           step !== "career" &&
           step !== "feed" &&
+          step !== "applications" &&
           step !== "sites" &&
           step !== "application" ? (
             <div className="notice">{saved.evidenceWarning}</div>
@@ -366,6 +371,7 @@ export function App() {
           ) : null}
           {step === "feed" ? <JobFeedView /> : null}
           {step === "sites" ? <JobSitesView /> : null}
+          {step === "applications" ? <ApplicationsView /> : null}
           {step === "application" ? <ApplicationDetailsView /> : null}
           {step === "career" ? (
             <CareerView
@@ -384,6 +390,7 @@ export function App() {
           step !== "history" &&
           step !== "career" &&
           step !== "feed" &&
+          step !== "applications" &&
           step !== "sites" &&
           step !== "application" ? (
           <div className="actions">

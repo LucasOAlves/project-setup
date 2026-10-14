@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import type {
   ApplicationAnswersContent,
   ApplicationDocumentPublic,
@@ -14,7 +14,10 @@ import {
   documentFileUrl,
   fetchApplication,
   fetchJobDocuments,
+  markApplicationNotSent,
+  markApplicationSubmitted,
   prepareApplication,
+  submitApplication,
   rejectApplication,
   saveApplicationAnswers,
   type ApiError,
@@ -37,6 +40,15 @@ const STATE_LABELS: Record<ApplicationState, string> = {
 // While a submission runs or its result is unclear, nothing may start over.
 const SUBMISSION_LOCKED: ReadonlySet<ApplicationState> = new Set(["SUBMITTING", "SUBMITTED", "SUBMISSION_UNKNOWN"]);
 
+// States from which you can say you submitted it yourself (the assisted path).
+const CAN_MARK_SUBMITTED: ReadonlySet<ApplicationState> = new Set([
+  "READY_FOR_REVIEW",
+  "APPROVED",
+  "NEEDS_INFORMATION",
+  "BLOCKED_BY_PLATFORM",
+  "FAILED",
+]);
+
 const SOURCE_LABELS: Record<FieldPlanSource, string> = {
   YOUR_DETAILS: "your details",
   YOUR_PROFILE: "your profile",
@@ -54,14 +66,13 @@ function isConsent(field: FieldPlan): boolean {
 
 // The application for one job: prepare it in a private browser, answer what your details do not
 // cover, and review the filled form (Milestone 3), then approve exactly that form (Milestone 4).
-export function ApplicationPanel({ jobId, jobUrl }: { jobId: string; jobUrl: string }) {
+export function ApplicationPanel({ jobId, jobUrl, onChange }: { jobId: string; jobUrl: string; onChange?: (application: ApplicationPublic) => void }) {
   const [application, setApplication] = useState<ApplicationPublic | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [agreed, setAgreed] = useState<string[]>([]);
-  const timer = useRef<number | null>(null);
 
   async function reload() {
     const next = await fetchApplication(jobId);
@@ -72,25 +83,28 @@ export function ApplicationPanel({ jobId, jobUrl }: { jobId: string; jobUrl: str
 
   useEffect(() => {
     reload().catch((caught: ApiError) => setError(caught.message));
-    return () => {
-      if (timer.current) window.clearInterval(timer.current);
-    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobId]);
 
-  // While the browser worker runs, check back until the run settles.
+  // Tells the inbox when the status moves, whether by your action or by a run finishing.
   useEffect(() => {
-    if (application?.status !== "PREPARING") {
-      if (timer.current) window.clearInterval(timer.current);
-      timer.current = null;
-      return;
-    }
-    if (timer.current) return;
-    timer.current = window.setInterval(() => {
-      reload().catch((caught: ApiError) => setError(caught.message));
-    }, POLL_MS);
+    if (application) onChange?.(application);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [application?.status]);
+
+  // While the browser worker runs, or a submission is queued, check back until it settles.
+  const running =
+    application?.status === "PREPARING" ||
+    application?.status === "SUBMITTING" ||
+    (application?.status === "APPROVED" && application.submission.allowed);
+  useEffect(() => {
+    if (!running) return;
+    const timer = window.setInterval(() => {
+      reload().catch((caught: ApiError) => setError(caught.message));
+    }, POLL_MS);
+    return () => window.clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [running, jobId]);
 
   async function act(action: () => Promise<unknown>) {
     setBusy(true);
@@ -130,8 +144,8 @@ export function ApplicationPanel({ jobId, jobUrl }: { jobId: string; jobUrl: str
   return (
     <div className="materials" data-testid="application-panel">
       <p className="status">
-        Opens the posting in a private browser, fills what your details answer, and stops before submitting. Nothing is sent to
-        the company.
+        Opens the posting in a private browser and fills what your details answer. Nothing is sent to the company unless you
+        approve exactly that form.
       </p>
       {error ? <div className="error">{error}</div> : null}
 
@@ -152,7 +166,9 @@ export function ApplicationPanel({ jobId, jobUrl }: { jobId: string; jobUrl: str
           {lastEvent ? <p>{lastEvent.reason}</p> : null}
           {application.status === "PREPARING" ? <p className="status">Filling the form in a private browser…</p> : null}
 
-          {application.mode === "MANUAL" || application.status === "BLOCKED_BY_PLATFORM" ? (
+          {application.mode === "MANUAL" ||
+          application.status === "BLOCKED_BY_PLATFORM" ||
+          (application.status === "APPROVED" && !application.submission.allowed) ? (
             <ManualFallback jobId={jobId} jobUrl={application.destinationUrl || jobUrl} />
           ) : null}
 
@@ -180,7 +196,7 @@ export function ApplicationPanel({ jobId, jobUrl }: { jobId: string; jobUrl: str
             </section>
           ) : null}
 
-          {settled && application.plan ? <FieldList plan={application.plan} /> : null}
+          {settled && application.plan ? <FieldList plan={application.plan} open={application.status === "READY_FOR_REVIEW"} /> : null}
 
           {settled && application.preview ? (
             <section className="materials-section" data-testid="application-preview">
@@ -222,9 +238,56 @@ export function ApplicationPanel({ jobId, jobUrl }: { jobId: string; jobUrl: str
                 You approved this application on {new Date(application.approval.decidedAt).toLocaleString()}. The approval expires on{" "}
                 {new Date(application.approval.expiresAt).toLocaleString()}.
               </p>
-              <button className="btn ghost" type="button" disabled={busy} onClick={() => void act(() => withdrawApproval(application.id))}>
-                Withdraw approval
-              </button>
+              {application.submission.allowed ? (
+                <p className="status" data-testid="submission-queued">
+                  The app will submit it to {new URL(application.destinationUrl).host} and check the result. If nothing happens, queue it
+                  again.
+                </p>
+              ) : (
+                <p className="status" data-testid="submission-permission">
+                  {application.submission.reason} Use the materials above, then mark it as submitted.
+                </p>
+              )}
+              <div className="actions" style={{ justifyContent: "flex-start" }}>
+                {application.submission.allowed ? (
+                  <button className="btn ghost" type="button" disabled={busy} onClick={() => void act(() => submitApplication(application.id))}>
+                    Queue the submission again
+                  </button>
+                ) : null}
+                <button className="btn ghost" type="button" disabled={busy} onClick={() => void act(() => withdrawApproval(application.id))}>
+                  Withdraw approval
+                </button>
+              </div>
+            </section>
+          ) : null}
+
+          {application.status === "SUBMITTING" ? (
+            <p className="status" data-testid="submission-running">
+              Submitting to {new URL(application.destinationUrl).host}… Do not submit it yourself while this runs.
+            </p>
+          ) : null}
+          {application.status === "SUBMITTED" ? (
+            <section className="approval" data-testid="submission-done">
+              <p>
+                Submitted{application.submittedAt ? ` on ${new Date(application.submittedAt).toLocaleString()}` : ""}.
+                {application.confirmationReference ? ` The portal's reference: ${application.confirmationReference}.` : ""}
+              </p>
+            </section>
+          ) : null}
+          {application.status === "SUBMISSION_UNKNOWN" ? (
+            <section className="approval" data-testid="submission-unknown">
+              <p>
+                The app clicked submit but could not confirm the result, so it will not try again. Check the portal or your email for a
+                confirmation, then say what you found.
+              </p>
+              <div className="actions" style={{ justifyContent: "flex-start" }}>
+                <button className="btn" type="button" disabled={busy} onClick={() => void act(() => markApplicationSubmitted(application.id))}>
+                  It was sent
+                </button>
+                <button className="btn ghost" type="button" disabled={busy} onClick={() => void act(() => markApplicationNotSent(application.id))}>
+                  It was not sent
+                </button>
+              </div>
             </section>
           ) : null}
 
@@ -238,9 +301,32 @@ export function ApplicationPanel({ jobId, jobUrl }: { jobId: string; jobUrl: str
                   Not applying
                 </button>
               ) : null}
+              {CAN_MARK_SUBMITTED.has(application.status) &&
+              (application.mode === "MANUAL" || !application.submission.allowed || application.status === "BLOCKED_BY_PLATFORM") ? (
+                <button className="btn ghost" type="button" disabled={busy} onClick={() => void act(() => markApplicationSubmitted(application.id))}>
+                  I submitted it
+                </button>
+              ) : null}
             </div>
           ) : null}
 
+          {application.executions.length > 0 ? (
+            <details data-testid="submission-runs">
+              <summary>Submission runs ({application.executions.length})</summary>
+              <ul>
+                {application.executions.map((run) => (
+                  <li key={run.id}>
+                    Attempt {run.attemptNumber} · started {new Date(run.startedAt).toLocaleString()}
+                    {run.clickedAt ? ` · submit clicked ${new Date(run.clickedAt).toLocaleTimeString()}` : " · submit not clicked"}
+                    {run.finishedAt ? ` · ${run.result ? STATE_LABELS[run.result as ApplicationState] ?? run.result : "finished"}` : " · running"}
+                    {run.submitStatus !== null ? ` · portal answered ${run.submitStatus}` : ""}
+                    {run.confirmationReference ? ` · reference ${run.confirmationReference}` : ""}
+                    {run.errorType ? ` · ${run.errorType.toLowerCase()}` : ""}
+                  </li>
+                ))}
+              </ul>
+            </details>
+          ) : null}
           <details>
             <summary>History ({application.events.length})</summary>
             <ul>
@@ -251,7 +337,6 @@ export function ApplicationPanel({ jobId, jobUrl }: { jobId: string; jobUrl: str
               ))}
             </ul>
           </details>
-          <p className="status">Submitting, after your explicit approval, comes in the next milestone. Nothing was submitted.</p>
         </>
       )}
     </div>
@@ -303,10 +388,10 @@ function QuestionInput({
   );
 }
 
-function FieldList({ plan }: { plan: FieldPlan[] }) {
+function FieldList({ plan, open }: { plan: FieldPlan[]; open: boolean }) {
   return (
-    <details>
-      <summary>Every field on the form ({plan.length})</summary>
+    <details open={open} data-testid="application-fields">
+      <summary>Every field and the value it gets ({plan.length})</summary>
       <ul className="application-fields">
         {plan.map((field) => (
           <li key={field.key}>
@@ -316,6 +401,14 @@ function FieldList({ plan }: { plan: FieldPlan[] }) {
             <strong>{field.label}</strong>
             {field.required ? " *" : ""}
             {field.value ? `: ${field.value}` : ""}
+            {field.kind === "FILE" && field.documentId && field.status === "FILLED" ? (
+              <>
+                {" "}
+                <a href={documentFileUrl(field.documentId)} target="_blank" rel="noreferrer">
+                  open the file
+                </a>
+              </>
+            ) : null}
             {field.source ? <span className="status"> ({SOURCE_LABELS[field.source]})</span> : null}
             {field.note ? <div className="status">{field.note}</div> : null}
           </li>

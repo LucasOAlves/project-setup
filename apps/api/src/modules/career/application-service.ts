@@ -1,4 +1,5 @@
 import {
+  INBOX_STATES,
   SUPPORTED_APPLICATION_PORTALS,
   detectBoardReference,
   applicationPreviewSchema,
@@ -6,6 +7,7 @@ import {
   fieldPlanSchema,
   formSnapshotSchema,
   type ApplicationActor,
+  type ApplicationInboxItem,
   type ApplicationPublic,
   type ApplicationState,
   type SupportedApplicationPortal,
@@ -19,6 +21,7 @@ import type {
   ApplicationRepository,
   ApplicationRow,
   ApprovalRow,
+  ExecutionRow,
 } from "./application-repository.js";
 import { APPROVAL_PROBLEM_TEXT, APPROVAL_TTL_MS, checkApproval, type ApprovalCheck } from "./application-approval.js";
 import { checkTransition, initialApplicationState } from "./application-state.js";
@@ -26,7 +29,7 @@ import { SUBMISSION_BLOCK_TEXT, type SubmissionPermission } from "./submission-p
 
 type Repo = Pick<
   ApplicationRepository,
-  "get" | "findByJob" | "create" | "transition" | "events" | "approve" | "liveApproval" | "claimSubmission" | "finishOpenExecutions"
+  "get" | "findByJob" | "create" | "transition" | "events" | "approve" | "liveApproval" | "claimSubmission" | "finishOpenExecutions" | "executions" | "listWithJobs"
 >;
 type Audit = { record(input: AuditEventInput): Promise<void> };
 type JobLookup = (jobId: string) => Promise<{ id: string; url: string } | null>;
@@ -62,6 +65,18 @@ export class ApplicationService {
     await this.requireJob(jobId);
     const row = await this.repo.findByJob(jobId);
     return row ? this.toPublic(await this.settleStale(row)) : null;
+  }
+
+  // Applications that wait on the user or are being submitted, each with its job (Milestone 4).
+  async inbox(): Promise<ApplicationInboxItem[]> {
+    const found = await this.repo.listWithJobs(INBOX_STATES);
+    const items: ApplicationInboxItem[] = [];
+    for (const { row, title, company } of found) {
+      const settled = await this.settleStale(row);
+      if (!(INBOX_STATES as readonly string[]).includes(settled.status)) continue;
+      items.push({ application: await this.toPublic(settled), job: { id: row.jobId, title, company } });
+    }
+    return items;
   }
 
   // The stored key of the last preview's screenshot, if it is still kept.
@@ -204,6 +219,26 @@ export class ApplicationService {
     return permission.allowed ? check : { ok: false, reason: "NOT_PERMITTED" };
   }
 
+  // The user says the application reached the company: they submitted it by hand (the assisted
+  // path), or they checked an unclear result and it was sent. Never while a run is submitting.
+  async markSubmitted(applicationId: string): Promise<ApplicationPublic> {
+    const row = await this.settleStale(await this.requireApplication(applicationId));
+    if (row.status === "SUBMITTING") throw conflict("The app is submitting this application right now. Wait for the result.");
+    const reason =
+      row.status === "SUBMISSION_UNKNOWN" ? "You checked and confirmed the application was sent." : "You submitted this application yourself.";
+    return this.toPublic(await this.apply(row, "SUBMITTED", "USER", reason, { submittedAt: this.now() }));
+  }
+
+  // The user checked an unclear result and nothing was sent: back to review. The used approval
+  // is invalidated with the transition, so submitting needs a new approval.
+  async markNotSent(applicationId: string): Promise<ApplicationPublic> {
+    const row = await this.settleStale(await this.requireApplication(applicationId));
+    if (row.status !== "SUBMISSION_UNKNOWN") throw conflict("Only an application whose result is unknown can be marked as not sent.");
+    return this.toPublic(
+      await this.apply(row, "READY_FOR_REVIEW", "USER", "You checked and confirmed the application was not sent. Approve it again to submit."),
+    );
+  }
+
   // Back to review. The repository invalidates the approval in the same transaction.
   async withdrawApproval(applicationId: string, reason = "You withdrew your approval."): Promise<ApplicationPublic> {
     const row = await this.settleStale(await this.requireApplication(applicationId));
@@ -284,6 +319,7 @@ export class ApplicationService {
     const events = await this.repo.events(row.id);
     const approval = row.status === "APPROVED" || row.status === "SUBMITTING" ? await this.repo.liveApproval(row.id) : null;
     const permission = await this.submissionCheck(row);
+    const runs = row.mode === "AUTOMATED" ? await this.repo.executions(row.id) : [];
     return {
       id: row.id,
       jobId: row.jobId,
@@ -308,6 +344,9 @@ export class ApplicationService {
       submission: permission.allowed
         ? { allowed: true, reason: "Once approved, the app submits this application and checks the result." }
         : { allowed: false, reason: SUBMISSION_BLOCK_TEXT[permission.reason] },
+      submittedAt: row.submittedAt?.toISOString() ?? null,
+      confirmationReference: row.confirmationReference,
+      executions: runs.map(toPublicExecution),
       createdAt: row.createdAt.toISOString(),
       updatedAt: row.updatedAt.toISOString(),
       events: events.map(toPublicEvent),
@@ -356,5 +395,19 @@ function toPublicEvent(event: ApplicationEventRow): ApplicationPublic["events"][
     actor: event.actor as ApplicationActor,
     reason: event.reason,
     createdAt: event.createdAt.toISOString(),
+  };
+}
+
+function toPublicExecution(execution: ExecutionRow): ApplicationPublic["executions"][number] {
+  return {
+    id: execution.id,
+    attemptNumber: execution.attemptNumber,
+    startedAt: execution.startedAt.toISOString(),
+    clickedAt: execution.clickedAt?.toISOString() ?? null,
+    finishedAt: execution.finishedAt?.toISOString() ?? null,
+    result: execution.result,
+    errorType: execution.errorType,
+    submitStatus: execution.submitStatus,
+    confirmationReference: execution.confirmationReference,
   };
 }

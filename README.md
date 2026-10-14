@@ -37,7 +37,7 @@ To require sign-in, run `npm run hash-password -w @studio/api`, type a password 
 
 Compose also starts Redis and a background `worker` (BullMQ, see [ADR-015](docs/decisions/ADR-015-job-hunter-worker-process.md)). It runs Job Hunter's daily discovery: every day at `DISCOVERY_CRON` (default 09:00 `America/Sao_Paulo`) it searches each source in `DISCOVERY_SOURCES` for each of `DISCOVERY_KEYWORDS` (by default including "forward deployed engineer" and "ai engineer"), spacing requests per source's rate limits, imports new postings (re-runs never duplicate a job), runs the eligibility rules on each new one and queues the non-excluded ones for evaluation. With `BRAVE_SEARCH_API_KEY` set, the same run also searches the web through the Brave Search API: one `site:` search per ATS domain (Ashby, both Greenhouse domains, Lever, Workable, SmartRecruiters) for `WEB_SEARCH_TITLES` with LATAM terms, past week only, and imports the postings it points at from each company's own ATS API (see [ADR-017](docs/decisions/ADR-017-web-search-discovery-via-ats-apis.md)). `POST /api/career/discovery/run` queues today's run on demand, once per source per day. To run the worker on the host instead: `npm run worker -w @studio/api` with `REDIS_URL` pointing at a local Redis.
 
-Compose also starts a `browser-worker` (Playwright's image, Chromium inside) that prepares job applications for Greenhouse, Lever and Ashby postings without submitting them. It has no model keys, only opens the job's own application site, and every request that could submit the form is blocked (see [ADR-020](docs/decisions/ADR-020-isolated-browser-worker.md)). To run it on the host: `npm run browser-worker -w @studio/api`, with `BROWSER_EXECUTABLE_PATH` pointing at a Chromium if Playwright's is not installed. Set `BROWSER_MOCK_PORTALS=true` to try the flow locally against mock Greenhouse, Lever and Ashby pages (`apps/api/src/modules/browser/mock-portals.ts`) with no network. Jobs whose link is one of the `MOCK_POSTINGS` URLs then prepare end to end.
+Compose also starts a `browser-worker` (Playwright's image, Chromium inside) that prepares job applications for Greenhouse, Lever and Ashby postings, and submits one only after you approve it and only when submission is switched on. It has no model keys, only opens the job's own application site, and every request that could submit the form is blocked, except the one submit request of an approved run (see [ADR-020](docs/decisions/ADR-020-isolated-browser-worker.md) and [ADR-022](docs/decisions/ADR-022-payload-bound-approval.md)). To run it on the host: `npm run browser-worker -w @studio/api`, with `BROWSER_EXECUTABLE_PATH` pointing at a Chromium if Playwright's is not installed. Set `BROWSER_MOCK_PORTALS=true` to try the flow locally against mock Greenhouse, Lever and Ashby pages (`apps/api/src/modules/browser/mock-portals.ts`) with no network. Jobs whose link is one of the `MOCK_POSTINGS` URLs then prepare end to end.
 
 Slice 1 is available: progressive professional profile, experiences, positioning, writing preferences, and up to three reference photos. On the Identity step, upload a resume PDF to pre-fill these forms (nothing is saved until you review and click Save and continue); on the Experience step, download a résumé PDF generated from the current saved profile, any time new information is added.
 
@@ -133,6 +133,15 @@ review. Only then does it let exactly one submit request through. The applicatio
 a new page). An error after the click, or no clear confirmation, becomes **Submission
 unknown**: nothing retries, and you check the portal or your email. Each run is kept in
 `executions` with its timestamps, result and any confirmation reference.
+
+The **Applications** step is the approval inbox: every application that is ready for review,
+needs answers, is blocked, approved, being submitted or has an unknown result, with the job and
+destination. Opening one shows the same panel: every field with the value it gets, the files
+that will be attached, the screenshot, the submission runs and the history. A result marked
+unknown is settled there with **It was sent** or **It was not sent** (back to review, with a new
+approval needed). When the app does not submit (a manual portal, a blocked run, or submission
+switched off), apply by hand and press **I submitted it**. The same step shows whether
+submission is switched on and lets you set Greenhouse, Lever and Ashby to automatic or assisted.
 
 Automatic submission stays off unless two settings agree: `APPLICATION_SUBMISSION_ENABLED=true`
 for the deployment, and the portal set to `AUTOMATED` in source settings

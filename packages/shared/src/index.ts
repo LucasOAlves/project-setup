@@ -324,4 +324,11 @@ export {
   type SupportedApplicationPortal,
   type ApplicationEventPublic,
   type ApplicationPublic,
+  executionPublicSchema,
+  INBOX_STATES,
+  applicationInboxItemSchema,
+  applicationInboxSchema,
+  type ExecutionPublic,
+  type ApplicationInboxItem,
+  type ApplicationInbox,
 } from "./applications.js";

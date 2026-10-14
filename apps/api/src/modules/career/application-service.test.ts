@@ -26,7 +26,7 @@ function setup(jobUrl = "https://job-boards.greenhouse.io/acme/jobs/123", clock 
     async create(input: Pick<ApplicationRow, "jobId" | "status" | "mode" | "portal" | "destinationUrl">, record: { actor: string; reason: string }) {
       if (rows.some((row) => row.jobId === input.jobId)) return null;
       const now = clock.now;
-      const row: ApplicationRow = { id: nextId(), lastError: "", formSnapshot: null, fieldPlan: null, preview: null, payloadHash: null, createdAt: now, updatedAt: now, ...input };
+      const row = { id: nextId(), lastError: "", formSnapshot: null, fieldPlan: null, preview: null, payloadHash: null, agreed: [], submittedAt: null, confirmationReference: "", createdAt: now, updatedAt: now, ...input } as ApplicationRow;
       rows.push(row);
       events.push({ id: nextId(), applicationId: row.id, fromStatus: null, toStatus: row.status, createdAt: now, ...record });
       return row;
@@ -63,6 +63,23 @@ function setup(jobUrl = "https://job-boards.greenhouse.io/acme/jobs/123", clock 
     },
     async finishOpenExecutions(applicationId: string) {
       for (const execution of executions) if (execution.applicationId === applicationId) execution.finished = true;
+    },
+    async executions(applicationId: string) {
+      return executions
+        .filter((execution) => execution.applicationId === applicationId)
+        .map((execution) => ({
+          ...execution,
+          startedAt: clock.now,
+          clickedAt: null,
+          finishedAt: execution.finished ? clock.now : null,
+          result: "",
+          errorType: "",
+          submitStatus: null,
+          confirmationReference: "",
+        }));
+    },
+    async listWithJobs(statuses: readonly string[]) {
+      return rows.filter((row) => statuses.includes(row.status)).map((row) => ({ row, title: "Engineer", company: "Acme" }));
     },
     async liveApproval(applicationId: string) {
       return approvals.filter((approval) => approval.applicationId === applicationId && !approval.invalidatedAt).at(-1) ?? null;
@@ -360,4 +377,54 @@ test("right before the click, the filled payload must hash to the approved one",
   assert.deepEqual(await service.confirmBeforeClick(id, "99999999-9999-4999-8999-999999999999", HASH), { ok: false, reason: "INVALIDATED" });
   permit.allowed = false;
   assert.deepEqual(await service.confirmBeforeClick(id, approved.approval!.id, HASH), { ok: false, reason: "NOT_PERMITTED" });
+});
+
+// Milestone 4, ticket 6: the inbox, the assisted path and settling an unknown result.
+
+test("the inbox lists applications that wait on the user, with their job", async () => {
+  const { service, id } = await readyForReview();
+  const items = await service.inbox();
+  assert.equal(items.length, 1);
+  assert.equal(items[0]?.application.id, id);
+  assert.deepEqual(items[0]?.job, { id: JOB, title: "Engineer", company: "Acme" });
+  await service.reject(id);
+  assert.equal((await service.inbox()).length, 0);
+});
+
+test("after submitting by hand, the user marks the application submitted", async () => {
+  const { service, id, clock } = await readyForReview();
+  const submitted = await service.markSubmitted(id);
+  assert.equal(submitted.status, "SUBMITTED");
+  assert.equal(submitted.submittedAt, clock.now.toISOString());
+  assert.equal(submitted.events.at(-1)?.actor, "USER");
+  await rejects(service.startPreparation(JOB), 409);
+});
+
+test("an unknown result is settled only by the user: sent, or not sent and back to review without an approval", async () => {
+  const setupResult = setup();
+  const { service, id, rows, approvals } = await readyForReview(setupResult);
+  const approved = await service.approve(id, { payloadHash: HASH });
+  await service.claimSubmission(id, approved.approval!.id);
+  await rejects(service.markSubmitted(id), 409, /submitting/);
+  rows[0]!.status = "SUBMISSION_UNKNOWN";
+  const back = await service.markNotSent(id);
+  assert.equal(back.status, "READY_FOR_REVIEW");
+  assert.ok(approvals[0]?.invalidatedAt);
+  assert.equal(back.approval, null);
+  await rejects(service.markNotSent(id), 409);
+
+  rows[0]!.status = "SUBMISSION_UNKNOWN";
+  const sent = await service.markSubmitted(id);
+  assert.equal(sent.status, "SUBMITTED");
+  assert.match(sent.events.at(-1)?.reason ?? "", /confirmed the application was sent/);
+});
+
+test("the public application lists its submission runs", async () => {
+  const { service, id } = await readyForReview();
+  const approved = await service.approve(id, { payloadHash: HASH });
+  await service.claimSubmission(id, approved.approval!.id);
+  const read = await service.get(id);
+  assert.equal(read.executions.length, 1);
+  assert.equal(read.executions[0]?.attemptNumber, 1);
+  assert.equal(read.executions[0]?.finishedAt, null);
 });

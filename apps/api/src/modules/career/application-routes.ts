@@ -15,13 +15,15 @@ function parseId(raw: unknown, what: string): string {
 }
 
 // Applications: prepare one job's application, read it with its history, reject it
-// (Milestone 3), and approve it or withdraw the approval (Milestone 4).
+// (Milestone 3), and approve it, withdraw the approval, list the inbox and record what was
+// sent (Milestone 4).
 export async function registerApplicationRoutes(
   app: FastifyInstance,
   applications: ApplicationService,
   dispatcher: Pick<ApplicationDispatcher, "dispatch" | "dispatchSubmission" | "close">,
   storage: Pick<StorageProvider, "get">,
   answers: Pick<ApplicationAnswerService, "save">,
+  submissionEnabled = false,
 ): Promise<void> {
   app.addHook("onClose", async () => {
     await dispatcher.close();
@@ -31,6 +33,11 @@ export async function registerApplicationRoutes(
     const { id } = request.params as { id: string };
     const started = await applications.startPreparation(parseId(id, "Job"));
     return reply.code(202).send({ application: await dispatcher.dispatch(started) });
+  });
+
+  // The approval inbox: applications that wait on you or are being submitted.
+  app.get("/api/career/applications", async () => {
+    return { items: await applications.inbox(), submissionEnabled };
   });
 
   app.get("/api/career/jobs/:id/application", async (request) => {
@@ -80,6 +87,18 @@ export async function registerApplicationRoutes(
   app.post("/api/career/applications/:id/approval/withdraw", async (request) => {
     const { id } = request.params as { id: string };
     return { application: await applications.withdrawApproval(parseId(id, "Application")) };
+  });
+
+  // You submitted it yourself, or checked that an unclear submission was sent.
+  app.post("/api/career/applications/:id/mark-submitted", async (request) => {
+    const { id } = request.params as { id: string };
+    return { application: await applications.markSubmitted(parseId(id, "Application")) };
+  });
+
+  // You checked that an unclear submission was not sent: back to review, with a new approval needed.
+  app.post("/api/career/applications/:id/mark-not-sent", async (request) => {
+    const { id } = request.params as { id: string };
+    return { application: await applications.markNotSent(parseId(id, "Application")) };
   });
 
   app.post("/api/career/applications/:id/reject", async (request) => {

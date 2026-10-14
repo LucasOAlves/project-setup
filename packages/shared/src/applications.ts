@@ -148,6 +148,23 @@ export const approveApplicationInputSchema = z.object({
 });
 export type ApproveApplicationInput = z.infer<typeof approveApplicationInputSchema>;
 
+// One submission run (Milestone 4): when it started, whether and when the submit button was
+// clicked, and how it ended.
+export const executionPublicSchema = z.object({
+  id: z.string().uuid(),
+  attemptNumber: z.number().int(),
+  startedAt: z.string(),
+  clickedAt: z.string().nullable(),
+  finishedAt: z.string().nullable(),
+  // The application state the run ended in, or "" while it runs.
+  result: z.string(),
+  errorType: z.string(),
+  // The HTTP status of the submit request, if one was sent and answered.
+  submitStatus: z.number().int().nullable(),
+  confirmationReference: z.string(),
+});
+export type ExecutionPublic = z.infer<typeof executionPublicSchema>;
+
 export const applicationPublicSchema = z.object({
   id: z.string().uuid(),
   jobId: z.string().uuid(),
@@ -167,6 +184,10 @@ export const applicationPublicSchema = z.object({
   approval: approvalPublicSchema.nullable(),
   // Whether the app would submit this application itself once approved, and if not, why.
   submission: z.object({ allowed: z.boolean(), reason: z.string() }),
+  submittedAt: z.string().nullable(),
+  // The portal's own reference for the submitted application, when it showed one.
+  confirmationReference: z.string(),
+  executions: z.array(executionPublicSchema),
   createdAt: z.string(),
   updatedAt: z.string(),
   events: z.array(applicationEventPublicSchema),
@@ -183,3 +204,26 @@ export const applicationAnswersInputSchema = z.object({
   agreed: z.array(z.string().min(1).max(400)).max(20).default([]),
 });
 export type ApplicationAnswersInput = z.infer<typeof applicationAnswersInputSchema>;
+
+// The approval inbox (Milestone 4): applications that wait on you or are being submitted.
+export const INBOX_STATES = [
+  "READY_FOR_REVIEW",
+  "NEEDS_INFORMATION",
+  "APPROVED",
+  "SUBMITTING",
+  "SUBMISSION_UNKNOWN",
+  "BLOCKED_BY_PLATFORM",
+] as const satisfies readonly ApplicationState[];
+
+export const applicationInboxItemSchema = z.object({
+  application: applicationPublicSchema,
+  job: z.object({ id: z.string().uuid(), title: z.string(), company: z.string() }),
+});
+export type ApplicationInboxItem = z.infer<typeof applicationInboxItemSchema>;
+
+export const applicationInboxSchema = z.object({
+  items: z.array(applicationInboxItemSchema),
+  // APPLICATION_SUBMISSION_ENABLED for this deployment.
+  submissionEnabled: z.boolean(),
+});
+export type ApplicationInbox = z.infer<typeof applicationInboxSchema>;

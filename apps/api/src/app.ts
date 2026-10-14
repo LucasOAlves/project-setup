@@ -228,6 +228,7 @@ export async function buildApp(env: Env, db: Database) {
       setAgreed: (id, agreed) => applicationRepo.setAgreed(id, agreed),
       audit: new AuditRepository(db),
     }),
+    env.APPLICATION_SUBMISSION_ENABLED,
   );
   await registerDiscoveryRoutes(app, env, new CompanyWatchService(new CareerRepository(db)));
 

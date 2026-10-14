@@ -1,4 +1,7 @@
 import type {
+  ApplicationInbox,
+  SourcePublic,
+  SourceApplicationMode,
   AngleType,
   CompanyInput,
   CompanyPublic,
@@ -1083,4 +1086,45 @@ export async function signOut(): Promise<AuthSession> {
   const response = await fetch("/api/auth/sign-out", { method: "POST" });
   if (!response.ok) throw await parseError(response);
   return (await response.json()) as AuthSession;
+}
+
+export async function fetchApplicationInbox(): Promise<ApplicationInbox> {
+  const response = await fetch("/api/career/applications");
+  if (!response.ok) throw await parseError(response);
+  return (await response.json()) as ApplicationInbox;
+}
+
+// Queues the submission of an approved application again (when the first queueing failed).
+export async function submitApplication(applicationId: string): Promise<ApplicationPublic> {
+  const response = await fetch(`/api/career/applications/${applicationId}/submit`, { method: "POST" });
+  if (!response.ok) throw await parseError(response);
+  return ((await response.json()) as { application: ApplicationPublic }).application;
+}
+
+export async function markApplicationSubmitted(applicationId: string): Promise<ApplicationPublic> {
+  const response = await fetch(`/api/career/applications/${applicationId}/mark-submitted`, { method: "POST" });
+  if (!response.ok) throw await parseError(response);
+  return ((await response.json()) as { application: ApplicationPublic }).application;
+}
+
+export async function markApplicationNotSent(applicationId: string): Promise<ApplicationPublic> {
+  const response = await fetch(`/api/career/applications/${applicationId}/mark-not-sent`, { method: "POST" });
+  if (!response.ok) throw await parseError(response);
+  return ((await response.json()) as { application: ApplicationPublic }).application;
+}
+
+export async function fetchSources(): Promise<SourcePublic[]> {
+  const response = await fetch("/api/career/sources");
+  if (!response.ok) throw await parseError(response);
+  return ((await response.json()) as { sources: SourcePublic[] }).sources;
+}
+
+export async function setSourceApplicationMode(sourceId: string, applicationMode: SourceApplicationMode): Promise<SourcePublic> {
+  const response = await fetch(`/api/career/sources/${sourceId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ applicationMode }),
+  });
+  if (!response.ok) throw await parseError(response);
+  return ((await response.json()) as { source: SourcePublic }).source;
 }
