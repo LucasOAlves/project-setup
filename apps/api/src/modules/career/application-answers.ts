@@ -15,7 +15,7 @@ export type ApplicationAnswer = {
   note?: string;
 };
 
-type AnswerExperience = { startPeriod: string; endPeriod: string; technologies: string[] };
+export type AnswerExperience = { startPeriod: string; endPeriod: string; technologies: string[] };
 
 export type AnswerInput = {
   profile: { yearsOfExperience: number | null; experiences: AnswerExperience[] };

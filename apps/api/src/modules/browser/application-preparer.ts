@@ -1,4 +1,4 @@
-import type { FormSnapshot, SupportedApplicationPortal } from "@studio/shared";
+import type { FieldPlan, FormField, FormSnapshot, SupportedApplicationPortal } from "@studio/shared";
 import { detectBlockingPage } from "./blocking-page.js";
 import { portalPolicy } from "./browser-guard.js";
 import { BrowserRunTimeout, withGuardedPage, type BrowserSessionOptions } from "./browser-session.js";
@@ -11,9 +11,15 @@ export type PreparationOutcome = {
   reason: string;
   lastError?: string;
   form?: FormSnapshot;
+  plan?: FieldPlan[];
 };
 
-export type PreparationTarget = { portal: SupportedApplicationPortal | null; destinationUrl: string };
+export type PreparationTarget = {
+  portal: SupportedApplicationPortal | null;
+  destinationUrl: string;
+  // Decides each field's value from the user's stated data (application-field-mapper.ts).
+  planFields?: (fields: FormField[]) => Promise<FieldPlan[]>;
+};
 
 // One browser run for one application (Milestone 3): open the portal inside the guard, stop on
 // a login or CAPTCHA, then read and fill the form. It never submits.
@@ -61,11 +67,20 @@ export class BrowserApplicationPreparer {
           throw error;
         }
         const form: FormSnapshot = { portal, url: page.url(), title: (await page.title()).slice(0, 300), fields, readAt: new Date().toISOString() };
-        return {
-          status: "NEEDS_INFORMATION" as const,
-          reason: `Read ${fields.length} fields. Filling them is not available yet.`,
-          form,
-        };
+        if (!target.planFields) {
+          return { status: "NEEDS_INFORMATION" as const, reason: `Read ${fields.length} fields.`, form };
+        }
+        const plan = await target.planFields(fields);
+        const questions = plan.filter((field) => field.status === "NEEDS_INPUT").length;
+        if (questions > 0) {
+          return {
+            status: "NEEDS_INFORMATION" as const,
+            reason: `${questions} required ${questions === 1 ? "question needs" : "questions need"} your answer.`,
+            form,
+            plan,
+          };
+        }
+        return { status: "READY_FOR_REVIEW" as const, reason: "Every required field has an answer from your details.", form, plan };
       });
     } catch (error) {
       if (error instanceof BrowserRunTimeout) return { status: "FAILED", reason: error.message, lastError: "TIMEOUT" };

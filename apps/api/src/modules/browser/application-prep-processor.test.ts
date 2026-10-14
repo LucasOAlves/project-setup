@@ -14,6 +14,7 @@ const application: ApplicationPublic = {
   destinationUrl: "https://jobs.lever.co/acme/abc",
   lastError: "",
   form: null,
+  plan: null,
   createdAt: RUN,
   updatedAt: RUN,
   events: [],
@@ -31,7 +32,7 @@ function setup(current: ApplicationPublic | null, prepare: () => Promise<Prepara
       return { ...application, status } as ApplicationPublic;
     },
   };
-  return { processor: new ApplicationPrepProcessor(applications as never, { prepare }), recorded };
+  return { processor: new ApplicationPrepProcessor(applications as never, { prepare }, { plan: async () => [] }), recorded };
 }
 
 test("records the preparer's outcome as the worker", async () => {

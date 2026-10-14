@@ -105,8 +105,9 @@ services:
       - ./apps/api/src:/app/apps/api/src
       - ./packages/shared/src:/app/packages/shared/src
 
-  # Runs Chromium for application preparation (Milestone 3). It gets only the database and
-  # Redis: no model keys, no API port, no storage volume, and resource limits.
+  # Runs Chromium for application preparation (Milestone 3). It gets the database, Redis and a
+  # read-only view of stored documents (to attach the CV): no model keys, no API port, and
+  # resource limits.
   browser-worker:
     build:
       context: .
@@ -122,10 +123,12 @@ services:
       REDIS_URL: redis://redis:6379
       BROWSER_EXECUTABLE_PATH: ${BROWSER_EXECUTABLE_PATH:-}
       BROWSER_RUN_TIMEOUT_MS: ${BROWSER_RUN_TIMEOUT_MS:-120000}
+      STORAGE_DIR: /data/storage
     shm_size: "1gb"
     mem_limit: 2g
     cpus: 1.5
     volumes:
+      - media_data:/data/storage:ro
       - ./apps/api/src:/app/apps/api/src
       - ./packages/shared/src:/app/packages/shared/src
 

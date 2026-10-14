@@ -1,12 +1,14 @@
 import {
   SUPPORTED_APPLICATION_PORTALS,
   detectBoardReference,
+  fieldPlanSchema,
   formSnapshotSchema,
   type ApplicationActor,
   type ApplicationPublic,
   type ApplicationState,
   type SupportedApplicationPortal,
 } from "@studio/shared";
+import { z } from "zod";
 import { conflict, notFound } from "../../app-error.js";
 import type { AuditEventInput } from "../audit/audit-repository.js";
 import type {
@@ -74,7 +76,7 @@ export class ApplicationService {
       await this.recordAudit(created, null, "USER", reason);
       return this.toPublic(created);
     }
-    return this.toPublic(await this.apply(existing, "PREPARING", "USER", reason, { ...target, lastError: "", formSnapshot: null }));
+    return this.toPublic(await this.apply(existing, "PREPARING", "USER", reason, { ...target, lastError: "", formSnapshot: null, fieldPlan: null }));
   }
 
   // Records how a preparation run ended. Used by the browser worker and the manual path.
@@ -153,6 +155,7 @@ export class ApplicationService {
       destinationUrl: row.destinationUrl,
       lastError: row.lastError,
       form: parseForm(row.formSnapshot),
+      plan: parsePlan(row.fieldPlan),
       createdAt: row.createdAt.toISOString(),
       updatedAt: row.updatedAt.toISOString(),
       events: events.map(toPublicEvent),
@@ -163,6 +166,12 @@ export class ApplicationService {
 function parseForm(snapshot: unknown): ApplicationPublic["form"] {
   if (!snapshot) return null;
   const parsed = formSnapshotSchema.safeParse(snapshot);
+  return parsed.success ? parsed.data : null;
+}
+
+function parsePlan(plan: unknown): ApplicationPublic["plan"] {
+  if (!plan) return null;
+  const parsed = z.array(fieldPlanSchema).safeParse(plan);
   return parsed.success ? parsed.data : null;
 }
 

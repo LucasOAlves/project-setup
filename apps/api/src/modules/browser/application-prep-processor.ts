@@ -1,4 +1,4 @@
-import type { ApplicationPublic } from "@studio/shared";
+import type { ApplicationPublic, FieldPlan, FormField } from "@studio/shared";
 import type { ApplicationService } from "../career/application-service.js";
 import type { PreparationOutcome, PreparationTarget } from "./application-preparer.js";
 
@@ -11,6 +11,7 @@ export class ApplicationPrepProcessor {
   constructor(
     private readonly applications: Pick<ApplicationService, "get" | "recordOutcome">,
     private readonly preparer: { prepare(target: PreparationTarget): Promise<PreparationOutcome> },
+    private readonly planner: { plan(jobId: string, fields: FormField[]): Promise<FieldPlan[]> },
   ) {}
 
   async process(job: ApplicationPrepJob): Promise<{ applicationId: string; status: string; skipped?: string }> {
@@ -26,7 +27,11 @@ export class ApplicationPrepProcessor {
 
     let outcome: PreparationOutcome;
     try {
-      outcome = await this.preparer.prepare({ portal: application.portal, destinationUrl: application.destinationUrl });
+      outcome = await this.preparer.prepare({
+        portal: application.portal,
+        destinationUrl: application.destinationUrl,
+        planFields: (fields) => this.planner.plan(application.jobId, fields),
+      });
     } catch (error) {
       // The message can carry page content, so only the error's kind is stored.
       outcome = {
@@ -38,6 +43,7 @@ export class ApplicationPrepProcessor {
     const recorded = await this.applications.recordOutcome(application.id, outcome.status, "WORKER", outcome.reason, {
       lastError: outcome.lastError ?? "",
       ...(outcome.form ? { formSnapshot: outcome.form as unknown as Record<string, unknown> } : {}),
+      ...(outcome.plan ? { fieldPlan: outcome.plan } : {}),
     });
     return { applicationId: application.id, status: recorded.status };
   }

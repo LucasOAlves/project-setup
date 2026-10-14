@@ -287,7 +287,15 @@ export const applications = pgTable("applications", {
   destinationUrl: text("destination_url").notNull().default(""),
   lastError: text("last_error").notNull().default(""),
   formSnapshot: jsonb("form_snapshot").$type<Record<string, unknown>>(),
+  fieldPlan: jsonb("field_plan").$type<unknown[]>(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const savedFormAnswers = pgTable("saved_form_answers", {
+  questionKey: text("question_key").primaryKey(),
+  label: text("label").notNull(),
+  answer: text("answer").notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

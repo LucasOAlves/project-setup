@@ -13,6 +13,14 @@ import { CareerRepository } from "./modules/career/career-repository.js";
 import { ApplicationPrepProcessor, type ApplicationPrepJob } from "./modules/browser/application-prep-processor.js";
 import { BrowserApplicationPreparer } from "./modules/browser/application-preparer.js";
 import { mockPortalResponse } from "./modules/browser/mock-portals.js";
+import { ApplicationDocumentRepository } from "./modules/career/application-document-repository.js";
+import { ApplicationDocumentService } from "./modules/career/application-document-service.js";
+import { ApplicationFillPlanner } from "./modules/career/application-fill-context.js";
+import { SavedAnswerRepository } from "./modules/career/saved-answer-repository.js";
+import { ApplicationDetailsRepository } from "./modules/profile/application-details-repository.js";
+import { ApplicationDetailsService } from "./modules/profile/application-details-service.js";
+import { ProfileRepository } from "./modules/profile/profile-repository.js";
+import { LocalStorageProvider } from "./modules/uploads/local-storage.js";
 import { createLogger } from "./observability/logger.js";
 import { attachObservability } from "./worker/observability.js";
 import { createRedisConnection, QUEUE_NAMES } from "./worker/queues.js";
@@ -43,6 +51,25 @@ async function main() {
   if (env.BROWSER_MOCK_PORTALS) {
     logger.warn("mock portals on", { reason: "BROWSER_MOCK_PORTALS=true: no request reaches the network" });
   }
+  // The worker reads the user's details to fill forms. None of it goes to a model: this
+  // process has no model keys.
+  const documents = new ApplicationDocumentService(
+    new ApplicationDocumentRepository(db),
+    new LocalStorageProvider(env.STORAGE_DIR),
+    async (jobId) => (await careerRepo.getJob(jobId)) !== null,
+  );
+  const profileRepo = new ProfileRepository(db);
+  const details = new ApplicationDetailsService(new ApplicationDetailsRepository(db));
+  const savedAnswers = new SavedAnswerRepository(db);
+  const planner = new ApplicationFillPlanner({
+    getProfile: async () => {
+      const record = await profileRepo.getWorkspaceProfile();
+      return record ? { fullName: record.profile.fullName, experiences: record.experiences } : null;
+    },
+    getDetails: () => details.get(),
+    latestDocument: (jobId, type) => documents.latest(jobId, type),
+    savedAnswers: () => savedAnswers.all(),
+  });
   const processor = new ApplicationPrepProcessor(
     applications,
     new BrowserApplicationPreparer({
@@ -50,6 +77,7 @@ async function main() {
       runTimeoutMs: env.BROWSER_RUN_TIMEOUT_MS,
       ...(env.BROWSER_MOCK_PORTALS ? { mockResponse: mockPortalResponse } : {}),
     }),
+    planner,
   );
 
   const connection = createRedisConnection(env.REDIS_URL);

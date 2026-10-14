@@ -13,6 +13,7 @@ const base: ApplicationPublic = {
   destinationUrl: "https://job-boards.greenhouse.io/acme/jobs/1",
   lastError: "",
   form: null,
+  plan: null,
   createdAt: "2026-10-14T12:00:00.000Z",
   updatedAt: "2026-10-14T12:00:00.000Z",
   events: [],

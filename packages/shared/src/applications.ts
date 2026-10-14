@@ -77,6 +77,40 @@ export const formSnapshotSchema = z.object({
 });
 export type FormSnapshot = z.infer<typeof formSnapshotSchema>;
 
+
+
+// What the filler will put in each form field, and where it came from (Milestone 3).
+export const FIELD_PLAN_STATUSES = ["FILLED", "NEEDS_INPUT", "LEFT_EMPTY"] as const;
+export type FieldPlanStatus = (typeof FIELD_PLAN_STATUSES)[number];
+
+export const FIELD_PLAN_SOURCES = [
+  "YOUR_DETAILS",
+  "YOUR_PROFILE",
+  "PREPARED_ANSWER",
+  "SAVED_ANSWER",
+  "CV",
+  "COVER_LETTER",
+] as const;
+export type FieldPlanSource = (typeof FIELD_PLAN_SOURCES)[number];
+
+export const fieldPlanSchema = z.object({
+  key: z.string(),
+  // The question as the portal words it, normalized: answers you give are saved under it
+  // and reused on any form that asks the same thing.
+  questionKey: z.string(),
+  label: z.string(),
+  kind: z.enum(FORM_FIELD_KINDS),
+  required: z.boolean(),
+  options: z.array(z.string()),
+  status: z.enum(FIELD_PLAN_STATUSES),
+  value: z.string().nullable(),
+  // For FILE fields: the application document to attach.
+  documentId: z.string().uuid().optional(),
+  source: z.enum(FIELD_PLAN_SOURCES).nullable(),
+  note: z.string().optional(),
+});
+export type FieldPlan = z.infer<typeof fieldPlanSchema>;
+
 export const applicationPublicSchema = z.object({
   id: z.string().uuid(),
   jobId: z.string().uuid(),
@@ -87,6 +121,8 @@ export const applicationPublicSchema = z.object({
   lastError: z.string(),
   // The form read on the last browser run, if any.
   form: formSnapshotSchema.nullable(),
+  // What goes in each field of that form, and which questions still need your answer.
+  plan: z.array(fieldPlanSchema).nullable(),
   createdAt: z.string(),
   updatedAt: z.string(),
   events: z.array(applicationEventPublicSchema),

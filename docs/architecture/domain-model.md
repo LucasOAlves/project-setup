@@ -286,6 +286,19 @@ exactly one row (`job_id` UNIQUE). It records:
 - `portal`, `destinationUrl`, and the last run's error;
 - `formSnapshot`: the form the last browser run read (each field's label, kind, required flag
   and options). This is page text, kept as data (migration 0028).
+- `fieldPlan`: what goes in each field (`application-field-mapper.ts`, test-first). Each value
+  comes only from stated data: the profile's name and current employer, ApplicationDetails,
+  the job's prepared answers, years with a technology counted from dated experiences, a saved
+  answer, or the job's CV or cover letter PDF. A required field with no stated value is
+  NEEDS_INPUT, an optional one is left empty. Consent boxes and voluntary self-identification
+  are never filled for the user. A yes/no work authorization question is never inferred from
+  the free-text statement (migration 0029).
+
+## SavedFormAnswer (Job Hunter)
+
+An answer the user gave to an application-form question (`saved_form_answers`, migration
+0029). It is keyed by the question's normalized wording (`questionKey`), so the same question
+on any later form is answered the same way. The field mapper uses it before anything else.
 
 Transitions follow `checkTransition` (`application-state.ts`):
 - Only the user starts a run or rejects.
