@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { and, desc, eq } from "drizzle-orm";
 import type { CompanyInput, JobInput, JobPatchInput, RecruiterInput, RecruiterPatchInput } from "@studio/shared";
 import type { Database } from "../../db/client.js";
+import { canonicalizeJobUrl, jobContentHash } from "./job-provenance.js";
 import { companies, jobStatusEvents, jobs, recruiters } from "../../db/schema.js";
 
 export type CompanyRow = typeof companies.$inferSelect;
@@ -129,6 +130,7 @@ export class CareerRepository {
     url: string;
     location: string;
     description: string;
+    companyName: string;
   }): Promise<JobRow> {
     const [row] = await this.db
       .insert(jobs)
@@ -141,6 +143,13 @@ export class CareerRepository {
         url: input.url,
         location: input.location,
         description: input.description,
+        rawDescription: input.description,
+        canonicalUrl: canonicalizeJobUrl(input.url),
+        contentHash: jobContentHash({
+          title: input.title,
+          companyName: input.companyName,
+          description: input.description,
+        }),
       })
       .returning();
     if (!row) {

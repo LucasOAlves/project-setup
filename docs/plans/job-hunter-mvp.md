@@ -11,7 +11,7 @@ Done when spec acceptance criteria 1, 2, 3 and 12 pass. Test-first per ADR-014 w
 | # | Spec ticket | Scope | Depends on | Test-first |
 | --- | --- | --- | --- | --- |
 | 1 | JOB-001 | Redis and a BullMQ worker in Compose | — | no |
-| 2 | JOB-002, JOB-010 | `sources`, job provenance, `job_evaluations`, `audit_events`, profile version | 1 | no |
+| 2 | JOB-002, JOB-010 | `sources`, job provenance, `job_evaluations`, `audit_events`, profile version | 1 | provenance helpers only |
 | 3 | JOB-004 | Discovery/evaluation queues, backoff, idempotency, redacted structured logs | 1 | no |
 | 4 | JOB-005 | Source registry with per-source policy; Remotive and Himalayas adapters | 2 | no |
 | 5 | JOB-006 | Normalizer (USD/month, region, type, age); cross-source dedupe | 2, 4 | yes |

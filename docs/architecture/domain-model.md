@@ -10,6 +10,10 @@ Owns identity fields, skills, technologies, industries, interests, avoid list, t
 
 Not every field is required. A usable profile needs enough evidence to ground authority: typically a headline or about section plus at least one experience or a meaningful skill/technology set. The product should warn when evidence is thin rather than blocking every incomplete form.
 
+`version` (integer, starts at 1) is bumped on every profile save. Job Hunter evaluations and
+generated documents record the version they were computed from, so a result can always be
+traced to the exact facts it used (spec JOB-010).
+
 ## ProfessionalExperience
 
 Belongs to a profile. Captures role, company, period, description, responsibilities, achievements, technologies, and measurable outcomes.
@@ -147,6 +151,34 @@ persisted on demand ("Score fit" / "Rescore fit" in the UI) — see
 rules (technical, seniority, architecture, leadership) and why no AI call is involved. Only
 the overall number is persisted; the full breakdown (strengths, gaps, per-dimension scores)
 is cheap to recompute and is not stored as its own row.
+
+Provenance (Job Hunter, migration 0016): imported jobs also store `rawDescription` (the text
+exactly as the source returned it, kept apart from the user-editable `description`),
+`canonicalUrl` and `contentHash` (from `job-provenance.ts`: tracking params, fragment and
+trailing slash removed; sha256 of normalized title + company + description), and
+`sourcePostedAt` when a source reports it. These feed cross-source dedupe (JOB-006); today's
+idempotency is still `source` + `externalId`.
+
+## Source (Job Hunter)
+
+One row per job-source adapter (`greenhouse`, `lever`, `ashby`, `remoteok`, `arbeitnow`,
+`adzuna`), seeded by migration 0016. The per-source permission registry from the spec:
+`discoveryAllowed` gates scheduled discovery, `applicationMode` (`MANUAL` / `ASSISTED` /
+`AUTOMATED`) caps how far application automation may go, `termsUrl` records what was
+reviewed. Every source starts `MANUAL`.
+
+## JobEvaluation (Job Hunter)
+
+Insert-only: one row per evaluation of a `Job` against a `Profile.version`. Holds eligibility
+(`ELIGIBLE` / `EXCLUDED` / `UNKNOWN` plus the quoted reasons), the score, its breakdown and
+confidence, the structured explanation and its evidence, and the model/prompt version and
+token counts behind it. Re-evaluating adds a row; nothing writes it yet (tickets 6, 8, 9).
+
+## AuditEvent (Job Hunter)
+
+Insert-only trail of who (`USER` / `SYSTEM` / `WORKER`) did what to which entity, with a
+correlation id across a pipeline run. Payloads never carry credentials or raw personal data.
+Nothing writes it yet (ticket 3 onward).
 
 ## ResumeTailoringPlan (Career domain, ephemeral)
 

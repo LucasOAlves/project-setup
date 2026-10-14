@@ -1,4 +1,5 @@
 import {
+  boolean,
   integer,
   jsonb,
   pgTable,
@@ -40,6 +41,7 @@ export const profiles = pgTable("profiles", {
   desiredPerception: text("desired_perception").notNull().default(""),
   writingTones: jsonb("writing_tones").$type<string[]>().notNull().default([]),
   postLength: text("post_length").notNull().default("MEDIUM"),
+  version: integer("version").notNull().default(1),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
@@ -206,6 +208,10 @@ export const jobs = pgTable("jobs", {
   appliedAt: timestamp("applied_at", { withTimezone: true }),
   notes: text("notes").notNull().default(""),
   nextAction: text("next_action").notNull().default(""),
+  canonicalUrl: text("canonical_url").notNull().default(""),
+  rawDescription: text("raw_description").notNull().default(""),
+  contentHash: text("content_hash").notNull().default(""),
+  sourcePostedAt: timestamp("source_posted_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
@@ -301,4 +307,48 @@ export const customTopics = pgTable("custom_topics", {
     { onDelete: "set null" },
   ),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const sources = pgTable("sources", {
+  id: text("id").primaryKey(),
+  domain: text("domain").notNull(),
+  adapterType: text("adapter_type").notNull(),
+  discoveryAllowed: boolean("discovery_allowed").notNull().default(true),
+  applicationMode: text("application_mode").notNull().default("MANUAL"),
+  termsUrl: text("terms_url").notNull().default(""),
+  enabled: boolean("enabled").notNull().default(true),
+  notes: text("notes").notNull().default(""),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const jobEvaluations = pgTable("job_evaluations", {
+  id: uuid("id").primaryKey(),
+  jobId: uuid("job_id")
+    .notNull()
+    .references(() => jobs.id, { onDelete: "cascade" }),
+  profileVersion: integer("profile_version").notNull(),
+  eligibility: text("eligibility").notNull(),
+  eligibilityReasons: jsonb("eligibility_reasons").$type<unknown[]>().notNull().default([]),
+  score: integer("score"),
+  scoreBreakdown: jsonb("score_breakdown").$type<Record<string, unknown>>().notNull().default({}),
+  confidence: integer("confidence"),
+  explanation: jsonb("explanation").$type<unknown>(),
+  evidence: jsonb("evidence").$type<unknown[]>().notNull().default([]),
+  modelVersion: text("model_version").notNull().default(""),
+  promptVersion: text("prompt_version").notNull().default(""),
+  inputTokens: integer("input_tokens").notNull().default(0),
+  outputTokens: integer("output_tokens").notNull().default(0),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const auditEvents = pgTable("audit_events", {
+  id: uuid("id").primaryKey(),
+  eventType: text("event_type").notNull(),
+  actor: text("actor").notNull(),
+  entityType: text("entity_type").notNull(),
+  entityId: text("entity_id").notNull(),
+  correlationId: text("correlation_id").notNull().default(""),
+  payload: jsonb("payload").$type<Record<string, unknown>>().notNull().default({}),
+  occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull().defaultNow(),
 });

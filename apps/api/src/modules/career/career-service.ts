@@ -119,6 +119,7 @@ export class CareerService {
         url: posting.url,
         location: posting.location,
         description: posting.description,
+        companyName: company.name,
       });
       imported.push(this.jobToPublic(row));
     }
@@ -173,6 +174,7 @@ export class CareerService {
       url: posting.url,
       location: posting.location,
       description: posting.description,
+      companyName: company.name,
     });
     return this.jobToPublic(row);
   }
