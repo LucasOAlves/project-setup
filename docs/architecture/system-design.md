@@ -76,8 +76,8 @@ JobSearchProvider                   (Career domain, keyword search, ADR-011)
 ├── RemotiveJobSearchProvider       (public, unauthenticated, attribution required)
 └── HimalayasJobSearchProvider      (public, unauthenticated, attribution required)
 
-Both ports are gated by SourceRegistry (`sources` table): CareerService calls
-assertDiscoveryAllowed(source) before any board import or search.
+Both ports are gated by SourceRegistry (`sources` table): CareerService and the
+worker's DiscoveryService call assertDiscoveryAllowed(source) before any board import or search.
 
 (no LinkedIn adapter exists for either port)
 ```
@@ -240,4 +240,4 @@ worker  →  redis (BullMQ queues + schedulers)
 
 Service DNS names are used between containers. `localhost` is not used to reach a sibling container.
 
-The API waits on Postgres readiness and runs migrations. The worker starts after Redis and the API are healthy; queues (`system`, `discovery`, `evaluation`), default retries (3 attempts, exponential backoff from 30s) and deterministic job ids live in `apps/api/src/worker/queues.ts` and `job-ids.ts`, so enqueueing the same discovery run or evaluation twice is a no-op. Today only the `system` heartbeat has a processor; discovery and evaluation register theirs in later tickets. Worker logs are JSON lines passed through `observability/redact.ts` (sensitive keys and email addresses masked); final job failures on pipeline queues are also written to `audit_events`. `.env.example` documents `OPENAI_API_KEY`, `NEWS_API_KEY`, model names, and database URL. Secrets are never committed.
+The API waits on Postgres readiness and runs migrations. The worker starts after Redis and the API are healthy; queues (`system`, `discovery`, `evaluation`), default retries (3 attempts, exponential backoff from 30s) and deterministic job ids live in `apps/api/src/worker/queues.ts` and `job-ids.ts`, so enqueueing the same discovery run or evaluation twice is a no-op. The `discovery` queue runs `DiscoveryService.runSource` (`modules/career/discovery.ts`): one job scheduler per source in `DISCOVERY_SOURCES` (cron `DISCOVERY_CRON` in `DISCOVERY_TZ`, stale schedulers removed on start), keywords searched sequentially with per-source spacing, each posting imported through `JobIntake` (the same import path the API uses, deduped by provenance), eligibility evaluated only for newly created jobs, and non-excluded jobs queued on `evaluation`. The run's counts are the job's return value and go into its completion audit event. `POST /api/career/discovery/run` enqueues the day's run from the API. The `evaluation` queue has no processor yet (tickets 8 and 9); queued evaluations wait in Redis. Worker logs are JSON lines passed through `observability/redact.ts` (sensitive keys and email addresses masked); final job failures on pipeline queues are also written to `audit_events`. `.env.example` documents `OPENAI_API_KEY`, `NEWS_API_KEY`, model names, and database URL. Secrets are never committed.

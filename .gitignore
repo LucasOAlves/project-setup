@@ -13,3 +13,4 @@ storage
 .vscode
 .idea
 *.tsbuildinfo
+dump.rdb

@@ -50,7 +50,7 @@ import type { JobSearchProvider } from "./job-search-provider.js";
 import { ALLOW_ALL_SOURCES, type SourceGate } from "./source-registry.js";
 import { computeJobFit } from "./job-fit.js";
 import { prepareImportedJob } from "./job-import.js";
-import { BRAZIL_REMOTE_CANDIDATE, evaluateEligibility } from "./job-eligibility.js";
+import { JobIntake } from "./job-intake.js";
 import { scoreRecruiterRelevance } from "./recruiter-scoring.js";
 import { applyTailoringPlan, groundTailoringPlan } from "./resume-tailoring.js";
 
@@ -74,6 +74,10 @@ export class CareerService {
     private readonly searchProviders: Record<JobSearchSource, JobSearchProvider>,
     private readonly sourceGate: SourceGate = ALLOW_ALL_SOURCES,
   ) {}
+
+  private get intake(): JobIntake {
+    return new JobIntake(this.repo);
+  }
 
   async listCompanies(): Promise<CompanyPublic[]> {
     const rows = await this.repo.listCompanies();
@@ -158,42 +162,11 @@ export class CareerService {
   }
 
   async importSearchResult(source: JobSearchSource, posting: JobSearchResult): Promise<JobPublic> {
-    const existing = await this.repo.getJobByExternalId(source, posting.externalId);
-    if (existing) {
-      return this.jobToPublic(existing);
-    }
-
-    const companyName = posting.companyName.trim() || "Unknown company";
-    const { fields, dedupe } = prepareImportedJob(
-      source,
-      {
-        ...posting,
-        postedAt: posting.postedAt ? new Date(posting.postedAt) : null,
-      },
-      companyName,
-    );
-    // The same role already tracked through another source: return it rather than add a twin.
-    const duplicate = await this.repo.findJobByProvenance(dedupe);
-    if (duplicate) {
-      return this.jobToPublic(duplicate);
-    }
-
-    let company = await this.repo.findCompanyByName(companyName);
-    if (!company) {
-      company = await this.repo.createCompany({
-        name: companyName,
-        website: "",
-        linkedinUrl: "",
-        industry: "",
-        size: "",
-        locations: [],
-        careerPageUrl: "",
-        notes: "",
-      });
-    }
-
-    const row = await this.repo.createImportedJob({ companyId: company.id, ...fields });
-    return this.jobToPublic(row);
+    const { job } = await this.intake.importSearchPosting(source, {
+      ...posting,
+      postedAt: posting.postedAt ? new Date(posting.postedAt) : null,
+    });
+    return this.jobToPublic(job);
   }
 
   async updateJobStatus(id: string, status: string): Promise<JobPublic> {
@@ -282,26 +255,12 @@ export class CareerService {
     return buildResumePdf(tailoredProfile);
   }
 
-  // ANALYZE-level per ADR-012: deterministic rules, no model call. Each run appends a
-  // job_evaluations row, so earlier verdicts stay inspectable. Rules read the source's own
-  // text (rawDescription) when present, not a description the user may have edited.
   async evaluateEligibility(id: string): Promise<JobEvaluationPublic> {
     const job = await this.repo.getJob(id);
     if (!job) {
       throw notFound("That job does not exist.");
     }
-    const result = evaluateEligibility(
-      { title: job.title, location: job.location, description: job.rawDescription || job.description },
-      BRAZIL_REMOTE_CANDIDATE,
-    );
-    const row = await this.repo.insertJobEvaluation({
-      jobId: job.id,
-      profileVersion: await this.repo.getProfileVersion(),
-      eligibility: result.status,
-      eligibilityReasons: result.reasons,
-      modelVersion: ELIGIBILITY_RULES_VERSION,
-    });
-    return evaluationToPublic(row);
+    return evaluationToPublic(await this.intake.evaluateEligibility(job));
   }
 
   async getLatestEvaluation(id: string): Promise<JobEvaluationPublic | null> {
@@ -530,9 +489,6 @@ export class CareerService {
     };
   }
 }
-
-// Recorded on each evaluation so a verdict can be traced to the rule set that produced it.
-const ELIGIBILITY_RULES_VERSION = "eligibility-rules@1";
 
 function evaluationToPublic(row: JobEvaluationRow): JobEvaluationPublic {
   return {

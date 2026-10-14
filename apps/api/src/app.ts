@@ -2,7 +2,6 @@ import {
   ERROR_CODES,
   type ImageProviderName,
   type JobBoardSource,
-  type JobSearchSource,
   type TextProviderName,
 } from "@studio/shared";
 import cors from "@fastify/cors";
@@ -21,13 +20,9 @@ import { GreenhouseJobProvider } from "./modules/career/greenhouse-job-provider.
 import { LeverJobProvider } from "./modules/career/lever-job-provider.js";
 import { AshbyJobProvider } from "./modules/career/ashby-job-provider.js";
 import type { JobProvider } from "./modules/career/job-provider.js";
-import { RemoteOkJobSearchProvider } from "./modules/career/remoteok-job-search-provider.js";
-import { ArbeitnowJobSearchProvider } from "./modules/career/arbeitnow-job-search-provider.js";
-import { AdzunaJobSearchProvider } from "./modules/career/adzuna-job-search-provider.js";
-import type { JobSearchProvider } from "./modules/career/job-search-provider.js";
-import { RemotiveJobSearchProvider } from "./modules/career/remotive-job-search-provider.js";
-import { HimalayasJobSearchProvider } from "./modules/career/himalayas-job-search-provider.js";
 import { SourceRegistry } from "./modules/career/source-registry.js";
+import { createSearchProviders } from "./modules/career/search-providers.js";
+import { registerDiscoveryRoutes } from "./modules/career/discovery-routes.js";
 import { registerContentPlanRoutes } from "./modules/content-plan/content-plan-routes.js";
 import { ContentPlanRepository } from "./modules/content-plan/content-plan-repository.js";
 import { ContentPlanService } from "./modules/content-plan/content-plan-service.js";
@@ -140,13 +135,7 @@ export async function buildApp(env: Env, db: Database) {
     lever: new LeverJobProvider(),
     ashby: new AshbyJobProvider(),
   };
-  const searchProviders: Record<JobSearchSource, JobSearchProvider> = {
-    remoteok: new RemoteOkJobSearchProvider(),
-    arbeitnow: new ArbeitnowJobSearchProvider(),
-    adzuna: new AdzunaJobSearchProvider(env.ADZUNA_APP_ID, env.ADZUNA_APP_KEY),
-    remotive: new RemotiveJobSearchProvider(),
-    himalayas: new HimalayasJobSearchProvider(),
-  };
+  const searchProviders = createSearchProviders(env);
   const sourceRegistry = new SourceRegistry(db);
   const career = new CareerService(
     new CareerRepository(db),
@@ -180,6 +169,7 @@ export async function buildApp(env: Env, db: Database) {
   await registerCustomTopicRoutes(app, customTopics);
   await registerImageRoutes(app, images);
   await registerCareerRoutes(app, career, sourceRegistry);
+  await registerDiscoveryRoutes(app, env);
 
   app.setErrorHandler((error, _request, reply) => {
     if (error instanceof AppError) {

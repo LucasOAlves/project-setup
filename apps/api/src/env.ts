@@ -1,4 +1,12 @@
+import { JOB_SEARCH_SOURCES } from "@studio/shared";
 import { z } from "zod";
+
+function splitList(value: string): string[] {
+  return value
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
 
 const envSchema = z.object({
   NODE_ENV: z.string().optional().default("development"),
@@ -20,6 +28,15 @@ const envSchema = z.object({
   ADZUNA_APP_KEY: z.string().optional().default(""),
   REDIS_URL: z.string().min(1).default("redis://localhost:6379"),
   WORKER_HEARTBEAT_MS: z.coerce.number().int().positive().default(5 * 60 * 1000),
+  // Scheduled discovery (JOB-009): which search sources run, with which keywords, when.
+  DISCOVERY_SOURCES: z
+    .string()
+    .default("remotive,himalayas,remoteok,arbeitnow")
+    .transform(splitList)
+    .pipe(z.array(z.enum(JOB_SEARCH_SOURCES))),
+  DISCOVERY_KEYWORDS: z.string().default("typescript,node.js,angular,tech lead").transform(splitList),
+  DISCOVERY_CRON: z.string().min(1).default("0 9 * * *"),
+  DISCOVERY_TZ: z.string().min(1).default("America/Sao_Paulo"),
 });
 
 export type Env = z.infer<typeof envSchema>;

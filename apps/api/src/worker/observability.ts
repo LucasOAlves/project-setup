@@ -11,9 +11,14 @@ export function attachObservability(worker: Worker, queueName: QueueName, logger
   const audited = queueName !== QUEUE_NAMES.system;
 
   worker.on("completed", (job: Job) => {
-    log.info("job completed", { job: job.name, jobId: job.id, attempts: job.attemptsMade });
+    log.info("job completed", {
+      job: job.name,
+      jobId: job.id,
+      attempts: job.attemptsMade,
+      ...(audited ? { result: job.returnvalue ?? null } : {}),
+    });
     if (audited) {
-      void recordAudit(audit, log, job, "WORKER_JOB_COMPLETED", {});
+      void recordAudit(audit, log, job, "WORKER_JOB_COMPLETED", { result: job.returnvalue ?? null });
     }
   });
 
