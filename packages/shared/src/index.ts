@@ -258,3 +258,12 @@ export {
   type TalentProfileInput,
   type TalentProfilePublic,
 } from "./job-sites.js";
+export {
+  SPOKEN_LANGUAGE_LEVELS,
+  SALARY_PERIODS,
+  applicationDetailsInputSchema,
+  applicationDetailsPublicSchema,
+  type ApplicationDetailsInput,
+  type ApplicationDetailsPublic,
+  type SpokenLanguageLevel,
+} from "./application-details.js";

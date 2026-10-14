@@ -105,6 +105,11 @@ terms that were reviewed), and `PATCH /api/career/sources/:id` with `{ "enabled"
 stops every search or board import against it. Search results show "via <source>" linking back
 to the original posting, which the Remotive, Himalayas and We Work Remotely terms require.
 
+The "Application details" step holds what application forms ask for beyond the profile:
+contact details, education, certifications, spoken languages, work authorization, visa
+sponsorship, notice period, time zone and salary expectation
+(`GET`/`PUT /api/profile/application-details`). Contact details are never sent to an AI provider.
+
 The "Job sites" step lists every site on the user's list grouped by how it takes part in the
 search (`JOB_SITES` in `packages/shared/src/job-sites.ts`): read automatically by discovery,
 talent platforms (with a per-platform status, note and last-updated date, saved through

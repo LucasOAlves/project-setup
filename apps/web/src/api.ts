@@ -48,6 +48,8 @@ import type {
   JobFeedbackPublic,
   JobFeedItem,
   TalentProfileInput,
+  ApplicationDetailsInput,
+  ApplicationDetailsPublic,
   TalentProfilePublic,
 } from "@studio/shared";
 import { profileInputSchema } from "@studio/shared";
@@ -606,6 +608,26 @@ export async function checkWatchNow(companyId: string): Promise<"QUEUED" | "ALRE
     throw await parseError(response);
   }
   return ((await response.json()) as { status: "QUEUED" | "ALREADY_QUEUED_THIS_HOUR" }).status;
+}
+
+export async function fetchApplicationDetails(): Promise<ApplicationDetailsPublic | null> {
+  const response = await fetch("/api/profile/application-details");
+  if (!response.ok) {
+    throw await parseError(response);
+  }
+  return ((await response.json()) as { details: ApplicationDetailsPublic | null }).details;
+}
+
+export async function saveApplicationDetails(input: ApplicationDetailsInput): Promise<ApplicationDetailsPublic> {
+  const response = await fetch("/api/profile/application-details", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!response.ok) {
+    throw await parseError(response);
+  }
+  return ((await response.json()) as { details: ApplicationDetailsPublic }).details;
 }
 
 export async function fetchTalentProfiles(): Promise<TalentProfilePublic[]> {

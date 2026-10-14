@@ -12,6 +12,7 @@ import {
 import { CareerView } from "./CareerView";
 import { JobFeedView } from "./JobFeedView";
 import { JobSitesView } from "./JobSitesView";
+import { ApplicationDetailsView } from "./ApplicationDetailsView";
 import { ContentPlanView } from "./ContentPlanView";
 import { CustomTopicsView, type CustomTopicDraft } from "./CustomTopicsView";
 import { DiscoverView } from "./DiscoverView";
@@ -48,6 +49,7 @@ const STEPS = [
   { id: "career", label: "Career" },
   { id: "feed", label: "Job feed" },
   { id: "sites", label: "Job sites" },
+  { id: "application", label: "Application details" },
 ] as const;
 
 type StepId = (typeof STEPS)[number]["id"];
@@ -198,7 +200,7 @@ export function App() {
                           ? "Career tracker"
                           : step === "feed"
                             ? "Job Hunter"
-                            : step === "sites"
+                            : step === "sites" || step === "application"
                               ? "Job Hunter"
                               : "Professional profile"}
           </p>
@@ -221,7 +223,9 @@ export function App() {
                             ? "Remote jobs ranked for you, with the evidence"
                             : step === "sites"
                               ? "Every job site, and how each one is covered"
-                              : "Tell the system who you actually are"}
+                              : step === "application"
+                                ? "What application forms will ask you"
+                                : "Tell the system who you actually are"}
           </h2>
           <nav className="steps" aria-label="Profile sections">
             {STEPS.filter((item) => item.id !== "welcome").map((item) => (
@@ -251,7 +255,8 @@ export function App() {
           step !== "history" &&
           step !== "career" &&
           step !== "feed" &&
-          step !== "sites" ? (
+          step !== "sites" &&
+          step !== "application" ? (
             <div className="notice">{saved.evidenceWarning}</div>
           ) : null}
 
@@ -361,6 +366,7 @@ export function App() {
           ) : null}
           {step === "feed" ? <JobFeedView /> : null}
           {step === "sites" ? <JobSitesView /> : null}
+          {step === "application" ? <ApplicationDetailsView /> : null}
           {step === "career" ? (
             <CareerView
               onDraftTopic={(draft) => {
@@ -378,7 +384,8 @@ export function App() {
           step !== "history" &&
           step !== "career" &&
           step !== "feed" &&
-          step !== "sites" ? (
+          step !== "sites" &&
+          step !== "application" ? (
           <div className="actions">
             <button
               className="btn ghost"

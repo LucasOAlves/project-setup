@@ -264,6 +264,17 @@ more than once an hour (`company-watch.ts`). Five or more roles posted in 30 day
 "Hiring fast". Deleting the company deletes its watch. Watching again with another board resets
 the poll history.
 
+## ApplicationDetails (Job Hunter)
+
+One row for the workspace user (`application_details`, migration 0025): contact details
+(email, phone, city, country, LinkedIn, GitHub and portfolio URLs), education, certifications,
+spoken languages with a level, work authorization in the user's own words, whether visa
+sponsorship is needed (unanswered until set), notice period, time zone and a salary
+expectation (amount, currency, per month or year). `version` goes up on every save, like
+`Profile.version`, so generated documents can record which details they used. It is kept out
+of `Profile` on purpose: model prompts are built from the profile, so contact details cannot
+reach a text provider by accident. Validated by `applicationDetailsInputSchema` (shared).
+
 ## TalentPlatformProfile (Job Hunter)
 
 One row per talent platform the user has touched (`talent_platform_profiles`, migration 0024),

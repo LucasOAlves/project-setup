@@ -46,6 +46,9 @@ import { registerPersonaRoutes } from "./modules/persona/persona-routes.js";
 import { PersonaRepository } from "./modules/persona/persona-repository.js";
 import { PersonaService } from "./modules/persona/persona-service.js";
 import { LocalStorageProvider } from "./modules/uploads/local-storage.js";
+import { ApplicationDetailsRepository } from "./modules/profile/application-details-repository.js";
+import { registerApplicationDetailsRoutes } from "./modules/profile/application-details-routes.js";
+import { ApplicationDetailsService } from "./modules/profile/application-details-service.js";
 import { ProfileRepository } from "./modules/profile/profile-repository.js";
 import { evaluationSettingsFromEnv } from "./modules/career/job-intake.js";
 import { registerProfileRoutes } from "./modules/profile/profile-routes.js";
@@ -156,6 +159,7 @@ export async function buildApp(env: Env, db: Database) {
   app.get("/health", async () => ({ ok: true }));
 
   await registerProfileRoutes(app, profiles, env.MAX_DOCUMENT_BYTES);
+  await registerApplicationDetailsRoutes(app, new ApplicationDetailsService(new ApplicationDetailsRepository(db)));
   await registerPersonaRoutes(app, personas);
   await registerResearchRoutes(app, research);
   await registerOpportunityRoutes(app, opportunities);

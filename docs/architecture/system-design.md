@@ -30,7 +30,7 @@ Controllers stay thin. Domain rules do not live in routes or React components.
 
 | Module | Owns |
 | --- | --- |
-| profile | profile, experiences, writing samples, photos metadata, resume PDF import (draft, ADR-010) and export |
+| profile | profile, experiences, writing samples, photos metadata, resume PDF import (draft, ADR-010) and export; application details for Job Hunter (`application_details`, `application-details-service.ts`: contact, education, certifications, spoken languages, work authorization, notice period, time zone, salary expectation; never part of a model prompt) |
 | persona | persona generation, authority model persistence |
 | news | NewsProvider calls, article normalization, persistence |
 | relevance | deterministic filters + semantic relevance |

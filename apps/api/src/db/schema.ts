@@ -207,6 +207,21 @@ export const talentPlatformProfiles = pgTable("talent_platform_profiles", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+export const applicationDetails = pgTable("application_details", {
+  id: uuid("id").primaryKey(),
+  contact: jsonb("contact").$type<Record<string, string>>().notNull().default({}),
+  education: jsonb("education").$type<unknown[]>().notNull().default([]),
+  certifications: jsonb("certifications").$type<unknown[]>().notNull().default([]),
+  spokenLanguages: jsonb("spoken_languages").$type<unknown[]>().notNull().default([]),
+  workAuthorization: text("work_authorization").notNull().default(""),
+  requiresVisaSponsorship: boolean("requires_visa_sponsorship"),
+  noticePeriod: text("notice_period").notNull().default(""),
+  timeZone: text("time_zone").notNull().default(""),
+  salaryExpectation: jsonb("salary_expectation").$type<Record<string, unknown> | null>(),
+  version: integer("version").notNull().default(1),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 export const jobs = pgTable("jobs", {
   id: uuid("id").primaryKey(),
   companyId: uuid("company_id")
