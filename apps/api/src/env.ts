@@ -1,5 +1,6 @@
 import { JOB_SEARCH_SOURCES } from "@studio/shared";
 import { z } from "zod";
+import { isPasswordHash } from "./modules/auth/password.js";
 
 function splitList(value: string): string[] {
   return value
@@ -26,6 +27,16 @@ const envSchema = z.object({
   NEWS_LOOKBACK_DAYS: z.coerce.number().int().positive().max(30).default(21),
   ADZUNA_APP_ID: z.string().optional().default(""),
   ADZUNA_APP_KEY: z.string().optional().default(""),
+  // Single-user sign-in (Milestone 4). Empty leaves the app open, except approving and
+  // submitting, which need a signed-in session. Make the hash with `npm run hash-password`.
+  APP_PASSWORD_HASH: z.string().optional().default(""),
+  SESSION_SECRET: z.string().optional().default(""),
+  SESSION_TTL_HOURS: z.coerce.number().int().positive().max(24 * 30).default(24 * 7),
+  // "auto" sets the cookie's Secure flag only when NODE_ENV=production.
+  SESSION_COOKIE_SECURE: z.enum(["auto", "true", "false"]).default("auto"),
+  // Origins other than the app's own that may send state-changing requests. Usually empty,
+  // since the web app reaches the API through its own /api proxy.
+  APP_ORIGINS: z.string().optional().default("").transform(splitList),
   REDIS_URL: z.string().min(1).default("redis://localhost:6379"),
   WORKER_HEARTBEAT_MS: z.coerce.number().int().positive().default(5 * 60 * 1000),
   // Browser worker (Milestone 3). Empty uses Playwright's own Chromium.
@@ -63,6 +74,16 @@ const envSchema = z.object({
   // Explanation agent (JOB-012): shortlist threshold and the daily model-cost limit.
   EXPLANATION_MIN_SCORE: z.coerce.number().int().min(0).max(100).default(60),
   EXPLANATION_DAILY_LIMIT: z.coerce.number().int().min(0).default(25),
+}).superRefine((env, context) => {
+  if (env.APP_PASSWORD_HASH && !isPasswordHash(env.APP_PASSWORD_HASH)) {
+    context.addIssue({ code: "custom", path: ["APP_PASSWORD_HASH"], message: "Not a hash from `npm run hash-password`." });
+  }
+  if (env.APP_PASSWORD_HASH && env.SESSION_SECRET.length < 32) {
+    context.addIssue({ code: "custom", path: ["SESSION_SECRET"], message: "Set at least 32 random characters when APP_PASSWORD_HASH is set." });
+  }
+  if (env.NODE_ENV === "production" && !env.APP_PASSWORD_HASH) {
+    context.addIssue({ code: "custom", path: ["APP_PASSWORD_HASH"], message: "Production needs a sign-in password." });
+  }
 });
 
 export type Env = z.infer<typeof envSchema>;

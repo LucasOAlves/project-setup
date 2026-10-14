@@ -32,3 +32,11 @@ export function malformedAiOutput(
 export function conflict(message: string): AppError {
   return new AppError(ERROR_CODES.CONFLICT, message, 409);
 }
+
+export function unauthenticated(message = "Sign in to continue."): AppError {
+  return new AppError(ERROR_CODES.UNAUTHENTICATED, message, 401);
+}
+
+export function forbidden(message: string): AppError {
+  return new AppError(ERROR_CODES.FORBIDDEN, message, 403);
+}

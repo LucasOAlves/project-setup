@@ -57,6 +57,10 @@ services:
       WEB_SEARCH_TITLES: ${WEB_SEARCH_TITLES:-senior software engineer,senior fullstack engineer,tech lead,forward deployed engineer,ai engineer}
       EXPLANATION_MIN_SCORE: ${EXPLANATION_MIN_SCORE:-60}
       EXPLANATION_DAILY_LIMIT: ${EXPLANATION_DAILY_LIMIT:-25}
+      APP_PASSWORD_HASH: ${APP_PASSWORD_HASH:-}
+      SESSION_SECRET: ${SESSION_SECRET:-}
+      SESSION_TTL_HOURS: ${SESSION_TTL_HOURS:-168}
+      APP_ORIGINS: ${APP_ORIGINS:-}
     volumes:
       - media_data:/data/storage
       - ./apps/api/src:/app/apps/api/src

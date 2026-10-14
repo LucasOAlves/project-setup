@@ -64,13 +64,15 @@ import { TailoredCvGenerator } from "./modules/career/tailored-cv-generator.js";
 import { CoverLetterGenerator } from "./modules/career/cover-letter-generator.js";
 import { ApplicationAnswersGenerator } from "./modules/career/application-answers-generator.js";
 import { evaluationSettingsFromEnv } from "./modules/career/job-intake.js";
+import { authConfigFromEnv, registerAuth } from "./modules/auth/auth-routes.js";
 import { registerProfileRoutes } from "./modules/profile/profile-routes.js";
 import { ProfileService } from "./modules/profile/profile-service.js";
 
 export async function buildApp(env: Env, db: Database) {
   const app = Fastify({ logger: true });
 
-  await app.register(cors, { origin: true });
+  // The web app reaches the API through its own /api proxy, so only listed origins get CORS.
+  await app.register(cors, { origin: env.APP_ORIGINS.length > 0 ? env.APP_ORIGINS : false, credentials: true });
   await app.register(multipart, {
     limits: {
       fileSize: Math.max(env.MAX_PHOTO_BYTES, env.MAX_DOCUMENT_BYTES),
@@ -192,6 +194,8 @@ export async function buildApp(env: Env, db: Database) {
     const job = await careerRepository.getJob(jobId);
     return job ? { id: job.id, url: job.url } : null;
   });
+
+  await registerAuth(app, authConfigFromEnv(env), new AuditRepository(db));
 
   app.get("/health", async () => ({ ok: true }));
 

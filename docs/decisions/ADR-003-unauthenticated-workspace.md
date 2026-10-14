@@ -29,3 +29,9 @@ Security still applies to uploads, prompts, keys, and validation. Missing auth i
 ## Tradeoffs
 
 This is unacceptable for a public multi-user service. It is acceptable for the Compound Engineering MVP demo.
+
+## Update (Milestone 4)
+
+[ADR-021](./ADR-021-single-user-sign-in.md) adds optional single-user sign-in. With
+`APP_PASSWORD_HASH` set, every API route needs a session. Without it the app stays open as
+described here, except that approving and submitting job applications are refused.

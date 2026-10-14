@@ -903,3 +903,14 @@ textarea {
   margin-top: 8px;
   border: 1px solid var(--line);
 }
+
+.sign-in {
+  max-width: 420px;
+  margin: 12vh auto 0;
+}
+
+.sign-out {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+}

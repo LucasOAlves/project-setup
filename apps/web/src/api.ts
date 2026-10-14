@@ -1044,3 +1044,27 @@ export async function rejectApplication(applicationId: string): Promise<Applicat
 export function applicationPreviewUrl(application: Pick<ApplicationPublic, "id" | "preview">): string {
   return `/api/career/applications/${application.id}/preview.png?at=${encodeURIComponent(application.preview?.capturedAt ?? "")}`;
 }
+
+export type AuthSession = { required: boolean; signedIn: boolean; expiresAt: string | null };
+
+export async function fetchAuthSession(): Promise<AuthSession> {
+  const response = await fetch("/api/auth/session");
+  if (!response.ok) throw await parseError(response);
+  return (await response.json()) as AuthSession;
+}
+
+export async function signIn(password: string): Promise<AuthSession> {
+  const response = await fetch("/api/auth/sign-in", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ password }),
+  });
+  if (!response.ok) throw await parseError(response);
+  return (await response.json()) as AuthSession;
+}
+
+export async function signOut(): Promise<AuthSession> {
+  const response = await fetch("/api/auth/sign-out", { method: "POST" });
+  if (!response.ok) throw await parseError(response);
+  return (await response.json()) as AuthSession;
+}
