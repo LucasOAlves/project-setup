@@ -94,6 +94,12 @@ export async function registerCareerRoutes(
     return reply.code(201).send({ job });
   });
 
+  // Ranked job feed (JOB-008). Query: eligibility (comma list), minScore, source, q,
+  // postedWithinDays.
+  app.get("/api/career/feed", async (request) => {
+    return { items: await service.getJobFeed(request.query) };
+  });
+
   app.get("/api/career/jobs", async () => {
     const jobs = await service.listJobs();
     return { jobs };

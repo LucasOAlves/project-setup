@@ -40,6 +40,9 @@ import type {
   SectionCommentReview,
   TextProviderName,
   WritingTone,
+  FeedEligibilityFilter,
+  JobEvaluationPublic,
+  JobFeedItem,
 } from "@studio/shared";
 import { profileInputSchema } from "@studio/shared";
 
@@ -796,3 +799,48 @@ export async function deleteJob(id: string): Promise<JobPublic[]> {
   const body = (await response.json()) as { jobs: JobPublic[] };
   return body.jobs;
 }
+
+export type JobFeedFilters = {
+  eligibility: FeedEligibilityFilter[];
+  minScore: number;
+  source: string;
+  q: string;
+  postedWithinDays: number | null;
+};
+
+export async function fetchJobFeed(filters: JobFeedFilters): Promise<JobFeedItem[]> {
+  const params = new URLSearchParams({
+    eligibility: filters.eligibility.join(","),
+    minScore: String(filters.minScore),
+  });
+  if (filters.source) params.set("source", filters.source);
+  if (filters.q.trim()) params.set("q", filters.q.trim());
+  if (filters.postedWithinDays) params.set("postedWithinDays", String(filters.postedWithinDays));
+  const response = await fetch(`/api/career/feed?${params.toString()}`);
+  if (!response.ok) {
+    throw await parseError(response);
+  }
+  const body = (await response.json()) as { items: JobFeedItem[] };
+  return body.items;
+}
+
+export async function evaluateJob(id: string): Promise<JobEvaluationPublic> {
+  const response = await fetch(`/api/career/jobs/${id}/evaluate`, { method: "POST" });
+  if (!response.ok) {
+    throw await parseError(response);
+  }
+  const body = (await response.json()) as { evaluation: JobEvaluationPublic };
+  return body.evaluation;
+}
+
+export async function runDiscoveryNow(): Promise<Array<{ sourceId: string; status: "QUEUED" | "ALREADY_RAN_TODAY" }>> {
+  const response = await fetch("/api/career/discovery/run", { method: "POST" });
+  if (!response.ok) {
+    throw await parseError(response);
+  }
+  const body = (await response.json()) as {
+    results: Array<{ sourceId: string; status: "QUEUED" | "ALREADY_RAN_TODAY" }>;
+  };
+  return body.results;
+}
+

@@ -18,8 +18,9 @@ import type {
   RecruiterPublic,
   ResumeTailoringPlan,
   TextProviderName,
+  JobFeedItem,
 } from "@studio/shared";
-import { outreachMessageSchema, resumeTailoringPlanSchema } from "@studio/shared";
+import { jobFeedQuerySchema, outreachMessageSchema, resumeTailoringPlanSchema } from "@studio/shared";
 import { malformedAiOutput, notFound, validationError } from "../../app-error.js";
 import { parseJsonObject } from "../ai/parse-json.js";
 import {
@@ -51,6 +52,7 @@ import { ALLOW_ALL_SOURCES, type SourceGate } from "./source-registry.js";
 import { computeJobFit } from "./job-fit.js";
 import { prepareImportedJob } from "./job-import.js";
 import { JobExplainer } from "./job-explanation.js";
+import { buildJobFeed } from "./job-feed.js";
 import { DEFAULT_EVALUATION_SETTINGS, JobIntake, type EvaluationSettings } from "./job-intake.js";
 import { scoreRecruiterRelevance } from "./recruiter-scoring.js";
 import { applyTailoringPlan, groundTailoringPlan } from "./resume-tailoring.js";
@@ -270,6 +272,32 @@ export class CareerService {
       onExplanationFailure: "skip",
     });
     return evaluationToPublic(evaluation);
+  }
+
+  async getJobFeed(rawQuery: unknown, now = new Date()): Promise<JobFeedItem[]> {
+    const parsed = jobFeedQuerySchema.safeParse(rawQuery ?? {});
+    if (!parsed.success) {
+      throw validationError("The feed filters are invalid.");
+    }
+    const [jobRows, companyRows, evaluations] = await Promise.all([
+      this.repo.listJobs(),
+      this.repo.listCompanies(),
+      this.repo.latestEvaluationsByJob(),
+    ]);
+    const companyNames = new Map(companyRows.map((company) => [company.id, company.name]));
+    const items = jobRows.map((row): JobFeedItem => {
+      const latest = evaluations.latest.get(row.id);
+      const explained = evaluations.explained.get(row.id);
+      return {
+        job: this.jobToPublic(row),
+        companyName: companyNames.get(row.companyId) ?? "",
+        postedAt: (row.sourcePostedAt ?? row.discoveredAt).toISOString(),
+        evaluation: latest ? evaluationToPublic(latest) : null,
+        explanation: explained ? evaluationToPublic(explained).explanation : null,
+        explainedAt: explained ? explained.createdAt.toISOString() : null,
+      };
+    });
+    return buildJobFeed(items, parsed.data, now);
   }
 
   async getLatestEvaluation(id: string): Promise<JobEvaluationPublic | null> {

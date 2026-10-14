@@ -410,3 +410,34 @@ export const jobEvaluationPublicSchema = z.object({
   createdAt: z.string(),
 });
 export type JobEvaluationPublic = z.infer<typeof jobEvaluationPublicSchema>;
+
+// Ranked job feed (JOB-008): each tracked job with its latest evaluation and, separately, its
+// latest explanation, so a later re-score that was not explained does not hide it.
+export const FEED_ELIGIBILITY_FILTERS = [...JOB_ELIGIBILITY_STATUSES, "NOT_EVALUATED"] as const;
+export type FeedEligibilityFilter = (typeof FEED_ELIGIBILITY_FILTERS)[number];
+
+export const jobFeedQuerySchema = z.object({
+  eligibility: z
+    .string()
+    .default("ELIGIBLE,UNKNOWN,NOT_EVALUATED")
+    .transform((value) => value.split(",").map((item) => item.trim()).filter(Boolean))
+    .pipe(z.array(z.enum(FEED_ELIGIBILITY_FILTERS)).min(1)),
+  // Jobs without a score are left out once this is above 0.
+  minScore: z.coerce.number().int().min(0).max(100).default(0),
+  source: z.enum(JOB_SOURCES).optional(),
+  q: z.string().trim().max(120).default(""),
+  postedWithinDays: z.coerce.number().int().positive().max(365).optional(),
+});
+export type JobFeedQuery = z.infer<typeof jobFeedQuerySchema>;
+
+export const jobFeedItemSchema = z.object({
+  job: jobPublicSchema,
+  companyName: z.string(),
+  // When the source says it was posted, else when it was discovered.
+  postedAt: z.string(),
+  evaluation: jobEvaluationPublicSchema.nullable(),
+  explanation: groundedJobExplanationSchema.nullable(),
+  explainedAt: z.string().nullable(),
+});
+export type JobFeedItem = z.infer<typeof jobFeedItemSchema>;
+

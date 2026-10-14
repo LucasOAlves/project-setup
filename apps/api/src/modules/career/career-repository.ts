@@ -184,6 +184,29 @@ export class CareerRepository {
     return row;
   }
 
+  // The newest evaluation of every job, and separately the newest one that carries an
+  // explanation, for the job feed. Two DISTINCT ON scans instead of one query per job.
+  async latestEvaluationsByJob(): Promise<{
+    latest: Map<string, JobEvaluationRow>;
+    explained: Map<string, JobEvaluationRow>;
+  }> {
+    const [latestRows, explainedRows] = await Promise.all([
+      this.db
+        .selectDistinctOn([jobEvaluations.jobId])
+        .from(jobEvaluations)
+        .orderBy(jobEvaluations.jobId, desc(jobEvaluations.createdAt)),
+      this.db
+        .selectDistinctOn([jobEvaluations.jobId])
+        .from(jobEvaluations)
+        .where(isNotNull(jobEvaluations.explanation))
+        .orderBy(jobEvaluations.jobId, desc(jobEvaluations.createdAt)),
+    ]);
+    return {
+      latest: new Map(latestRows.map((row) => [row.jobId, row])),
+      explained: new Map(explainedRows.map((row) => [row.jobId, row])),
+    };
+  }
+
   // Explanations written since `since`, for the daily model-cost limit.
   async countExplanationsSince(since: Date): Promise<number> {
     const [row] = await this.db

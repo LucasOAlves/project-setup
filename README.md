@@ -107,7 +107,12 @@ every job discovery finds. Jobs scoring 60 or more are also explained by the con
 provider (why they fit, matched requirements, gaps, eligibility, pay, risks, what to stress
 in the CV), and every quote in the explanation is checked against the posting or your
 profile before it is kept ([ADR-016](docs/decisions/ADR-016-verified-explanation-evidence.md)). `GET /api/career/jobs/:id/evaluation` returns the latest.
-There is no UI for it yet; the ranked job feed (ticket 10) will show it.
+
+The **Job feed** step lists every discovered or tracked job ranked by match score, then
+confidence, then the newest posting. It filters by eligibility (excluded jobs hidden by default), minimum score,
+source, title or company, and posting age. Each card opens the eligibility quotes, the score
+breakdown and the explanation, with every claim's quoted evidence. Jobs can be (re)evaluated
+from the card, and "Run discovery now" queues today's discovery. API: `GET /api/career/feed`.
 
 Content ideas from your job search close the Content↔Career loop, one direction of it: the
 Career step surfaces which technologies your tracked jobs actually request, kept only when
