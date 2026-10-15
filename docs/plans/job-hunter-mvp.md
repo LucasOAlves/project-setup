@@ -117,4 +117,40 @@ As in Milestone 3, verification is against the mock portals. The submit requests
 Greenhouse, Lever and Ashby forms cannot be reached from the build environment, so the first
 real submission should be one you watch.
 
-Milestone 5 (monitoring) is broken down once Milestone 4 ships.
+## Milestone 5 — monitor responses and optimize results
+
+Proposed on 2026-10-15, awaiting approval. Done when spec acceptance criteria 10 and 12 pass and
+spec section 12's Milestone 5 is covered: what happens after an application is sent is tracked
+from the company's own messages, nothing about it is decided from an ambiguous message, the
+user hears about what needs them, and the funnel and model costs show where to adjust.
+
+| # | Spec ticket | Scope | Depends on | Test-first |
+| --- | --- | --- | --- | --- |
+| 1 | JOB-027 (part) | Join submission to the pursuit pipeline: a SUBMITTED application (by the worker or "I submitted it") sets the job's status to APPLIED with a `job_status_events` row, so the existing Career tracker and analytics see it. Backfill the applications already submitted | — | no |
+| 2 | — | Email access (decision below): Gmail API with the read-only scope and the user's own OAuth client. The refresh token is stored encrypted at rest (AES-256-GCM, key from `APP_ENCRYPTION_KEY`, never in the database or a prompt). Connect and disconnect from settings. Reading is narrowed by a Gmail query to the last 30 days and to senders from the ATS domains and the companies applied to | 1 | encryption helper |
+| 3 | JOB-026 | `recruiter_messages` (spec section 7): provider message id (unique, so a re-read adds nothing), sender domain, subject, received at, the matched application, classification, evidence quote, and the body kept only for matched messages, deleted after 180 days. A scheduled worker job reads new messages hourly. Matching to an application by ATS sender, company domain or name, and job title | 2 | matcher |
+| 4 | JOB-026, A10 | Classification: rules first for the ATS confirmation and rejection templates, then the text provider for the rest (prompt `recruiter-message.v1`, Zod schema). Classes: APPLICATION_RECEIVED, REJECTION, INTERVIEW_REQUEST, ASSESSMENT, OFFER, RECRUITER_OUTREACH, OTHER, UNCLEAR. Every non-UNCLEAR class needs a quote found in the message, or it becomes UNCLEAR. Before sending, email addresses, phone numbers and links are masked, and only the subject and body go to the model | 3 | yes (rules, grounding) |
+| 5 | A10, JOB-027 | Response tracking in the Applications step: each message suggests a pursuit status (APPLIED confirmed, REJECTED, SCREENING, INTERVIEW, OFFER) that the user accepts or dismisses. Nothing changes status by itself. Follow-up reminders: a submitted application with no reply after 10 days is flagged "consider following up", and the app never writes to anyone | 3, 4 | follow-up rule |
+| 6 | JOB-025 | Notifications through a Telegram bot (`TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`; off when unset): a daily digest of new jobs scoring 80 or more, an application ready for your review, a submission result (including unknown), an interview, assessment or offer message, a follow-up due, and a cost budget crossed. Messages carry job titles, companies and a link only, never contact details or message bodies. In-app, the same events show as a count on the Applications step | 5, 7 | no |
+| 7 | JOB-028, criterion 12 | Model cost ledger: one `ai_usage` row per model call (purpose, provider, model, prompt version, input and output tokens, estimated USD from a price table in code) plus Brave queries. `AI_MONTHLY_BUDGET_USD` stops optional calls (explanations, cover letters, classification falls back to rules and UNCLEAR) once reached, and warns at 80% | — | cost estimate |
+| 8 | JOB-027, JOB-028, criterion 10 | Operations step: the funnel from discovered to offer, with conversion by source, by score band and by portal, median time to first reply, cost by purpose and month, and the outcome-based check of the matching weights (reply rate per score band next to the relevance feedback summary). It suggests weight changes and never applies them. `GET /api/audit-events` with filters and a readable audit history showing who acted (you, the worker or the system), what ran and the result | 1, 5, 7 | funnel metrics |
+
+Defaults: email reading is opt-in and read-only, and nothing is ever sent from the user's
+account. A message that matches no application is not stored, only its id, so it is not read
+again. Notifications go to Telegram because it needs only a bot token and no stored password.
+Notifications stay off until the two variables are set. Follow-up after 10 days and the 80
+digest threshold are settings. One ADR for email access and message classification, and a note
+on ADR-016 for the classification evidence check.
+
+Decision for Lucas: how the app reads recruiter email.
+1. **Gmail API, read-only (recommended).** Narrow, revocable, no password stored. It needs a
+   Google Cloud OAuth client of your own. While the client stays in "testing" Google expires the
+   token every 7 days, so it should be published for personal use (Google shows an "unverified
+   app" screen once, which is fine for one user).
+2. **IMAP with an app password.** Works with any provider, but it stores a password that can read
+   and delete all mail, which the spec asks to avoid.
+3. **Paste or forward by hand.** No access at all, but tracking depends on you remembering.
+Option 3 is built in any case as the fallback: paste a message into an application.
+
+Not in this milestone: backup, restore and retention controls (JOB-031) and the deployment
+runbook (JOB-032). They are proposed as Milestone 6.
