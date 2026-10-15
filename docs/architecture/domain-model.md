@@ -478,3 +478,12 @@ it was connected and last checked, and the last error (for example, Google no lo
 the access). Connecting again replaces it, and disconnecting revokes the token at Google and
 deletes the row.
 
+## RecruiterMessage (Job Hunter)
+
+A message about an application (`recruiter_messages`, migration 0037), read from Gmail or pasted by
+the user (`source` GMAIL or PASTED). A matched message holds the application, the sender's domain,
+subject, body as text, when it arrived, and how it was matched (`match_confidence` HIGH or LOW, with
+the reason). A Gmail message that matched nothing keeps only its provider id, so it is never fetched
+again, and Gmail ids are unique. Bodies older than 180 days are cleared. Classification, evidence,
+the suggested pursuit status and the user's decision on it are filled by later tickets.
+

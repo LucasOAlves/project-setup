@@ -60,6 +60,13 @@ It can never send, change or delete mail. It uses your own Google OAuth client:
 
 Connecting needs sign-in. **Disconnect** revokes the access at Google and deletes the token.
 
+Once connected, the worker reads Gmail every hour (and on **Check now**): only mail from the last
+30 days that comes from an ATS (Greenhouse, Lever, Ashby and others) or from a company you applied
+to, never your sent mail. A message is kept with the application it is about when it comes from the
+company's own domain, or from an ATS and names the company; other messages keep only their id, so
+they are not read again. Bodies are cleared after 180 days. Without Gmail, you can paste a message
+on an application instead (`POST /api/career/applications/:id/messages`).
+
 Slice 1 is available: progressive professional profile, experiences, positioning, writing preferences, and up to three reference photos. On the Identity step, upload a resume PDF to pre-fill these forms (nothing is saved until you review and click Save and continue); on the Experience step, download a résumé PDF generated from the current saved profile, any time new information is added.
 
 Slice 2 is available: generate a structured professional persona and authority map from the saved profile. Set `OPENAI_API_KEY` in `.env` before generating.

@@ -33,11 +33,13 @@ import {
   type WatchCompanyJobData,
   WATCH_JOBS,
   type EvaluationJobData,
+  MONITORING_JOBS,
   QUEUE_NAMES,
   SYSTEM_JOBS,
   type QueueName,
 } from "./worker/queues.js";
 
+import { recruiterMailServiceFromEnv } from "./modules/email/email-setup.js";
 loadDotenv({
   path: path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../.env"),
 });
@@ -75,6 +77,15 @@ async function main() {
     { pattern: env.DISCOVERY_CRON, tz: env.DISCOVERY_TZ },
     { name: WATCH_JOBS.run, data: { correlationId: "scheduled.watchlist" } },
   );
+
+  // Recruiter replies (Milestone 5): Gmail is read hourly when a mailbox is connected.
+  const monitoringQueue = createQueue(QUEUE_NAMES.monitoring, connection);
+  await monitoringQueue.upsertJobScheduler(
+    MONITORING_JOBS.emailCheck,
+    { pattern: "15 * * * *", tz: env.DISCOVERY_TZ },
+    { name: MONITORING_JOBS.emailCheck, data: { correlationId: "scheduled.email-check" }, opts: { attempts: 1 } },
+  );
+  const recruiterMail = recruiterMailServiceFromEnv(env, db);
 
   const careerRepo = new CareerRepository(db);
   const profileRepo = new ProfileRepository(db);
@@ -168,6 +179,10 @@ async function main() {
         outputTokens: evaluation.outputTokens,
       };
     },
+    [QUEUE_NAMES.monitoring]: async (job) => {
+      if (job.name === MONITORING_JOBS.emailCheck) return recruiterMail.check();
+      throw new Error(`Unknown monitoring job: ${job.name}`);
+    },
     [QUEUE_NAMES.system]: async (job) => {
       if (job.name === SYSTEM_JOBS.heartbeat) {
         return { ok: true, at: new Date().toISOString() };
@@ -186,7 +201,7 @@ async function main() {
 
   const shutdown = async () => {
     await Promise.all(workers.map((worker) => worker.close()));
-    await Promise.all([systemQueue.close(), discoveryQueue.close(), evaluationQueue.close()]);
+    await Promise.all([systemQueue.close(), discoveryQueue.close(), evaluationQueue.close(), monitoringQueue.close()]);
     await connection.quit();
     await sql.end();
     process.exit(0);

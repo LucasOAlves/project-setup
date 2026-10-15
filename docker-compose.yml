@@ -100,6 +100,10 @@ services:
       WEB_SEARCH_TITLES: ${WEB_SEARCH_TITLES:-senior software engineer,senior fullstack engineer,tech lead,forward deployed engineer,ai engineer}
       EXPLANATION_MIN_SCORE: ${EXPLANATION_MIN_SCORE:-60}
       EXPLANATION_DAILY_LIMIT: ${EXPLANATION_DAILY_LIMIT:-25}
+      APP_ENCRYPTION_KEY: ${APP_ENCRYPTION_KEY:-}
+      GOOGLE_OAUTH_CLIENT_ID: ${GOOGLE_OAUTH_CLIENT_ID:-}
+      GOOGLE_OAUTH_CLIENT_SECRET: ${GOOGLE_OAUTH_CLIENT_SECRET:-}
+      GOOGLE_OAUTH_REDIRECT_URI: ${GOOGLE_OAUTH_REDIRECT_URI:-}
       DISCOVERY_KEYWORDS: ${DISCOVERY_KEYWORDS:-typescript,node.js,angular,tech lead,forward deployed engineer,ai engineer}
       DISCOVERY_CRON: ${DISCOVERY_CRON:-0 9 * * *}
       DISCOVERY_TZ: ${DISCOVERY_TZ:-America/Sao_Paulo}

@@ -57,7 +57,7 @@ import { ApplicationRepository } from "./modules/career/application-repository.j
 import { ApplicationService } from "./modules/career/application-service.js";
 import { submissionCheckFor } from "./modules/career/submission-permission.js";
 import { registerApplicationRoutes } from "./modules/career/application-routes.js";
-import { emailAccountServiceFromEnv } from "./modules/email/email-setup.js";
+import { emailAccountServiceFromEnv, mailCheckQueue, recruiterMailServiceFromEnv } from "./modules/email/email-setup.js";
 import { registerEmailRoutes } from "./modules/email/email-routes.js";
 import { ApplicationDispatcher } from "./modules/career/application-dispatcher.js";
 import { ApplicationAnswerService } from "./modules/career/application-answer-service.js";
@@ -235,7 +235,7 @@ export async function buildApp(env: Env, db: Database) {
     env.APPLICATION_SUBMISSION_ENABLED,
   );
   await registerDiscoveryRoutes(app, env, new CompanyWatchService(new CareerRepository(db)));
-  await registerEmailRoutes(app, emailAccountServiceFromEnv(env, db), authConfig.secureCookie);
+  await registerEmailRoutes(app, emailAccountServiceFromEnv(env, db), recruiterMailServiceFromEnv(env, db), mailCheckQueue(env.REDIS_URL), authConfig.secureCookie);
 
   app.setErrorHandler((error, _request, reply) => {
     if (error instanceof AppError) {

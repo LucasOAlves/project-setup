@@ -33,3 +33,9 @@ export function applicationSubmitJobId(approvalId: string): string {
 export function applicationPrepJobId(applicationId: string, runId: string): string {
   return `prep.${safe(applicationId)}.${safe(runId)}`;
 }
+
+// One mail check per UTC minute: two clicks on "Check now" add one job. BullMQ refuses custom
+// ids containing ":", so the time's colons become "-".
+export function emailCheckJobId(at: Date): string {
+  return `email-check.${at.toISOString().slice(0, 16).replace(/:/g, "-")}`;
+}

@@ -227,3 +227,31 @@ export const applicationInboxSchema = z.object({
   submissionEnabled: z.boolean(),
 });
 export type ApplicationInbox = z.infer<typeof applicationInboxSchema>;
+
+// A reply about an application (Milestone 5): read from Gmail or pasted by the user. Its text is
+// the sender's, kept as data.
+export const RECRUITER_MESSAGE_SOURCES = ["GMAIL", "PASTED"] as const;
+export const recruiterMessagePublicSchema = z.object({
+  id: z.string().uuid(),
+  source: z.enum(RECRUITER_MESSAGE_SOURCES),
+  senderDomain: z.string(),
+  subject: z.string(),
+  // Null once removed after 180 days.
+  body: z.string().nullable(),
+  receivedAt: z.string().nullable(),
+  matchConfidence: z.string(),
+  matchReason: z.string(),
+  classification: z.string(),
+  evidence: z.string(),
+  suggestedStatus: z.string(),
+  decision: z.string(),
+});
+export type RecruiterMessagePublic = z.infer<typeof recruiterMessagePublicSchema>;
+
+export const pastedMessageInputSchema = z.object({
+  subject: z.string().trim().max(500).default(""),
+  body: z.string().trim().min(1).max(20_000),
+  from: z.string().trim().max(320).default(""),
+  receivedAt: z.string().datetime().optional(),
+});
+export type PastedMessageInput = z.infer<typeof pastedMessageInputSchema>;

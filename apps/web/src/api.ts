@@ -1147,6 +1147,11 @@ export async function startGmailConnect(): Promise<string> {
   return ((await response.json()) as { url: string }).url;
 }
 
+export async function checkEmailNow(): Promise<void> {
+  const response = await fetch("/api/email/check", { method: "POST" });
+  if (!response.ok) throw await parseError(response);
+}
+
 export async function disconnectEmail(): Promise<EmailAccountStatus> {
   const response = await fetch("/api/email/disconnect", { method: "POST" });
   if (!response.ok) throw await parseError(response);

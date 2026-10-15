@@ -331,4 +331,9 @@ export {
   type ExecutionPublic,
   type ApplicationInboxItem,
   type ApplicationInbox,
+  RECRUITER_MESSAGE_SOURCES,
+  recruiterMessagePublicSchema,
+  pastedMessageInputSchema,
+  type RecruiterMessagePublic,
+  type PastedMessageInput,
 } from "./applications.js";

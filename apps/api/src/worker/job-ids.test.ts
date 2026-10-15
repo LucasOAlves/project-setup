@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { applicationPrepJobId, discoveryJobId, evaluationJobId, watchJobId } from "./job-ids.ts";
+import { applicationPrepJobId, discoveryJobId, emailCheckJobId, evaluationJobId, watchJobId } from "./job-ids.ts";
 
 test("discoveryJobId is one id per source per UTC day", () => {
   const morning = discoveryJobId("remoteok", new Date("2026-10-14T01:00:00Z"));
@@ -54,4 +54,11 @@ test("applicationSubmitJobId is one id per approval, with no colons", async () =
   assert.equal(id, applicationSubmitJobId("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"));
   assert.notEqual(id, applicationSubmitJobId("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"));
   assert.doesNotMatch(id, /:/);
+});
+
+test("emailCheckJobId is one id per UTC minute, with no colon (BullMQ refuses one)", () => {
+  const id = emailCheckJobId(new Date("2026-10-15T11:05:59Z"));
+  assert.equal(id, "email-check.2026-10-15T11-05");
+  assert.equal(id, emailCheckJobId(new Date("2026-10-15T11:05:00Z")));
+  assert.ok(!id.includes(":"));
 });

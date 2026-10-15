@@ -1,6 +1,6 @@
 import { Queue, type JobsOptions } from "bullmq";
 import { Redis } from "ioredis";
-import { applicationPrepJobId, applicationSubmitJobId, discoveryJobId, evaluationJobId, watchJobId } from "./job-ids.js";
+import { applicationPrepJobId, applicationSubmitJobId, discoveryJobId, emailCheckJobId, evaluationJobId, watchJobId } from "./job-ids.js";
 
 // Queue names are the contract between whoever enqueues (API routes, schedulers) and the
 // worker process that consumes them — see ADR-015. New pipelines add their queue here
@@ -13,12 +13,18 @@ export const QUEUE_NAMES = {
   applicationPrep: "application-prep",
   // Approved submissions (Milestone 4), also consumed only by the browser worker.
   applicationSubmit: "application-submit",
+  // Milestone 5: reading recruiter replies (and, later, notifications), consumed by worker.ts.
+  monitoring: "monitoring",
 } as const;
 
 export type QueueName = (typeof QUEUE_NAMES)[keyof typeof QUEUE_NAMES];
 
 export const SYSTEM_JOBS = {
   heartbeat: "heartbeat",
+} as const;
+
+export const MONITORING_JOBS = {
+  emailCheck: "email-check",
 } as const;
 
 export type DiscoveryJobData = { sourceId: string; correlationId: string };
@@ -80,4 +86,9 @@ export async function enqueueApplicationSubmit(queue: Queue, data: ApplicationSu
   const previous = await queue.getJob(jobId);
   if (previous && ((await previous.isCompleted()) || (await previous.isFailed()))) await previous.remove();
   return queue.add("submit", data, { jobId, attempts: 1 });
+}
+
+// A mail check on demand. Two clicks within a minute add one job.
+export async function enqueueEmailCheck(queue: Queue, at = new Date()) {
+  return queue.add(MONITORING_JOBS.emailCheck, { correlationId: "manual.email-check" }, { jobId: emailCheckJobId(at), attempts: 1 });
 }

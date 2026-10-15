@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { ApplicationInbox, ApplicationInboxItem, ApplicationState, SourcePublic } from "@studio/shared";
 import { ApplicationPanel } from "./ApplicationPanel";
 import {
+  checkEmailNow,
   disconnectEmail,
   fetchApplicationInbox,
   fetchEmailAccount,
@@ -126,6 +127,7 @@ function RecruiterEmail() {
   const [status, setStatus] = useState<EmailAccountStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
   const [returned] = useState(() => new URLSearchParams(window.location.search).get("email"));
 
   useEffect(() => {
@@ -158,6 +160,20 @@ function RecruiterEmail() {
     }
   }
 
+  async function checkNow() {
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+    try {
+      await checkEmailNow();
+      setNotice("Checking Gmail now. New replies appear on each application in a minute or two.");
+    } catch (caught) {
+      setError((caught as ApiError).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   const account = status?.account;
   return (
     <section className="article-card" data-testid="recruiter-email">
@@ -181,7 +197,13 @@ function RecruiterEmail() {
             {account.lastCheckedAt ? `, last checked ${new Date(account.lastCheckedAt).toLocaleString()}` : ""}.
           </p>
           {account.lastError ? <div className="error">{account.lastError}</div> : null}
+          {notice ? <p className="status">{notice}</p> : null}
           <div className="actions" style={{ justifyContent: "flex-start" }}>
+            {!account.lastError ? (
+              <button className="btn" type="button" disabled={busy} onClick={() => void checkNow()}>
+                Check now
+              </button>
+            ) : null}
             {account.lastError ? (
               <button className="btn" type="button" disabled={busy} onClick={() => void connect()}>
                 Connect Gmail again

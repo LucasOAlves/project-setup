@@ -512,3 +512,23 @@ export const emailAccounts = pgTable("email_accounts", {
   lastCheckedAt: timestamp("last_checked_at", { withTimezone: true }),
   lastError: text("last_error").notNull().default(""),
 });
+
+// Milestone 5: replies about applications. Unmatched Gmail messages keep only their id.
+export const recruiterMessages = pgTable("recruiter_messages", {
+  id: uuid("id").primaryKey(),
+  source: text("source").notNull(),
+  providerMessageId: text("provider_message_id"),
+  applicationId: uuid("application_id").references(() => applications.id, { onDelete: "cascade" }),
+  senderDomain: text("sender_domain").notNull().default(""),
+  subject: text("subject").notNull().default(""),
+  body: text("body"),
+  receivedAt: timestamp("received_at", { withTimezone: true }),
+  matchConfidence: text("match_confidence").notNull().default(""),
+  matchReason: text("match_reason").notNull().default(""),
+  classification: text("classification").notNull().default(""),
+  evidence: text("evidence").notNull().default(""),
+  suggestedStatus: text("suggested_status").notNull().default(""),
+  decision: text("decision").notNull().default(""),
+  decidedAt: timestamp("decided_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
