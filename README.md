@@ -132,7 +132,9 @@ review. Only then does it let exactly one submit request through. The applicatio
 **Submitted** only when the portal confirms it (a confirmation message, plus the form gone or
 a new page). An error after the click, or no clear confirmation, becomes **Submission
 unknown**: nothing retries, and you check the portal or your email. Each run is kept in
-`executions` with its timestamps, result and any confirmation reference.
+`executions` with its timestamps, result and any confirmation reference. A submitted application,
+whether the app sent it or you marked it, moves the job to **Applied** in the Career tracker,
+unless you already moved it further.
 
 The **Applications** step is the approval inbox: every application that is ready for review,
 needs answers, is blocked, approved, being submitted or has an unknown result, with the job and

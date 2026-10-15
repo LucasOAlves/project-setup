@@ -34,6 +34,8 @@ type Repo = Pick<
 type Audit = { record(input: AuditEventInput): Promise<void> };
 type JobLookup = (jobId: string) => Promise<{ id: string; url: string } | null>;
 type SubmissionCheck = (application: { mode: string; portal: string | null }) => Promise<SubmissionPermission>;
+// Moves the job's pursuit status to APPLIED once its application is sent (Milestone 5).
+type OnSubmitted = (jobId: string, at: Date) => Promise<unknown>;
 
 const SWITCHED_OFF: SubmissionCheck = async () => ({ allowed: false, reason: "SWITCHED_OFF" });
 
@@ -59,6 +61,7 @@ export class ApplicationService {
     private readonly findJob: JobLookup,
     private readonly now: () => Date = () => new Date(),
     private readonly submissionCheck: SubmissionCheck = SWITCHED_OFF,
+    private readonly onSubmitted: OnSubmitted = async () => undefined,
   ) {}
 
   async getForJob(jobId: string): Promise<ApplicationPublic | null> {
@@ -290,6 +293,10 @@ export class ApplicationService {
     const updated = await this.repo.transition(row.id, from, to, { actor, reason }, patch);
     if (!updated) throw conflict("This application changed while you were looking at it. Reload and try again.");
     await this.recordAudit(updated, from, actor, reason);
+    if (to === "SUBMITTED") {
+      // The pursuit status follows the submission. Failing to move it never undoes what was sent.
+      await this.onSubmitted(updated.jobId, updated.submittedAt ?? this.now()).catch(() => undefined);
+    }
     return updated;
   }
 

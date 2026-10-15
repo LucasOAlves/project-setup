@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, count, desc, eq, gte, inArray, isNotNull, or } from "drizzle-orm";
+import { and, count, desc, eq, gte, inArray, isNotNull, or, sql } from "drizzle-orm";
 import type { CompanyInput, JobInput, JobPatchInput, RecruiterInput, RecruiterPatchInput } from "@studio/shared";
 import type { Database } from "../../db/client.js";
 import type { DedupeKeys, ImportedJobFields } from "./job-import.js";
@@ -14,6 +14,9 @@ export type CompanyWatchRow = typeof companyWatches.$inferSelect;
 export type TalentPlatformProfileRow = typeof talentPlatformProfiles.$inferSelect;
 export type RecruiterRow = typeof recruiters.$inferSelect;
 export type JobStatusEventRow = typeof jobStatusEvents.$inferSelect;
+
+// Pursuit statuses before an application goes out.
+const BEFORE_APPLYING = ["SAVED", "SHORTLISTED", "PREPARING"] as const;
 
 export class CareerRepository {
   constructor(private readonly db: Database) {}
@@ -97,6 +100,19 @@ export class CareerRepository {
     }
     await this.recordJobStatusEvent(row.id, row.status);
     return row;
+  }
+
+  // A sent application moves the job to APPLIED (Milestone 5), but only from a stage before
+  // applying, so a status the user already moved further (an interview, say) is never pulled
+  // back. Returns whether it moved.
+  async markApplied(id: string, at: Date): Promise<boolean> {
+    const [row] = await this.db
+      .update(jobs)
+      .set({ status: "APPLIED", appliedAt: sql`COALESCE(${jobs.appliedAt}, ${at.toISOString()}::timestamptz)`, updatedAt: new Date() })
+      .where(and(eq(jobs.id, id), inArray(jobs.status, [...BEFORE_APPLYING])))
+      .returning();
+    if (row) await this.recordJobStatusEvent(row.id, row.status);
+    return Boolean(row);
   }
 
   async updateJobStatus(

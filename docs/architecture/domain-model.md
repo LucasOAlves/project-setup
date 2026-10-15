@@ -285,7 +285,9 @@ exactly one row (`job_id` UNIQUE). It records:
   where: only the user approves, only the worker moves APPROVED to SUBMITTING, SUBMITTED is
   final, a stalled submission can only become SUBMISSION_UNKNOWN, and from there only the user
   says whether it was sent (`markSubmitted`, `markNotSent`). The user also marks SUBMITTED an
-  application they submitted by hand (the assisted path), with `submittedAt`;
+  application they submitted by hand (the assisted path), with `submittedAt`. Reaching SUBMITTED
+  moves the job's pursuit status to APPLIED (`CareerRepository.markApplied`, only from SAVED,
+  SHORTLISTED or PREPARING; migration 0035 backfilled earlier submissions);
 - `mode`: AUTOMATED when the posting is on a supported portal (Greenhouse, Lever, Ashby),
   otherwise MANUAL;
 - `portal`, `destinationUrl`, and the last run's error;

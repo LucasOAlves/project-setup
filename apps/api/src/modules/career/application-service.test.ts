@@ -94,14 +94,16 @@ function setup(jobUrl = "https://job-boards.greenhouse.io/acme/jobs/123", clock 
     },
   };
   const permit = { allowed: true };
+  const applied: Array<{ jobId: string; at: Date }> = [];
   const service = new ApplicationService(
     repo,
     audit,
     async (id) => (id === JOB ? { id, url: jobUrl } : null),
     () => clock.now,
     async () => (permit.allowed ? { allowed: true } : { allowed: false, reason: "SWITCHED_OFF" }),
+    async (jobId, at) => void applied.push({ jobId, at }),
   );
-  return { service, rows, audits, approvals, clock, executions, permit };
+  return { service, rows, audits, approvals, clock, executions, permit, applied };
 }
 
 async function rejects(promise: Promise<unknown>, status: number, message?: RegExp) {
@@ -427,4 +429,41 @@ test("the public application lists its submission runs", async () => {
   assert.equal(read.executions.length, 1);
   assert.equal(read.executions[0]?.attemptNumber, 1);
   assert.equal(read.executions[0]?.finishedAt, null);
+});
+
+// Milestone 5, ticket 1: a sent application moves the job's pursuit status.
+
+test("a submission confirmed by the worker or by the user moves the job to APPLIED", async () => {
+  const setupResult = setup();
+  const { service, id, applied, clock } = await readyForReview(setupResult);
+  assert.equal(applied.length, 0);
+  const approved = await service.approve(id, { payloadHash: HASH });
+  await service.claimSubmission(id, approved.approval!.id);
+  await service.recordOutcome(id, "SUBMITTED", "WORKER", "Confirmed.", { submittedAt: clock.now });
+  assert.deepEqual(applied, [{ jobId: JOB, at: clock.now }]);
+
+  const other = await readyForReview();
+  await other.service.markSubmitted(other.id);
+  assert.equal(other.applied.length, 1);
+});
+
+test("an unknown result does not move the job, and a failing pipeline update never undoes a submission", async () => {
+  const { service, id, rows, applied } = await readyForReview();
+  const approved = await service.approve(id, { payloadHash: HASH });
+  await service.claimSubmission(id, approved.approval!.id);
+  await service.recordOutcome(id, "SUBMISSION_UNKNOWN", "WORKER", "Unclear.");
+  assert.equal(applied.length, 0);
+
+  const failing = new ApplicationService(
+    (service as unknown as { repo: never }).repo,
+    { record: async () => undefined },
+    async () => ({ id: JOB, url: "https://job-boards.greenhouse.io/acme/jobs/123" }),
+    () => new Date(),
+    async () => ({ allowed: true }),
+    async () => {
+      throw new Error("database down");
+    },
+  );
+  assert.equal(rows[0]?.status, "SUBMISSION_UNKNOWN");
+  assert.equal((await failing.markSubmitted(id)).status, "SUBMITTED");
 });

@@ -200,6 +200,7 @@ export async function buildApp(env: Env, db: Database) {
     },
     () => new Date(),
     submissionCheckFor(env.APPLICATION_SUBMISSION_ENABLED, (portal) => sourceRegistry.applicationPolicy(portal)),
+    (jobId, at) => careerRepository.markApplied(jobId, at),
   );
 
   await registerAuth(app, authConfigFromEnv(env), new AuditRepository(db));

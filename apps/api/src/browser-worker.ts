@@ -62,6 +62,7 @@ async function main() {
     },
     () => new Date(),
     submissionCheckFor(env.APPLICATION_SUBMISSION_ENABLED, (portal) => sourceRegistry.applicationPolicy(portal)),
+    (jobId, at) => careerRepo.markApplied(jobId, at),
   );
   if (env.BROWSER_MOCK_PORTALS && env.NODE_ENV === "production") {
     throw new Error("BROWSER_MOCK_PORTALS is for local development only.");
