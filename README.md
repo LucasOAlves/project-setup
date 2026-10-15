@@ -31,7 +31,111 @@ cp .env.example .env
 docker compose up --build
 ```
 
-Then open `http://localhost:5173`.
+Then open `http://localhost:5173`. The [operations runbook](docs/operations/runbook.md) covers a
+full deployment: secrets, backups and a restore drill, upgrades, key loss and what to do when
+something goes wrong.
+
+To require sign-in, run `npm run hash-password -w @studio/api`, type a password of at least 12 characters, and paste the two lines it prints (`APP_PASSWORD_HASH`, `SESSION_SECRET`) into `.env`. The app then asks for that password, keeps you signed in for `SESSION_TTL_HOURS` (default 7 days) with an httpOnly cookie, and refuses state-changing requests from other sites. Without a password the app stays open as before, but approving and submitting job applications are refused, because only the signed-in user may approve one (see [ADR-021](docs/decisions/ADR-021-single-user-sign-in.md)).
+
+Compose also starts Redis and a background `worker` (BullMQ, see [ADR-015](docs/decisions/ADR-015-job-hunter-worker-process.md)). It runs Job Hunter's daily discovery: every day at `DISCOVERY_CRON` (default 09:00 `America/Sao_Paulo`) it searches each source in `DISCOVERY_SOURCES` for each of `DISCOVERY_KEYWORDS` (by default including "forward deployed engineer" and "ai engineer"), spacing requests per source's rate limits, imports new postings (re-runs never duplicate a job), runs the eligibility rules on each new one and queues the non-excluded ones for evaluation. With `BRAVE_SEARCH_API_KEY` set, the same run also searches the web through the Brave Search API: one `site:` search per ATS domain (Ashby, both Greenhouse domains, Lever, Workable, SmartRecruiters) for `WEB_SEARCH_TITLES` with LATAM terms, past week only, and imports the postings it points at from each company's own ATS API (see [ADR-017](docs/decisions/ADR-017-web-search-discovery-via-ats-apis.md)). `POST /api/career/discovery/run` queues today's run on demand, once per source per day. To run the worker on the host instead: `npm run worker -w @studio/api` with `REDIS_URL` pointing at a local Redis.
+
+Compose also starts a `browser-worker` (Playwright's image, Chromium inside) that prepares job applications for Greenhouse, Lever and Ashby postings, and submits one only after you approve it and only when submission is switched on. It has no model keys, only opens the job's own application site, and every request that could submit the form is blocked, except the one submit request of an approved run (see [ADR-020](docs/decisions/ADR-020-isolated-browser-worker.md) and [ADR-022](docs/decisions/ADR-022-payload-bound-approval.md)). To run it on the host: `npm run browser-worker -w @studio/api`, with `BROWSER_EXECUTABLE_PATH` pointing at a Chromium if Playwright's is not installed. Set `BROWSER_MOCK_PORTALS=true` to try the flow locally against mock Greenhouse, Lever and Ashby pages (`apps/api/src/modules/browser/mock-portals.ts`) with no network. Jobs whose link is one of the `MOCK_POSTINGS` URLs then prepare end to end. The browser tests, including the end-to-end submission tests for the spec's safety criteria (`submission-e2e.test.ts`), run in a real headless Chromium and are skipped when none is found; set `BROWSER_EXECUTABLE_PATH` to run them.
+
+### Recruiter email
+
+The **Applications** step can connect your Gmail with read-only access, so the app can follow
+replies to your applications (see [ADR-023](docs/decisions/ADR-023-gmail-read-only-access.md)).
+It can never send, change or delete mail. It uses your own Google OAuth client:
+
+1. In the Google Cloud console, create a project and enable the **Gmail API**.
+2. Under **Google Auth Platform**, set the app up as **External**, and in **Data access** add only
+   the `https://www.googleapis.com/auth/gmail.readonly` scope.
+3. Create an OAuth client of type **Web application**, with the authorized redirect URI
+   `http://localhost:5173/api/email/google/callback` (or your deployment's address with the same
+   path).
+4. In **Audience**, publish the app. While it stays in "Testing", Google expires the access every
+   7 days. Since the app is unverified, Google shows a warning on the consent screen once. Choose
+   to continue: you are the only user.
+5. Put the client id and secret in `GOOGLE_OAUTH_CLIENT_ID` and `GOOGLE_OAUTH_CLIENT_SECRET`, the
+   redirect URI in `GOOGLE_OAUTH_REDIRECT_URI`, and a key from `openssl rand -base64 32` in
+   `APP_ENCRYPTION_KEY`. The refresh token is stored encrypted with that key.
+
+Connecting needs sign-in. **Disconnect** revokes the access at Google and deletes the token.
+
+Once connected, the worker reads Gmail every hour (and on **Check now**): only mail from the last
+30 days that comes from an ATS (Greenhouse, Lever, Ashby and others) or from a company you applied
+to, never your sent mail. A message is kept with the application it is about when it comes from the
+company's own domain, or from an ATS and names the company; other messages keep only their id, so
+they are not read again. Bodies are cleared after `MESSAGE_BODY_RETENTION_DAYS` (180). Each kept message is labelled
+(received, rejection, interview, assessment, offer, outreach, other or unclear) with the sentence
+that shows it: rules for the usual ATS templates, then the text model, which sees the subject and
+body with addresses, phone numbers and links masked. Without a quote from the message, it stays
+unclear.
+
+**Sent applications** (on the Applications step) lists every sent application with its replies.
+A reply can suggest moving the job forward (applied, screening, interview, offer, or rejected); the
+job changes only when you accept. An application with no reply after `FOLLOW_UP_AFTER_DAYS` (10 by
+default) is flagged "consider following up". The app never writes to anyone. Without Gmail, paste
+replies there instead.
+
+### Notifications
+
+With a Telegram bot, the app tells you what needs you: an application ready for your review, a
+submission result (including an unknown one), an interview, assessment or offer message, a
+follow-up due, the AI budget at 80% or reached, and a daily digest at 08:00 of new jobs scoring
+`NOTIFY_DIGEST_MIN_SCORE` (80) or more. Messages carry job titles, companies and links only, never
+a recruiter's text or contact details, and each event is sent once. Create a bot with
+[@BotFather](https://t.me/BotFather), send it any message, read your chat id from
+`https://api.telegram.org/bot<token>/getUpdates`, and set `TELEGRAM_BOT_TOKEN` and
+`TELEGRAM_CHAT_ID` (and `APP_PUBLIC_URL` for links). Without them notifications are off. In the
+app, the **Applications** step shows a count of what waits on you.
+
+### Operations
+
+The **Operations** step shows the funnel (discovered, shortlisted, applied, got a reply, interview,
+offer), conversion by source, by score band and by portal, the median time to a first reply, the
+AI cost by month and purpose against the budget, and suggestions for the matching weights from
+reply rates and your relevance feedback (shown only, never applied). Its audit history lists who
+acted (you, the worker or the system), what ran and the result, filtered by actor or event type
+(`GET /api/audit-events`).
+
+### AI cost and budget
+
+Every model call and Brave search query is recorded in the `ai_usage` table with its purpose,
+model, tokens and an estimated cost from the price table in `apps/api/src/modules/usage/cost-estimate.ts`
+(list prices, an estimate: your provider's invoice is the real figure). Set `AI_MONTHLY_BUDGET_USD`
+to cap the month: at 80% an `AI_BUDGET_WARNING` audit event is written, and at 100% the optional
+calls stop until the next month (both are also sent as notifications) (job explanations, cover letters, and recruiter message
+classification, which then uses its rules only). `GET /api/usage/summary` shows the month so far.
+
+### Backups
+
+Set `BACKUP_ENCRYPTION_KEY` (`openssl rand -base64 32`) and the worker writes an encrypted backup
+of the database and the stored files (CV, PDFs, screenshots) to `BACKUP_DIR` (`./backups` under
+Docker Compose) every day at 03:00, keeping the newest `BACKUP_KEEP` (7). `npm run backup -w
+@studio/api` makes one now. To restore, point the app at a new, empty database and run `npm run
+restore -w @studio/api -- <file>`: it refuses a database with data in it, a wrong key and a backup
+from a newer version. Keep `BACKUP_ENCRYPTION_KEY` and `APP_ENCRYPTION_KEY` somewhere outside the
+machine, because without the first a backup cannot be opened, and without the second a restored
+Gmail connection has to be made again (see [ADR-024](docs/decisions/ADR-024-application-level-backups.md)).
+
+### Retention
+
+A daily job (04:00) deletes preview screenshots after `SCREENSHOT_RETENTION_DAYS` (30), clears the
+text of recruiter messages after `MESSAGE_BODY_RETENTION_DAYS` (180, the label and quote stay),
+drops the ids of unmatched Gmail messages after 60 days and notification records after 180 (except
+follow-ups, so none is sent twice). Browser sessions are never kept: each run uses a fresh context
+that closes with it. The **Operations** step shows the policy and when the retention job and the
+backup last ran.
+
+### Export and deletion
+
+`npm run backup -w @studio/api -- --plain` writes an unencrypted JSON export of everything (with
+a warning, since it holds your CV and messages). `npm run delete-my-data -w @studio/api --
+--yes-delete-everything` revokes the Gmail grant at Google, then deletes the profile, CV, jobs,
+applications, documents, recruiter messages and every stored file. It keeps only the audit log
+(which records the deletion), the AI cost ledger and the job source settings. It is a command-line
+step on purpose, with no button or API route; make a backup and stop the worker first.
 
 Slice 1 is available: progressive professional profile, experiences, positioning, writing preferences, and up to three reference photos. On the Identity step, upload a resume PDF to pre-fill these forms (nothing is saved until you review and click Save and continue); on the Experience step, download a résumé PDF generated from the current saved profile, any time new information is added.
 
@@ -65,6 +169,87 @@ tailored résumé" renders a PDF from that ordering. The model never writes new 
 it only re-ranks real profile content, and anything it invents or omits is corrected
 deterministically before export (see `apps/api/src/modules/career/resume-tailoring.ts`).
 
+Tailored CV v2 (Job Hunter, `POST /api/career/jobs/:id/documents/cv`) goes further and saves
+the result as a versioned document: the model picks which of each experience's own sentences
+to show and writes up to three summary sentences, and code keeps only what the profile
+supports (`tailored-cv.ts`). Highlights are reused word for word; a summary sentence must quote
+the profile and may not add a number or technology the profile lacks; every experience, skill
+and technology stays. Technologies the job asks for that the profile lacks are listed as gaps,
+never added. Name, contact details and employer names are not sent to the model: the CV header
+comes from Application details and is added after the model answers.
+
+A cover letter is optional and generated only on request
+(`POST /api/career/jobs/:id/documents/cover-letter`). Every sentence must quote the profile or
+the posting; a claim about you needs a profile quote, and a sentence that adds a number or a
+technology its sources lack is removed (`cover-letter.ts`). The greeting, sign-off and header
+are added by code. Your edits are saved as a new version with
+`POST /api/career/jobs/:id/documents/cover-letter/edits`.
+
+Application answers (`POST /api/career/jobs/:id/documents/answers`) cover the questions forms
+usually ask: work authorization, visa sponsorship, notice period, salary expectation, location,
+time zone, English level, years of experience, profile links and years with up to three of the
+job's technologies (counted from the dated experiences that list them). They come only from
+what you entered in Application details and your profile (`application-answers.ts`); anything
+those do not answer is left blank as "needs your input", never guessed. "Why do you want to work
+here?" is drafted by the model under the cover letter's evidence rules. Edits are saved as a new
+version with `POST /api/career/jobs/:id/documents/answers/edits`.
+
+In the app, each Job feed card has a **Materials** button. It generates the CV, the cover
+letter and the answers, shows the gaps and missing details, lets you edit the letter and the
+answers, downloads the PDFs, and lists every earlier version.
+
+Next to it, **Application** prepares the application itself, without submitting it
+(Milestone 3). For a Greenhouse, Lever or Ashby posting, the browser worker opens the form in a
+private browser, reads every field and fills what your stated data answers:
+- contact details and links from Application details;
+- your name and current employer from the profile;
+- prepared answers, and years with a technology counted from dated experiences;
+- the CV PDF from Materials.
+
+It then reads each value back from the page and shows a preview: every field with where its
+value came from, and a screenshot with your typed details masked. Required questions nothing
+answers (work authorization yes/no, a select whose options do not match) come back as
+"Questions only you can answer". Answers you give are saved and reused when another form asks
+the same question. Consent boxes are only ticked if you agree for that application, and
+voluntary self-identification is never filled.
+
+A login, CAPTCHA or bot check stops the run as blocked. Nothing works around it. Any other
+portal, or a blocked one, shows the manual path instead: the posting link, the CV and the
+prepared answers to copy.
+
+When the review looks right, **Approve this application** records your approval of exactly
+that form: the same values, files and destination, identified by its payload hash
+([ADR-022](docs/decisions/ADR-022-payload-bound-approval.md)). Approving needs sign-in. The
+approval lasts 24 hours. Preparing again, new answers, rejecting or **Withdraw approval**
+cancel it.
+
+When submission is allowed (below), approving queues the submission. The browser worker claims
+the approval once, opens the form again, refills it, and checks right before the click that
+the payload hash, destination and approval are unchanged; anything different goes back to
+review. Only then does it let exactly one submit request through. The application becomes
+**Submitted** only when the portal confirms it (a confirmation message, plus the form gone or
+a new page). An error after the click, or no clear confirmation, becomes **Submission
+unknown**: nothing retries, and you check the portal or your email. Each run is kept in
+`executions` with its timestamps, result and any confirmation reference. A submitted application,
+whether the app sent it or you marked it, moves the job to **Applied** in the Career tracker,
+unless you already moved it further.
+
+The **Applications** step is the approval inbox: every application that is ready for review,
+needs answers, is blocked, approved, being submitted or has an unknown result, with the job and
+destination. Opening one shows the same panel: every field with the value it gets, the files
+that will be attached, the screenshot, the submission runs and the history. A result marked
+unknown is settled there with **It was sent** or **It was not sent** (back to review, with a new
+approval needed). When the app does not submit (a manual portal, a blocked run, or submission
+switched off), apply by hand and press **I submitted it**. The same step shows whether
+submission is switched on and lets you set Greenhouse, Lever and Ashby to automatic or assisted.
+
+Automatic submission stays off unless two settings agree: `APPLICATION_SUBMISSION_ENABLED=true`
+for the deployment, and the portal set to `AUTOMATED` in source settings
+(`PATCH /api/career/sources/greenhouse` with `{"applicationMode":"AUTOMATED"}`, likewise for
+`lever` and `ashby`). Greenhouse, Lever and Ashby start as `ASSISTED`: the app prepares, you
+submit. Check each portal's terms before turning it on. The application panel says which
+applies.
+
 Recruiters & contacts is a lightweight career CRM: add a contact under a company, optionally
 tie them to a tracked job, and track connection status (Not connected/Requested/Connected).
 "Score relevance" is a deterministic score (company match, role, job link — see
@@ -74,21 +259,73 @@ send yourself — this app never sends a message, a connection request, or anyth
 your behalf (see [ADR-012](docs/decisions/ADR-012-external-action-approval.md)).
 
 Job board import is available on each tracked company: pick a board source (Greenhouse, Lever,
-or Ashby), enter that company's board token (the slug in `boards.greenhouse.io/<token>`,
-`jobs.lever.co/<token>`, or `jobs.ashbyhq.com/<token>`), and "Import from…" pulls every open
-posting from that board's real, public, unauthenticated Job Board API — no OAuth, no LinkedIn.
+Ashby, Workable or SmartRecruiters), enter that company's board token (the slug in `job-boards.greenhouse.io/<token>` or
+the older `boards.greenhouse.io/<token>`, `jobs.lever.co/<token>`, `jobs.ashbyhq.com/<token>`, `apply.workable.com/<token>` or
+`jobs.smartrecruiters.com/<token>`)
+or paste a board or job URL and let the app work out the source and token, and "Import from…"
+pulls every open posting from that board's real, public, unauthenticated Job Board API — no
+OAuth, no LinkedIn. Ashby imports include the published pay range (`includeCompensation=true`).
+"Watch daily" puts the company on the watchlist instead: the worker reads its board every day
+at `DISCOVERY_CRON` (never more than once an hour per company, "Check now" included), imports
+new postings, runs them through eligibility and scoring like discovered jobs, and shows the
+open roles, how many were posted in the last 30 days and a "Hiring fast" badge at five or more.
 Re-running an import only adds postings not already tracked (matched by source + external id);
 nothing is re-created or overwritten. See
 [ADR-011](docs/decisions/ADR-011-career-domain-boundaries.md)'s update notes for why Greenhouse,
 not LinkedIn, is this project's first real job provider, and for the later board/search split.
 
-Job search is available above the company list: pick a search source (RemoteOK, Arbeitnow, or
-Adzuna — Adzuna needs a free `ADZUNA_APP_ID`/`ADZUNA_APP_KEY` from developer.adzuna.com; the
-other two need no key), enter keywords and an optional location, and "Add to tracker" imports
+Job search is available above the company list: pick a search source (RemoteOK, Arbeitnow,
+Adzuna, Remotive, Himalayas or We Work Remotely — Adzuna needs a free `ADZUNA_APP_ID`/`ADZUNA_APP_KEY` from
+developer.adzuna.com; the others need no key), enter keywords and an optional location, and "Add to tracker" imports
 one result — creating its company automatically (matched case-insensitively, or created new) if
 it isn't tracked yet. Unlike board import, search spans many companies at once instead of one
 company's own board. A collapsible "New to these sites?" guide next to the search panel explains
-each of the five sources and how to find a company's board token.
+each source and how to find a company's board token.
+
+Each source can be turned off without a code change: `GET /api/career/sources` lists the
+per-source registry (whether discovery is allowed, how far application automation may go, the
+terms that were reviewed), and `PATCH /api/career/sources/:id` with `{ "enabled": false }`
+stops every search or board import against it. Search results show "via <source>" linking back
+to the original posting, which the Remotive, Himalayas and We Work Remotely terms require.
+
+The "Application details" step holds what application forms ask for beyond the profile:
+contact details, education, certifications, spoken languages, work authorization, visa
+sponsorship, notice period, time zone and salary expectation
+(`GET`/`PUT /api/profile/application-details`). Contact details are never sent to an AI provider.
+
+The "Job sites" step lists every site on the user's list grouped by how it takes part in the
+search (`JOB_SITES` in `packages/shared/src/job-sites.ts`): read automatically by discovery,
+talent platforms (with a per-platform status, note and last-updated date, saved through
+`GET /api/career/job-sites/profiles` and `PUT /api/career/job-sites/:id/profile`), sites to
+browse yourself (no feed, a login, or terms that do not allow reuse), freelance marketplaces
+and sites that are not job sources. Only the first group is ever read automatically.
+
+Eligibility rules (Job Hunter) run with `POST /api/career/jobs/:id/evaluate`: a job comes back
+`ELIGIBLE`, `EXCLUDED` or `UNKNOWN` for a Brazil-based remote candidate, with the exact sentence
+or location text behind each verdict. A requirement to live in a US time zone excludes; hiring
+through an EOR such as Deel is shown as a supporting signal that never confirms eligibility on its
+own. Jobs that are not excluded also get a 0-100 match score
+over the spec's six weighted dimensions, a confidence (how much of the score the posting
+actually supports) and flags such as undisclosed compensation (the title counts toward the
+preferences dimension when it contains one of `MATCH_TARGET_ROLES`, by default seniority words
+plus Forward Deployed and AI Engineer variants); the worker does the same for
+every job discovery finds. Jobs scoring 60 or more are also explained by the configured text
+provider (why they fit, matched requirements, gaps, eligibility, pay, risks, what to stress
+in the CV), and every quote in the explanation is checked against the posting or your
+profile before it is kept ([ADR-016](docs/decisions/ADR-016-verified-explanation-evidence.md)). `GET /api/career/jobs/:id/evaluation` returns the latest.
+
+The **Job feed** step lists every discovered or tracked job ranked by match score, then
+confidence, then the newest posting. It filters by eligibility (excluded jobs hidden by default), minimum score,
+source, title or company, and posting age. Each card opens the eligibility quotes, the score
+breakdown and the explanation, with every claim's quoted evidence. Jobs can be (re)evaluated
+from the card, and "Run discovery now" queues today's discovery. API: `GET /api/career/feed`.
+Cards also flag a posting with no date, one posted 30+ days ago, and a likely ghost job
+(60+ days), and mark a published salary and a link to the company's own careers site. When
+the same role arrives from an aggregator and from the company's ATS board, it is tracked
+once, linked to the company's posting.
+Mark a job relevant or not, with reasons. The feed then shows how often the match score agrees
+with you and which reasons come up most. Once each side has enough verdicts, it also names the
+dimension that best separates relevant from not-relevant jobs.
 
 Content ideas from your job search close the Content↔Career loop, one direction of it: the
 Career step surfaces which technologies your tracked jobs actually request, kept only when

@@ -9,6 +9,7 @@ const MIME_EXTENSION: Record<string, string> = {
   "image/png": "png",
   "image/jpeg": "jpg",
   "image/webp": "webp",
+  "application/pdf": "pdf",
 };
 
 export class LocalStorageProvider implements StorageProvider {
@@ -86,5 +87,6 @@ function mimeFromKey(key: string): string {
   if (key.endsWith(".png")) return "image/png";
   if (key.endsWith(".jpg") || key.endsWith(".jpeg")) return "image/jpeg";
   if (key.endsWith(".webp")) return "image/webp";
+  if (key.endsWith(".pdf")) return "application/pdf";
   return "application/octet-stream";
 }

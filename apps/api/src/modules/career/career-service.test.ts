@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { JobBoardSource, JobSearchSource } from "@studio/shared";
+import { ERROR_CODES, type JobBoardSource, type JobSearchSource } from "@studio/shared";
+import { AppError } from "../../app-error.ts";
 import type { TextGenerationProvider } from "../ai/text-generation-provider.ts";
 import type { JobProvider } from "./job-provider.ts";
 import type { JobSearchProvider } from "./job-search-provider.ts";
 import { CareerService } from "./career-service.ts";
+import { DEFAULT_EVALUATION_SETTINGS } from "./job-intake.ts";
 
 const textMap = (text: TextGenerationProvider) => ({ openai: text, anthropic: text }) as const;
 const noTextCalls: TextGenerationProvider = {
@@ -19,7 +21,7 @@ function noBoardProviders(message = "must not call the job provider"): Record<Jo
       assert.fail(message);
     },
   };
-  return { greenhouse: fail, lever: fail, ashby: fail };
+  return { greenhouse: fail, lever: fail, ashby: fail, workable: fail, smartrecruiters: fail };
 }
 
 function noSearchProviders(message = "must not call the search provider"): Record<JobSearchSource, JobSearchProvider> {
@@ -28,7 +30,7 @@ function noSearchProviders(message = "must not call the search provider"): Recor
       assert.fail(message);
     },
   };
-  return { remoteok: fail, arbeitnow: fail, adzuna: fail };
+  return { remoteok: fail, arbeitnow: fail, adzuna: fail, remotive: fail, himalayas: fail, weworkremotely: fail };
 }
 
 function fakeCompany(overrides: Partial<Record<string, unknown>> = {}) {
@@ -665,6 +667,12 @@ test("importFromBoard skips postings already imported and only creates the new o
       async getCompany() {
         return fakeCompany();
       },
+      async findJobByProvenance() {
+        return null;
+      },
+      async listJobsForCompany() {
+        return [];
+      },
       async getJobByExternalId(_source: string, externalId: string) {
         return externalId === "1" ? fakeJob({ externalId: "1" }) : null;
       },
@@ -686,6 +694,80 @@ test("importFromBoard skips postings already imported and only creates the new o
   assert.equal(result.imported.length, 1);
   assert.equal(created.length, 1);
   assert.equal((created[0] as { externalId: string }).externalId, "2");
+});
+
+test("importFromBoard points an aggregator copy of the same role at the company's posting instead of adding it", async () => {
+  const created: unknown[] = [];
+  const patches: Array<{ id: string; patch: Record<string, unknown> }> = [];
+  const aggregatorCopy = fakeJob({
+    id: "remotive-copy",
+    source: "remotive",
+    title: "Backend Engineer (Remote)",
+    url: "https://remotive.com/remote-jobs/software-dev/backend-engineer-9",
+    salaryMin: null,
+    salaryMax: null,
+    sourcePostedAt: null,
+  });
+  const boardProviders = noBoardProviders();
+  boardProviders.greenhouse = {
+    async listJobs() {
+      return [
+        {
+          externalId: "77",
+          title: "Backend Engineer",
+          url: "https://job-boards.greenhouse.io/nimbus/jobs/77",
+          location: "Remote",
+          description: "",
+          companyNameFromSource: "Nimbus",
+          updatedAt: new Date(),
+          postedAt: new Date("2026-10-10T00:00:00Z"),
+        },
+      ];
+    },
+  };
+  const service = new CareerService(
+    {
+      async getCompany() {
+        return fakeCompany();
+      },
+      async findJobByProvenance() {
+        return null;
+      },
+      async listJobsForCompany() {
+        return [aggregatorCopy];
+      },
+      async applyCompanySitePatch(id: string, patch: Record<string, unknown>) {
+        patches.push({ id, patch });
+        return { ...aggregatorCopy, ...patch };
+      },
+      async getJobByExternalId() {
+        return null;
+      },
+      async createImportedJob(input: unknown) {
+        created.push(input);
+        return fakeJob({ ...(input as Record<string, unknown>) });
+      },
+    } as never,
+    {} as never,
+    textMap(noTextCalls),
+    "openai",
+    boardProviders,
+    noSearchProviders(),
+  );
+
+  const result = await service.importFromBoard("company-1", "greenhouse", "nimbus");
+
+  assert.equal(created.length, 0);
+  assert.equal(result.imported.length, 0);
+  assert.deepEqual(patches, [
+    {
+      id: "remotive-copy",
+      patch: {
+        url: "https://job-boards.greenhouse.io/nimbus/jobs/77",
+        sourcePostedAt: new Date("2026-10-10T00:00:00Z"),
+      },
+    },
+  ]);
 });
 
 test("searchJobs returns normalized postings from the chosen search provider", async () => {
@@ -720,10 +802,59 @@ test("searchJobs returns normalized postings from the chosen search provider", a
   assert.equal(results[0]?.companyName, "Nimbus");
 });
 
+test("searchJobs refuses a source the registry has turned off, without calling it", async () => {
+  const service = new CareerService(
+    {} as never,
+    {} as never,
+    textMap(noTextCalls),
+    "openai",
+    noBoardProviders(),
+    noSearchProviders(),
+    {
+      async assertDiscoveryAllowed(sourceId: string) {
+        throw new Error(`${sourceId} is turned off in source settings.`);
+      },
+    },
+  );
+
+  await assert.rejects(() => service.searchJobs("remotive", "angular"), /remotive is turned off/);
+});
+
+test("importFromBoard checks the registry before calling the board provider", async () => {
+  const checked: string[] = [];
+  const service = new CareerService(
+    {
+      async getCompany() {
+        return fakeCompany();
+      },
+    } as never,
+    {} as never,
+    textMap(noTextCalls),
+    "openai",
+    noBoardProviders(),
+    noSearchProviders(),
+    {
+      async assertDiscoveryAllowed(sourceId: string) {
+        checked.push(sourceId);
+        throw new Error("off");
+      },
+    },
+  );
+
+  await assert.rejects(() => service.importFromBoard("company-1", "lever", "acme"), /off/);
+  assert.deepEqual(checked, ["lever"]);
+});
+
 test("importSearchResult reuses an existing company matched case-insensitively", async () => {
   let createCompanyCalled = false;
   const service = new CareerService(
     {
+      async findJobByProvenance() {
+        return null;
+      },
+      async listJobsForCompany() {
+        return [];
+      },
       async getJobByExternalId() {
         return null;
       },
@@ -761,6 +892,12 @@ test("importSearchResult creates a new company when none matches", async () => {
   let createdCompanyName: string | undefined;
   const service = new CareerService(
     {
+      async findJobByProvenance() {
+        return null;
+      },
+      async listJobsForCompany() {
+        return [];
+      },
       async getJobByExternalId() {
         return null;
       },
@@ -794,10 +931,99 @@ test("importSearchResult creates a new company when none matches", async () => {
   assert.equal(createdCompanyName, "Acme GmbH");
 });
 
+test("importSearchResult returns the job already tracked through another source", async () => {
+  let created = false;
+  const service = new CareerService(
+    {
+      async getJobByExternalId() {
+        return null;
+      },
+      async findJobByProvenance(keys: { canonicalUrl: string }) {
+        return keys.canonicalUrl === "https://jobs.lever.co/nimbus/42" ? fakeJob({ id: "existing" }) : null;
+      },
+      async createImportedJob() {
+        created = true;
+        return fakeJob();
+      },
+    } as never,
+    {} as never,
+    textMap(noTextCalls),
+    "openai",
+    noBoardProviders(),
+    noSearchProviders(),
+  );
+
+  const job = await service.importSearchResult("remotive", {
+    externalId: "r-42",
+    title: "Backend Engineer",
+    url: "https://jobs.lever.co/nimbus/42/?utm_source=remotive",
+    location: "LATAM",
+    description: "Build things.",
+    companyName: "Nimbus",
+  });
+
+  assert.equal(job.id, "existing");
+  assert.equal(created, false);
+});
+
+test("importSearchResult stores normalized salary, regions and type", async () => {
+  let stored: Record<string, unknown> = {};
+  const service = new CareerService(
+    {
+      async getJobByExternalId() {
+        return null;
+      },
+      async findJobByProvenance() {
+        return null;
+      },
+      async listJobsForCompany() {
+        return [];
+      },
+      async findCompanyByName() {
+        return fakeCompany();
+      },
+      async createImportedJob(input: Record<string, unknown>) {
+        stored = input;
+        return fakeJob();
+      },
+    } as never,
+    {} as never,
+    textMap(noTextCalls),
+    "openai",
+    noBoardProviders(),
+    noSearchProviders(),
+  );
+
+  await service.importSearchResult("himalayas", {
+    externalId: "h-1",
+    title: "Staff Engineer",
+    url: "https://himalayas.app/companies/nimbus/jobs/staff-engineer",
+    location: "Brazil, Mexico",
+    description: "Lead our TypeScript platform.",
+    companyName: "Nimbus",
+    salary: { min: 96000, max: 120000, currency: "USD", period: "annual" },
+    employmentType: "Full Time",
+    postedAt: "2026-10-01T00:00:00.000Z",
+  });
+
+  const normalized = stored.normalizedData as { salary: { usdMonthlyMin: number }; regions: string[] };
+  assert.equal(normalized.salary.usdMonthlyMin, 8000);
+  assert.deepEqual(normalized.regions, ["BRAZIL", "LATAM"]);
+  assert.equal(stored.employmentType, "FULL_TIME");
+  assert.equal(stored.salaryCurrency, "USD");
+  assert.equal((stored.sourcePostedAt as Date).toISOString(), "2026-10-01T00:00:00.000Z");
+});
+
 test("importSearchResult is idempotent on re-import", async () => {
   let createImportedJobCalls = 0;
   const service = new CareerService(
     {
+      async findJobByProvenance() {
+        return null;
+      },
+      async listJobsForCompany() {
+        return [];
+      },
       async getJobByExternalId() {
         return fakeJob({ externalId: "42", source: "remoteok" });
       },
@@ -872,4 +1098,292 @@ test("getContentSuggestions grounds market demand against the real saved profile
   const suggestions = await service.getContentSuggestions();
   assert.equal(suggestions.length, 1);
   assert.equal(suggestions[0]?.technology, "Kubernetes");
+});
+
+test("evaluateJob judges the source text and stores the verdict with its evidence", async () => {
+  let stored: Record<string, unknown> = {};
+  const service = new CareerService(
+    {
+      async getJob() {
+        return fakeJob({
+          id: "job-9",
+          location: "Remote",
+          description: "Edited by the user.",
+          rawDescription: "Great team. You must be based in the United States.",
+        });
+      },
+      async getProfileVersion() {
+        return 4;
+      },
+      async insertJobEvaluation(input: Record<string, unknown>) {
+        stored = input;
+        return { id: "eval-1", createdAt: new Date("2026-10-14T00:00:00Z"), score: null, confidence: null, scoreBreakdown: {}, ...input };
+      },
+    } as never,
+    {
+      async getProfile() {
+        return fakeProfileForTailoring();
+      },
+    } as never,
+    textMap(noTextCalls),
+    "openai",
+    noBoardProviders(),
+    noSearchProviders(),
+  );
+
+  const evaluation = await service.evaluateJob("job-9");
+
+  assert.equal(evaluation.eligibility, "EXCLUDED");
+  assert.equal(evaluation.profileVersion, 4);
+  assert.equal(evaluation.eligibilityReasons[0]?.quote, "You must be based in the United States.");
+  // Excluded jobs are not ranked.
+  assert.equal(evaluation.score, null);
+  assert.equal(evaluation.match, null);
+  assert.equal(stored.modelVersion, "eligibility-rules@2");
+});
+
+const SCORED_JOB_TEXT = "Fully remote, open to candidates in Brazil. Node.js and PostgreSQL.";
+
+function scoredJobService(
+  text: TextGenerationProvider,
+  options: { explanationsToday?: number; minScore?: number } = {},
+) {
+  const stored: { input: Record<string, unknown> } = { input: {} };
+  const service = new CareerService(
+    {
+      async getJob() {
+        return fakeJob({
+          id: "job-10",
+          title: "Senior Backend Engineer",
+          location: "Remote - LATAM",
+          rawDescription: SCORED_JOB_TEXT,
+          normalizedData: {
+            version: 1,
+            salary: { usdMonthlyMin: 7000, usdMonthlyMax: 9000, approximate: false },
+            regions: ["LATAM", "BRAZIL"],
+            employmentType: "FULL_TIME",
+          },
+        });
+      },
+      async getProfileVersion() {
+        return 4;
+      },
+      async countExplanationsSince() {
+        return options.explanationsToday ?? 0;
+      },
+      async insertJobEvaluation(input: Record<string, unknown>) {
+        stored.input = input;
+        return {
+          id: "eval-2",
+          createdAt: new Date("2026-10-14T00:00:00Z"),
+          score: null,
+          confidence: null,
+          scoreBreakdown: {},
+          explanation: null,
+          promptVersion: "",
+          ...input,
+        };
+      },
+    } as never,
+    {
+      async getProfile() {
+        return {
+          ...fakeProfileForTailoring(),
+          yearsOfExperience: 9,
+          architectureExperience: "",
+          leadershipExperience: "",
+          experiences: [],
+        };
+      },
+    } as never,
+    textMap(text),
+    "openai",
+    noBoardProviders(),
+    noSearchProviders(),
+    undefined,
+    {
+      matchPreferences: DEFAULT_EVALUATION_SETTINGS.matchPreferences,
+      explanationMinScore: options.minScore ?? 60,
+      explanationDailyLimit: 5,
+    },
+  );
+  return { service, stored };
+}
+
+test("evaluateJob scores a job the rules did not exclude against the saved profile", async () => {
+  const { service, stored } = scoredJobService(noTextCalls, { minScore: 101 });
+
+  const evaluation = await service.evaluateJob("job-10");
+
+  assert.equal(evaluation.eligibility, "ELIGIBLE");
+  assert.equal(typeof evaluation.score, "number");
+  assert.equal(evaluation.match?.version, "matching@2");
+  assert.deepEqual(evaluation.match?.matchedSkills, ["Node.js", "PostgreSQL"]);
+  assert.equal(evaluation.explanation, null);
+  assert.equal(stored.input.modelVersion, "eligibility-rules@2+matching@2");
+});
+
+test("evaluateJob explains a shortlisted job and keeps only quotes the texts back up", async () => {
+  let prompt = "";
+  const { service, stored } = scoredJobService({
+    async generateText(request) {
+      prompt = request.user;
+      return {
+        model: "test-model",
+        usage: { inputTokens: 1200, outputTokens: 300 },
+        text: JSON.stringify({
+          executiveSummary: "Backend role on a stack the candidate knows.",
+          whyShortlisted: [{ statement: "Uses Node.js.", kind: "FACT", evidence: [{ source: "JOB", quote: "Node.js and PostgreSQL" }] }],
+          matchedRequirements: [
+            { statement: "Knows Node.js.", kind: "FACT", evidence: [{ source: "PROFILE", quote: "Top skills: Kubernetes, Node.js" }] },
+            { statement: "Ran Kafka at scale.", kind: "FACT", evidence: [{ source: "PROFILE", quote: "Ran Kafka clusters at scale" }] },
+          ],
+          geographicEligibility: [
+            { statement: "Hires from Brazil.", kind: "FACT", evidence: [{ source: "JOB", quote: "open to candidates in Brazil" }] },
+          ],
+          recommendedAction: "APPLY",
+          confidence: "HIGH",
+        }),
+      };
+    },
+  });
+
+  const evaluation = await service.evaluateJob("job-10");
+
+  assert.ok(prompt.includes(SCORED_JOB_TEXT));
+  assert.equal(evaluation.explanation?.matchedRequirements.length, 1);
+  assert.equal(evaluation.explanation?.grounding.droppedClaims, 1);
+  assert.equal(evaluation.explanation?.geographicEligibility[0]?.kind, "FACT");
+  assert.equal(evaluation.promptVersion, "job-explanation.v1");
+  assert.equal(stored.input.modelVersion, "eligibility-rules@2+matching@2+test-model");
+  assert.equal(stored.input.inputTokens, 1200);
+  assert.equal(stored.input.outputTokens, 300);
+});
+
+test("evaluateJob stops explaining once the daily limit is reached", async () => {
+  const { service } = scoredJobService(noTextCalls, { explanationsToday: 5 });
+  const evaluation = await service.evaluateJob("job-10");
+  assert.equal(typeof evaluation.score, "number");
+  assert.equal(evaluation.explanation, null);
+});
+
+test("evaluateJob still stores the score when the model call fails", async () => {
+  const { service, stored } = scoredJobService({
+    async generateText() {
+      return { model: "test-model", text: "not json at all" };
+    },
+  });
+  const evaluation = await service.evaluateJob("job-10");
+  assert.equal(typeof evaluation.score, "number");
+  assert.equal(evaluation.explanation, null);
+  assert.equal(stored.input.modelVersion, "eligibility-rules@2+matching@2");
+});
+
+test("evaluateJob rejects an unknown job", async () => {
+  const service = new CareerService(
+    {
+      async getJob() {
+        return null;
+      },
+    } as never,
+    {} as never,
+    textMap(noTextCalls),
+    "openai",
+    noBoardProviders(),
+    noSearchProviders(),
+  );
+  await assert.rejects(() => service.evaluateJob("missing"), /does not exist/);
+});
+
+function feedbackService(evaluationJobId: string, inserted: Array<Record<string, unknown>>) {
+  return new CareerService(
+    {
+      async getJobEvaluation(id: string) {
+        return { id, jobId: evaluationJobId };
+      },
+      async insertJobFeedback(input: Record<string, unknown>) {
+        inserted.push(input);
+        return { id: "fb-1", createdAt: new Date("2026-10-14T00:00:00Z"), ...input };
+      },
+    } as never,
+    {} as never,
+    textMap(noTextCalls),
+    "openai",
+    noBoardProviders(),
+    noSearchProviders(),
+  );
+}
+
+const EVALUATION_ID = "00000000-0000-4000-8000-0000000000e1";
+
+test("submitFeedback stores the verdict and reasons for the job's evaluation", async () => {
+  const inserted: Array<Record<string, unknown>> = [];
+  const feedback = await feedbackService("job-1", inserted).submitFeedback("job-1", {
+    evaluationId: EVALUATION_ID,
+    verdict: "NOT_RELEVANT",
+    reasons: ["PAY_TOO_LOW"],
+  });
+  assert.equal(feedback.verdict, "NOT_RELEVANT");
+  assert.deepEqual(inserted[0], {
+    jobId: "job-1",
+    evaluationId: EVALUATION_ID,
+    verdict: "NOT_RELEVANT",
+    reasons: ["PAY_TOO_LOW"],
+    note: "",
+  });
+});
+
+test("submitFeedback rejects an evaluation that belongs to another job", async () => {
+  const inserted: Array<Record<string, unknown>> = [];
+  await assert.rejects(
+    () => feedbackService("job-2", inserted).submitFeedback("job-1", { evaluationId: EVALUATION_ID, verdict: "RELEVANT" }),
+    /does not exist for this job/,
+  );
+  assert.equal(inserted.length, 0);
+});
+
+test("submitFeedback rejects an unknown reason", async () => {
+  await assert.rejects(
+    () =>
+      feedbackService("job-1", []).submitFeedback("job-1", {
+        evaluationId: EVALUATION_ID,
+        verdict: "RELEVANT",
+        reasons: ["BECAUSE"],
+      }),
+    /invalid/,
+  );
+});
+
+// --- talent-platform checklist (Milestone 1.5) ---------------------------------------------
+
+function talentService(saved: Array<Record<string, unknown>>) {
+  return new CareerService(
+    {
+      async upsertTalentPlatformProfile(input: { siteId: string; status: string; note: string }) {
+        saved.push(input);
+        return { ...input, updatedAt: new Date("2026-10-14T12:00:00Z") };
+      },
+    } as never,
+    {} as never,
+    textMap(noTextCalls),
+    "openai",
+    noBoardProviders(),
+    noSearchProviders(),
+  );
+}
+
+test("setTalentProfile saves a status for a talent platform in the catalog", async () => {
+  const saved: Array<Record<string, unknown>> = [];
+  const profile = await talentService(saved).setTalentProfile("turing", { status: "APPLIED", note: "Took the test" });
+  assert.deepEqual(saved, [{ siteId: "turing", status: "APPLIED", note: "Took the test" }]);
+  assert.equal(profile.updatedAt, "2026-10-14T12:00:00.000Z");
+});
+
+test("setTalentProfile rejects a site that is not a talent platform", async () => {
+  const saved: Array<Record<string, unknown>> = [];
+  await assert.rejects(
+    () => talentService(saved).setTalentProfile("wellfound", { status: "APPLIED", note: "" }),
+    (error: unknown) => error instanceof AppError && error.code === ERROR_CODES.NOT_FOUND,
+  );
+  assert.equal(saved.length, 0);
 });

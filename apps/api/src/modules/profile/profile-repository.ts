@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import type { ProfileInput } from "@studio/shared";
 import type { Database } from "../../db/client.js";
 import {
@@ -96,6 +96,9 @@ export class ProfileRepository {
           desiredPerception: input.desiredPerception,
           writingTones: input.writingTones,
           postLength: input.postLength,
+          // Every save is a new set of facts (JOB-010): evaluations and generated documents
+          // record the version they were computed from.
+          version: sql`${profiles.version} + 1`,
           updatedAt: now,
         },
       });

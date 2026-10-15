@@ -7,6 +7,7 @@ import type {
   JobFitResult,
   JobInput,
   JobPatchInput,
+  JobEvaluationPublic,
   JobPublic,
   JobSearchResult,
   JobSearchSource,
@@ -17,8 +18,19 @@ import type {
   RecruiterPublic,
   ResumeTailoringPlan,
   TextProviderName,
+  JobFeedItem,
+  FeedbackSummary,
+  JobFeedbackPublic,
+  TalentProfileInput,
+  TalentProfilePublic,
 } from "@studio/shared";
-import { outreachMessageSchema, resumeTailoringPlanSchema } from "@studio/shared";
+import {
+  isTalentPlatform,
+  jobFeedbackInputSchema,
+  jobFeedQuerySchema,
+  outreachMessageSchema,
+  resumeTailoringPlanSchema,
+} from "@studio/shared";
 import { malformedAiOutput, notFound, validationError } from "../../app-error.js";
 import { parseJsonObject } from "../ai/parse-json.js";
 import {
@@ -37,10 +49,24 @@ import { buildResumePdf } from "../profile/resume-pdf.js";
 import type { ProfileService } from "../profile/profile-service.js";
 import { computeCareerAnalytics } from "./career-analytics.js";
 import { computeContentTopicSuggestions } from "./content-suggestions.js";
-import type { CareerRepository, CompanyRow, JobRow, RecruiterRow } from "./career-repository.js";
+import type {
+  CareerRepository,
+  CompanyRow,
+  JobEvaluationRow,
+  JobFeedbackRow,
+  JobRow,
+  RecruiterRow,
+  TalentPlatformProfileRow,
+} from "./career-repository.js";
 import type { JobProvider } from "./job-provider.js";
 import type { JobSearchProvider } from "./job-search-provider.js";
+import { ALLOW_ALL_SOURCES, type SourceGate } from "./source-registry.js";
 import { computeJobFit } from "./job-fit.js";
+import { JobExplainer } from "./job-explanation.js";
+import { buildJobFeed } from "./job-feed.js";
+import { jobFreshnessSignals } from "./job-freshness.js";
+import { summarizeFeedback, type RatedEvaluation } from "./job-feedback.js";
+import { DEFAULT_EVALUATION_SETTINGS, JobIntake, type EvaluationSettings } from "./job-intake.js";
 import { scoreRecruiterRelevance } from "./recruiter-scoring.js";
 import { applyTailoringPlan, groundTailoringPlan } from "./resume-tailoring.js";
 
@@ -62,7 +88,25 @@ export class CareerService {
     private readonly defaultTextProvider: TextProviderName,
     private readonly boardProviders: Record<JobBoardSource, JobProvider>,
     private readonly searchProviders: Record<JobSearchSource, JobSearchProvider>,
+    private readonly sourceGate: SourceGate = ALLOW_ALL_SOURCES,
+    private readonly evaluationSettings: EvaluationSettings = DEFAULT_EVALUATION_SETTINGS,
   ) {}
+
+  private get intake(): JobIntake {
+    return new JobIntake(this.repo, this.evaluationSettings);
+  }
+
+  // Talent-platform checklist (Milestone 1.5): only platforms in the shared catalog.
+  async listTalentProfiles(): Promise<TalentProfilePublic[]> {
+    return (await this.repo.listTalentPlatformProfiles()).map(talentProfileToPublic);
+  }
+
+  async setTalentProfile(siteId: string, input: TalentProfileInput): Promise<TalentProfilePublic> {
+    if (!isTalentPlatform(siteId)) {
+      throw notFound("That talent platform is not in the catalog.");
+    }
+    return talentProfileToPublic(await this.repo.upsertTalentPlatformProfile({ siteId, ...input }));
+  }
 
   async listCompanies(): Promise<CompanyPublic[]> {
     const rows = await this.repo.listCompanies();
@@ -102,25 +146,15 @@ export class CareerService {
       throw notFound("That company does not exist.");
     }
 
+    await this.sourceGate.assertDiscoveryAllowed(source);
     const postings = await this.boardProviders[source].listJobs(boardToken);
     const imported: JobPublic[] = [];
     let skipped = 0;
+    const intake = this.intake;
     for (const posting of postings) {
-      const existing = await this.repo.getJobByExternalId(source, posting.externalId);
-      if (existing) {
-        skipped += 1;
-        continue;
-      }
-      const row = await this.repo.createImportedJob({
-        companyId,
-        source,
-        externalId: posting.externalId,
-        title: posting.title,
-        url: posting.url,
-        location: posting.location,
-        description: posting.description,
-      });
-      imported.push(this.jobToPublic(row));
+      const { job, outcome } = await intake.importBoardPosting(source, posting, company);
+      if (outcome === "CREATED") imported.push(this.jobToPublic(job));
+      else skipped += 1;
     }
     return { imported, skipped };
   }
@@ -133,6 +167,7 @@ export class CareerService {
     keywords: string,
     location?: string,
   ): Promise<JobSearchResult[]> {
+    await this.sourceGate.assertDiscoveryAllowed(source);
     const postings = await this.searchProviders[source].searchJobs({ keywords, location });
     return postings.map((posting) => ({
       externalId: posting.externalId,
@@ -141,40 +176,18 @@ export class CareerService {
       location: posting.location,
       description: posting.description,
       companyName: posting.companyNameFromSource,
+      salary: posting.salary,
+      employmentType: posting.employmentType ?? null,
+      postedAt: posting.postedAt?.toISOString() ?? null,
     }));
   }
 
   async importSearchResult(source: JobSearchSource, posting: JobSearchResult): Promise<JobPublic> {
-    const existing = await this.repo.getJobByExternalId(source, posting.externalId);
-    if (existing) {
-      return this.jobToPublic(existing);
-    }
-
-    const companyName = posting.companyName.trim() || "Unknown company";
-    let company = await this.repo.findCompanyByName(companyName);
-    if (!company) {
-      company = await this.repo.createCompany({
-        name: companyName,
-        website: "",
-        linkedinUrl: "",
-        industry: "",
-        size: "",
-        locations: [],
-        careerPageUrl: "",
-        notes: "",
-      });
-    }
-
-    const row = await this.repo.createImportedJob({
-      companyId: company.id,
-      source,
-      externalId: posting.externalId,
-      title: posting.title,
-      url: posting.url,
-      location: posting.location,
-      description: posting.description,
+    const { job } = await this.intake.importSearchPosting(source, {
+      ...posting,
+      postedAt: posting.postedAt ? new Date(posting.postedAt) : null,
     });
-    return this.jobToPublic(row);
+    return this.jobToPublic(job);
   }
 
   async updateJobStatus(id: string, status: string): Promise<JobPublic> {
@@ -261,6 +274,88 @@ export class CareerService {
     const grounded = groundTailoringPlan(parsed.data, profile);
     const tailoredProfile = applyTailoringPlan(profile, grounded);
     return buildResumePdf(tailoredProfile);
+  }
+
+  async evaluateJob(id: string): Promise<JobEvaluationPublic> {
+    const job = await this.repo.getJob(id);
+    if (!job) {
+      throw notFound("That job does not exist.");
+    }
+    // Eligibility rules, matching v2 for jobs the rules did not exclude (JOB-011), and an
+    // explanation for shortlisted ones (JOB-012). A failed model call still stores the score:
+    // the explanation stays empty and evaluating again retries it.
+    const { evaluation } = await this.intake.evaluateJob(job, await this.profiles.getProfile(), {
+      explainer: new JobExplainer(resolveTextProvider(this.textProviders, this.defaultTextProvider)),
+      onExplanationFailure: "skip",
+    });
+    return evaluationToPublic(evaluation);
+  }
+
+  async getJobFeed(rawQuery: unknown, now = new Date()): Promise<JobFeedItem[]> {
+    const parsed = jobFeedQuerySchema.safeParse(rawQuery ?? {});
+    if (!parsed.success) {
+      throw validationError("The feed filters are invalid.");
+    }
+    const [jobRows, companyRows, evaluations, feedback] = await Promise.all([
+      this.repo.listJobs(),
+      this.repo.listCompanies(),
+      this.repo.latestEvaluationsByJob(),
+      this.repo.latestFeedbackByJob(),
+    ]);
+    const companyNames = new Map(companyRows.map((company) => [company.id, company.name]));
+    const items = jobRows.map((row): JobFeedItem => {
+      const latest = evaluations.latest.get(row.id);
+      const explained = evaluations.explained.get(row.id);
+      return {
+        job: this.jobToPublic(row),
+        companyName: companyNames.get(row.companyId) ?? "",
+        postedAt: (row.sourcePostedAt ?? row.discoveredAt).toISOString(),
+        evaluation: latest ? evaluationToPublic(latest) : null,
+        explanation: explained ? evaluationToPublic(explained).explanation : null,
+        explainedAt: explained ? explained.createdAt.toISOString() : null,
+        feedback: feedback.has(row.id) ? feedbackToPublic(feedback.get(row.id)!) : null,
+        signals: jobFreshnessSignals(row, now),
+      };
+    });
+    return buildJobFeed(items, parsed.data, now);
+  }
+
+  // Relevance feedback (JOB-014) on one evaluation of this job. Insert-only: a new verdict
+  // replaces the current one without erasing the history.
+  async submitFeedback(jobId: string, payload: unknown): Promise<JobFeedbackPublic> {
+    const parsed = jobFeedbackInputSchema.safeParse(payload);
+    if (!parsed.success) {
+      throw validationError("The feedback is invalid.");
+    }
+    const evaluation = await this.repo.getJobEvaluation(parsed.data.evaluationId);
+    if (!evaluation || evaluation.jobId !== jobId) {
+      throw notFound("That evaluation does not exist for this job.");
+    }
+    const row = await this.repo.insertJobFeedback({ jobId, ...parsed.data });
+    return feedbackToPublic(row);
+  }
+
+  async getFeedbackSummary(): Promise<FeedbackSummary> {
+    const latest = [...(await this.repo.latestFeedbackByJob()).values()];
+    const evaluations = new Map(
+      (await this.repo.getJobEvaluations(latest.map((row) => row.evaluationId))).map((row) => [row.id, row]),
+    );
+    const entries = latest.map((row): RatedEvaluation => {
+      const evaluation = evaluations.get(row.evaluationId);
+      const breakdown = evaluation?.score === null || !evaluation ? null : evaluationToPublic(evaluation).match;
+      return {
+        verdict: row.verdict as RatedEvaluation["verdict"],
+        reasons: row.reasons as RatedEvaluation["reasons"],
+        score: evaluation?.score ?? null,
+        dimensions: breakdown?.dimensions ?? null,
+      };
+    });
+    return summarizeFeedback(entries, this.evaluationSettings.explanationMinScore);
+  }
+
+  async getLatestEvaluation(id: string): Promise<JobEvaluationPublic | null> {
+    const row = await this.repo.getLatestJobEvaluation(id);
+    return row ? evaluationToPublic(row) : null;
   }
 
   async computeFit(id: string): Promise<JobFitResult> {
@@ -483,4 +578,42 @@ export class CareerService {
       updatedAt: row.updatedAt.toISOString(),
     };
   }
+}
+
+function feedbackToPublic(row: JobFeedbackRow): JobFeedbackPublic {
+  return {
+    id: row.id,
+    jobId: row.jobId,
+    evaluationId: row.evaluationId,
+    verdict: row.verdict as JobFeedbackPublic["verdict"],
+    reasons: row.reasons as JobFeedbackPublic["reasons"],
+    note: row.note,
+    createdAt: row.createdAt.toISOString(),
+  };
+}
+
+function evaluationToPublic(row: JobEvaluationRow): JobEvaluationPublic {
+  return {
+    id: row.id,
+    jobId: row.jobId,
+    profileVersion: row.profileVersion,
+    eligibility: row.eligibility as JobEvaluationPublic["eligibility"],
+    eligibilityReasons: row.eligibilityReasons as JobEvaluationPublic["eligibilityReasons"],
+    score: row.score,
+    confidence: row.confidence,
+    match: row.score === null ? null : (row.scoreBreakdown as JobEvaluationPublic["match"]),
+    explanation: (row.explanation ?? null) as JobEvaluationPublic["explanation"],
+    modelVersion: row.modelVersion,
+    promptVersion: row.promptVersion,
+    createdAt: row.createdAt.toISOString(),
+  };
+}
+
+function talentProfileToPublic(row: TalentPlatformProfileRow): TalentProfilePublic {
+  return {
+    siteId: row.siteId,
+    status: row.status as TalentProfilePublic["status"],
+    note: row.note,
+    updatedAt: row.updatedAt.toISOString(),
+  };
 }

@@ -1,0 +1,22 @@
+# Browser worker (Milestone 3, ADR-020). Playwright's image ships Chromium and its system
+# libraries; the version must match playwright-core in apps/api/package.json.
+FROM mcr.microsoft.com/playwright:v1.56.1-noble
+
+WORKDIR /app
+
+COPY package.json package-lock.json* ./
+COPY apps/api/package.json apps/api/package.json
+COPY packages/shared/package.json packages/shared/package.json
+COPY packages/config/package.json packages/config/package.json
+
+RUN npm install
+
+COPY packages ./packages
+COPY apps/api ./apps/api
+
+WORKDIR /app/apps/api
+
+# The image's unprivileged user, so Chromium never runs as root.
+USER pwuser
+
+CMD ["npx", "tsx", "src/browser-worker.ts"]

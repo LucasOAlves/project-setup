@@ -1,7 +1,15 @@
 import type {
+  ApplicationInbox,
+  RecruiterMessagePublic,
+  SentApplication,
+  OperationsReport,
+  AuditEventPublic,
+  SourcePublic,
+  SourceApplicationMode,
   AngleType,
   CompanyInput,
   CompanyPublic,
+  CompanyWatchPublic,
   ContentPlanStatus,
   ContentPlanTopic,
   ContentPlanTopicPublic,
@@ -40,6 +48,21 @@ import type {
   SectionCommentReview,
   TextProviderName,
   WritingTone,
+  FeedEligibilityFilter,
+  FeedbackSummary,
+  JobEvaluationPublic,
+  JobFeedbackInput,
+  JobFeedbackPublic,
+  JobFeedItem,
+  TalentProfileInput,
+  ApplicationDocumentPublic,
+  ApplicationAnswersInput,
+  ApplicationPublic,
+  CoverLetterEdit,
+  ApplicationAnswersEdit,
+  ApplicationDetailsInput,
+  ApplicationDetailsPublic,
+  TalentProfilePublic,
 } from "@studio/shared";
 import { profileInputSchema } from "@studio/shared";
 
@@ -560,6 +583,131 @@ export async function importFromBoard(
   return (await response.json()) as { imported: JobPublic[]; skipped: number };
 }
 
+export async function fetchWatchlist(): Promise<CompanyWatchPublic[]> {
+  const response = await fetch("/api/career/watchlist");
+  if (!response.ok) {
+    throw await parseError(response);
+  }
+  return ((await response.json()) as { watches: CompanyWatchPublic[] }).watches;
+}
+
+export async function watchCompany(
+  companyId: string,
+  source: JobBoardSource,
+  boardToken: string,
+): Promise<CompanyWatchPublic> {
+  const response = await fetch(`/api/career/companies/${companyId}/watch`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ source, boardToken }),
+  });
+  if (!response.ok) {
+    throw await parseError(response);
+  }
+  return ((await response.json()) as { watch: CompanyWatchPublic }).watch;
+}
+
+export async function unwatchCompany(companyId: string): Promise<void> {
+  const response = await fetch(`/api/career/companies/${companyId}/watch`, { method: "DELETE" });
+  if (!response.ok) {
+    throw await parseError(response);
+  }
+}
+
+export async function checkWatchNow(companyId: string): Promise<"QUEUED" | "ALREADY_QUEUED_THIS_HOUR"> {
+  const response = await fetch(`/api/career/companies/${companyId}/watch/check`, { method: "POST" });
+  if (!response.ok) {
+    throw await parseError(response);
+  }
+  return ((await response.json()) as { status: "QUEUED" | "ALREADY_QUEUED_THIS_HOUR" }).status;
+}
+
+export async function fetchApplicationDetails(): Promise<ApplicationDetailsPublic | null> {
+  const response = await fetch("/api/profile/application-details");
+  if (!response.ok) {
+    throw await parseError(response);
+  }
+  return ((await response.json()) as { details: ApplicationDetailsPublic | null }).details;
+}
+
+export async function saveApplicationDetails(input: ApplicationDetailsInput): Promise<ApplicationDetailsPublic> {
+  const response = await fetch("/api/profile/application-details", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!response.ok) {
+    throw await parseError(response);
+  }
+  return ((await response.json()) as { details: ApplicationDetailsPublic }).details;
+}
+
+export type DocumentSaveResult = { document: ApplicationDocumentPublic; created: boolean };
+
+export async function fetchJobDocuments(jobId: string): Promise<ApplicationDocumentPublic[]> {
+  const response = await fetch(`/api/career/jobs/${jobId}/documents`);
+  if (!response.ok) {
+    throw await parseError(response);
+  }
+  return ((await response.json()) as { documents: ApplicationDocumentPublic[] }).documents;
+}
+
+async function postDocument(path: string, body: unknown): Promise<DocumentSaveResult> {
+  const response = await fetch(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) {
+    throw await parseError(response);
+  }
+  return (await response.json()) as DocumentSaveResult;
+}
+
+export function generateCv(jobId: string): Promise<DocumentSaveResult> {
+  return postDocument(`/api/career/jobs/${jobId}/documents/cv`, {});
+}
+
+export function generateCoverLetter(jobId: string): Promise<DocumentSaveResult> {
+  return postDocument(`/api/career/jobs/${jobId}/documents/cover-letter`, {});
+}
+
+export function saveCoverLetterEdit(jobId: string, edit: CoverLetterEdit): Promise<DocumentSaveResult> {
+  return postDocument(`/api/career/jobs/${jobId}/documents/cover-letter/edits`, edit);
+}
+
+export function generateAnswers(jobId: string): Promise<DocumentSaveResult> {
+  return postDocument(`/api/career/jobs/${jobId}/documents/answers`, {});
+}
+
+export function saveAnswersEdit(jobId: string, edit: ApplicationAnswersEdit): Promise<DocumentSaveResult> {
+  return postDocument(`/api/career/jobs/${jobId}/documents/answers/edits`, edit);
+}
+
+export function documentFileUrl(documentId: string): string {
+  return `/api/career/documents/${documentId}/file`;
+}
+
+export async function fetchTalentProfiles(): Promise<TalentProfilePublic[]> {
+  const response = await fetch("/api/career/job-sites/profiles");
+  if (!response.ok) {
+    throw await parseError(response);
+  }
+  return ((await response.json()) as { profiles: TalentProfilePublic[] }).profiles;
+}
+
+export async function saveTalentProfile(siteId: string, input: TalentProfileInput): Promise<TalentProfilePublic> {
+  const response = await fetch(`/api/career/job-sites/${encodeURIComponent(siteId)}/profile`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!response.ok) {
+    throw await parseError(response);
+  }
+  return ((await response.json()) as { profile: TalentProfilePublic }).profile;
+}
+
 export async function searchJobs(
   source: JobSearchSource,
   keywords: string,
@@ -795,4 +943,266 @@ export async function deleteJob(id: string): Promise<JobPublic[]> {
   }
   const body = (await response.json()) as { jobs: JobPublic[] };
   return body.jobs;
+}
+
+export type JobFeedFilters = {
+  eligibility: FeedEligibilityFilter[];
+  minScore: number;
+  source: string;
+  q: string;
+  postedWithinDays: number | null;
+};
+
+export async function fetchJobFeed(filters: JobFeedFilters): Promise<JobFeedItem[]> {
+  const params = new URLSearchParams({
+    eligibility: filters.eligibility.join(","),
+    minScore: String(filters.minScore),
+  });
+  if (filters.source) params.set("source", filters.source);
+  if (filters.q.trim()) params.set("q", filters.q.trim());
+  if (filters.postedWithinDays) params.set("postedWithinDays", String(filters.postedWithinDays));
+  const response = await fetch(`/api/career/feed?${params.toString()}`);
+  if (!response.ok) {
+    throw await parseError(response);
+  }
+  const body = (await response.json()) as { items: JobFeedItem[] };
+  return body.items;
+}
+
+export async function evaluateJob(id: string): Promise<JobEvaluationPublic> {
+  const response = await fetch(`/api/career/jobs/${id}/evaluate`, { method: "POST" });
+  if (!response.ok) {
+    throw await parseError(response);
+  }
+  const body = (await response.json()) as { evaluation: JobEvaluationPublic };
+  return body.evaluation;
+}
+
+export async function runDiscoveryNow(): Promise<Array<{ sourceId: string; status: "QUEUED" | "ALREADY_RAN_TODAY" }>> {
+  const response = await fetch("/api/career/discovery/run", { method: "POST" });
+  if (!response.ok) {
+    throw await parseError(response);
+  }
+  const body = (await response.json()) as {
+    results: Array<{ sourceId: string; status: "QUEUED" | "ALREADY_RAN_TODAY" }>;
+  };
+  return body.results;
+}
+
+export async function submitJobFeedback(jobId: string, input: JobFeedbackInput): Promise<JobFeedbackPublic> {
+  const response = await fetch(`/api/career/jobs/${jobId}/feedback`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!response.ok) {
+    throw await parseError(response);
+  }
+  const body = (await response.json()) as { feedback: JobFeedbackPublic };
+  return body.feedback;
+}
+
+export async function fetchFeedbackSummary(): Promise<FeedbackSummary> {
+  const response = await fetch("/api/career/feedback/summary");
+  if (!response.ok) {
+    throw await parseError(response);
+  }
+  const body = (await response.json()) as { summary: FeedbackSummary };
+  return body.summary;
+}
+
+
+// Applications (Milestone 3): prepared in a private browser, never submitted.
+export async function fetchApplication(jobId: string): Promise<ApplicationPublic | null> {
+  const response = await fetch(`/api/career/jobs/${jobId}/application`);
+  if (!response.ok) {
+    throw await parseError(response);
+  }
+  return ((await response.json()) as { application: ApplicationPublic | null }).application;
+}
+
+export async function prepareApplication(jobId: string): Promise<ApplicationPublic> {
+  const response = await fetch(`/api/career/jobs/${jobId}/application/prepare`, { method: "POST" });
+  if (!response.ok) {
+    throw await parseError(response);
+  }
+  return ((await response.json()) as { application: ApplicationPublic }).application;
+}
+
+export async function saveApplicationAnswers(applicationId: string, input: ApplicationAnswersInput): Promise<void> {
+  const response = await fetch(`/api/career/applications/${applicationId}/answers`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!response.ok) {
+    throw await parseError(response);
+  }
+}
+
+export async function rejectApplication(applicationId: string): Promise<ApplicationPublic> {
+  const response = await fetch(`/api/career/applications/${applicationId}/reject`, { method: "POST" });
+  if (!response.ok) {
+    throw await parseError(response);
+  }
+  return ((await response.json()) as { application: ApplicationPublic }).application;
+}
+
+export async function approveApplication(application: Pick<ApplicationPublic, "id" | "payloadHash">): Promise<ApplicationPublic> {
+  const response = await fetch(`/api/career/applications/${application.id}/approve`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ payloadHash: application.payloadHash }),
+  });
+  if (!response.ok) throw await parseError(response);
+  return ((await response.json()) as { application: ApplicationPublic }).application;
+}
+
+export async function withdrawApproval(applicationId: string): Promise<ApplicationPublic> {
+  const response = await fetch(`/api/career/applications/${applicationId}/approval/withdraw`, { method: "POST" });
+  if (!response.ok) throw await parseError(response);
+  return ((await response.json()) as { application: ApplicationPublic }).application;
+}
+
+export function applicationPreviewUrl(application: Pick<ApplicationPublic, "id" | "preview">): string {
+  return `/api/career/applications/${application.id}/preview.png?at=${encodeURIComponent(application.preview?.capturedAt ?? "")}`;
+}
+
+export type AuthSession = { required: boolean; signedIn: boolean; expiresAt: string | null };
+
+export async function fetchAuthSession(): Promise<AuthSession> {
+  const response = await fetch("/api/auth/session");
+  if (!response.ok) throw await parseError(response);
+  return (await response.json()) as AuthSession;
+}
+
+export async function signIn(password: string): Promise<AuthSession> {
+  const response = await fetch("/api/auth/sign-in", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ password }),
+  });
+  if (!response.ok) throw await parseError(response);
+  return (await response.json()) as AuthSession;
+}
+
+export async function signOut(): Promise<AuthSession> {
+  const response = await fetch("/api/auth/sign-out", { method: "POST" });
+  if (!response.ok) throw await parseError(response);
+  return (await response.json()) as AuthSession;
+}
+
+export async function fetchApplicationInbox(): Promise<ApplicationInbox> {
+  const response = await fetch("/api/career/applications");
+  if (!response.ok) throw await parseError(response);
+  return (await response.json()) as ApplicationInbox;
+}
+
+// Queues the submission of an approved application again (when the first queueing failed).
+export async function submitApplication(applicationId: string): Promise<ApplicationPublic> {
+  const response = await fetch(`/api/career/applications/${applicationId}/submit`, { method: "POST" });
+  if (!response.ok) throw await parseError(response);
+  return ((await response.json()) as { application: ApplicationPublic }).application;
+}
+
+export async function markApplicationSubmitted(applicationId: string): Promise<ApplicationPublic> {
+  const response = await fetch(`/api/career/applications/${applicationId}/mark-submitted`, { method: "POST" });
+  if (!response.ok) throw await parseError(response);
+  return ((await response.json()) as { application: ApplicationPublic }).application;
+}
+
+export async function markApplicationNotSent(applicationId: string): Promise<ApplicationPublic> {
+  const response = await fetch(`/api/career/applications/${applicationId}/mark-not-sent`, { method: "POST" });
+  if (!response.ok) throw await parseError(response);
+  return ((await response.json()) as { application: ApplicationPublic }).application;
+}
+
+export async function fetchSources(): Promise<SourcePublic[]> {
+  const response = await fetch("/api/career/sources");
+  if (!response.ok) throw await parseError(response);
+  return ((await response.json()) as { sources: SourcePublic[] }).sources;
+}
+
+export async function setSourceApplicationMode(sourceId: string, applicationMode: SourceApplicationMode): Promise<SourcePublic> {
+  const response = await fetch(`/api/career/sources/${sourceId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ applicationMode }),
+  });
+  if (!response.ok) throw await parseError(response);
+  return ((await response.json()) as { source: SourcePublic }).source;
+}
+
+export type EmailAccountStatus = {
+  configured: boolean;
+  account: { provider: string; emailAddress: string; connectedAt: string; lastCheckedAt: string | null; lastError: string } | null;
+};
+
+export async function fetchEmailAccount(): Promise<EmailAccountStatus> {
+  const response = await fetch("/api/email/account");
+  if (!response.ok) throw await parseError(response);
+  return (await response.json()) as EmailAccountStatus;
+}
+
+// Returns Google's consent URL; the caller sends the browser there.
+export async function startGmailConnect(): Promise<string> {
+  const response = await fetch("/api/email/google/start", { method: "POST" });
+  if (!response.ok) throw await parseError(response);
+  return ((await response.json()) as { url: string }).url;
+}
+
+export async function checkEmailNow(): Promise<void> {
+  const response = await fetch("/api/email/check", { method: "POST" });
+  if (!response.ok) throw await parseError(response);
+}
+
+export async function disconnectEmail(): Promise<EmailAccountStatus> {
+  const response = await fetch("/api/email/disconnect", { method: "POST" });
+  if (!response.ok) throw await parseError(response);
+  return (await response.json()) as EmailAccountStatus;
+}
+
+// Sent applications with their replies, status suggestions and follow-up flags (Milestone 5).
+export async function fetchSentApplications(): Promise<SentApplication[]> {
+  const response = await fetch("/api/career/responses");
+  if (!response.ok) throw await parseError(response);
+  return ((await response.json()) as { items: SentApplication[] }).items;
+}
+
+export async function answerSuggestion(messageId: string, answer: "accept" | "dismiss"): Promise<RecruiterMessagePublic> {
+  const response = await fetch(`/api/career/messages/${encodeURIComponent(messageId)}/${answer}`, { method: "POST" });
+  if (!response.ok) throw await parseError(response);
+  return ((await response.json()) as { message: RecruiterMessagePublic }).message;
+}
+
+export async function pasteRecruiterMessage(applicationId: string, input: { subject: string; body: string }): Promise<RecruiterMessagePublic> {
+  const response = await fetch(`/api/career/applications/${encodeURIComponent(applicationId)}/messages`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!response.ok) throw await parseError(response);
+  return ((await response.json()) as { message: RecruiterMessagePublic }).message;
+}
+
+// What waits on the user in Applications: reviews, status suggestions and follow-ups due.
+export async function fetchAttention(): Promise<{ applications: number; suggestions: number; followUps: number; total: number }> {
+  const response = await fetch("/api/career/attention");
+  if (!response.ok) throw await parseError(response);
+  return (await response.json()) as { applications: number; suggestions: number; followUps: number; total: number };
+}
+
+// The Operations step (Milestone 5): funnel, conversion, cost and the audit history.
+export async function fetchOperationsReport(): Promise<OperationsReport> {
+  const response = await fetch("/api/operations");
+  if (!response.ok) throw await parseError(response);
+  return ((await response.json()) as { report: OperationsReport }).report;
+}
+
+export async function fetchAuditEvents(filters: { actor?: string; eventType?: string; before?: string }): Promise<AuditEventPublic[]> {
+  const params = new URLSearchParams({ limit: "50" });
+  for (const [key, value] of Object.entries(filters)) if (value) params.set(key, value);
+  const response = await fetch(`/api/audit-events?${params.toString()}`);
+  if (!response.ok) throw await parseError(response);
+  return ((await response.json()) as { events: AuditEventPublic[] }).events;
 }

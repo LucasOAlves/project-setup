@@ -1,13 +1,22 @@
 import { randomUUID } from "node:crypto";
-import { and, desc, eq } from "drizzle-orm";
+import { and, count, desc, eq, gte, inArray, isNotNull, or, sql } from "drizzle-orm";
 import type { CompanyInput, JobInput, JobPatchInput, RecruiterInput, RecruiterPatchInput } from "@studio/shared";
 import type { Database } from "../../db/client.js";
-import { companies, jobStatusEvents, jobs, recruiters } from "../../db/schema.js";
+import type { DedupeKeys, ImportedJobFields } from "./job-import.js";
+import type { CompanySitePatch } from "./job-source-preference.js";
+import { companies, companyWatches, talentPlatformProfiles, jobEvaluations, jobFeedback, jobStatusEvents, jobs, profiles, recruiters } from "../../db/schema.js";
 
 export type CompanyRow = typeof companies.$inferSelect;
 export type JobRow = typeof jobs.$inferSelect;
+export type JobEvaluationRow = typeof jobEvaluations.$inferSelect;
+export type JobFeedbackRow = typeof jobFeedback.$inferSelect;
+export type CompanyWatchRow = typeof companyWatches.$inferSelect;
+export type TalentPlatformProfileRow = typeof talentPlatformProfiles.$inferSelect;
 export type RecruiterRow = typeof recruiters.$inferSelect;
 export type JobStatusEventRow = typeof jobStatusEvents.$inferSelect;
+
+// Pursuit statuses before an application goes out.
+const BEFORE_APPLYING = ["SAVED", "SHORTLISTED", "PREPARING"] as const;
 
 export class CareerRepository {
   constructor(private readonly db: Database) {}
@@ -93,6 +102,19 @@ export class CareerRepository {
     return row;
   }
 
+  // A sent application moves the job to APPLIED (Milestone 5), but only from a stage before
+  // applying, so a status the user already moved further (an interview, say) is never pulled
+  // back. Returns whether it moved.
+  async markApplied(id: string, at: Date): Promise<boolean> {
+    const [row] = await this.db
+      .update(jobs)
+      .set({ status: "APPLIED", appliedAt: sql`COALESCE(${jobs.appliedAt}, ${at.toISOString()}::timestamptz)`, updatedAt: new Date() })
+      .where(and(eq(jobs.id, id), inArray(jobs.status, [...BEFORE_APPLYING])))
+      .returning();
+    if (row) await this.recordJobStatusEvent(row.id, row.status);
+    return Boolean(row);
+  }
+
   async updateJobStatus(
     id: string,
     patch: { status: string; appliedAt?: Date | null },
@@ -121,26 +143,40 @@ export class CareerRepository {
     return row ?? null;
   }
 
-  async createImportedJob(input: {
-    companyId: string;
-    source: string;
-    externalId: string;
-    title: string;
-    url: string;
-    location: string;
-    description: string;
-  }): Promise<JobRow> {
+  // Cross-source duplicate lookup (JOB-006): the same posting seen through another source
+  // shares its canonical URL, or, when the description is substantial, its content hash.
+  async findJobByProvenance(keys: DedupeKeys): Promise<JobRow | null> {
+    const conditions = [];
+    if (keys.canonicalUrl) conditions.push(eq(jobs.canonicalUrl, keys.canonicalUrl));
+    if (keys.contentHash) conditions.push(eq(jobs.contentHash, keys.contentHash));
+    if (conditions.length === 0) return null;
+    const [row] = await this.db
+      .select()
+      .from(jobs)
+      .where(or(...conditions))
+      .limit(1);
+    return row ?? null;
+  }
+
+  async listJobsForCompany(companyId: string): Promise<JobRow[]> {
+    return this.db.select().from(jobs).where(eq(jobs.companyId, companyId));
+  }
+
+  async applyCompanySitePatch(id: string, patch: CompanySitePatch): Promise<JobRow | null> {
+    const [row] = await this.db
+      .update(jobs)
+      .set({ ...patch, updatedAt: new Date() })
+      .where(eq(jobs.id, id))
+      .returning();
+    return row ?? null;
+  }
+
+  async createImportedJob(input: ImportedJobFields & { companyId: string }): Promise<JobRow> {
     const [row] = await this.db
       .insert(jobs)
       .values({
         id: randomUUID(),
-        companyId: input.companyId,
-        source: input.source,
-        externalId: input.externalId,
-        title: input.title,
-        url: input.url,
-        location: input.location,
-        description: input.description,
+        ...input,
       })
       .returning();
     if (!row) {
@@ -148,6 +184,196 @@ export class CareerRepository {
     }
     await this.recordJobStatusEvent(row.id, row.status);
     return row;
+  }
+
+  // The single workspace profile's version (JOB-010); 1 before any profile is saved.
+  async getProfileVersion(): Promise<number> {
+    const [row] = await this.db.select({ version: profiles.version }).from(profiles).limit(1);
+    return row?.version ?? 1;
+  }
+
+  async insertJobEvaluation(input: {
+    jobId: string;
+    profileVersion: number;
+    eligibility: string;
+    eligibilityReasons: unknown[];
+    modelVersion: string;
+    score?: number | null;
+    confidence?: number | null;
+    scoreBreakdown?: Record<string, unknown>;
+    explanation?: unknown;
+    evidence?: unknown[];
+    promptVersion?: string;
+    inputTokens?: number;
+    outputTokens?: number;
+  }): Promise<JobEvaluationRow> {
+    const [row] = await this.db
+      .insert(jobEvaluations)
+      .values({ id: randomUUID(), ...input })
+      .returning();
+    if (!row) {
+      throw new Error("job evaluation insert failed");
+    }
+    return row;
+  }
+
+  // The newest evaluation of every job, and separately the newest one that carries an
+  // explanation, for the job feed. Two DISTINCT ON scans instead of one query per job.
+  async latestEvaluationsByJob(): Promise<{
+    latest: Map<string, JobEvaluationRow>;
+    explained: Map<string, JobEvaluationRow>;
+  }> {
+    const [latestRows, explainedRows] = await Promise.all([
+      this.db
+        .selectDistinctOn([jobEvaluations.jobId])
+        .from(jobEvaluations)
+        .orderBy(jobEvaluations.jobId, desc(jobEvaluations.createdAt)),
+      this.db
+        .selectDistinctOn([jobEvaluations.jobId])
+        .from(jobEvaluations)
+        .where(isNotNull(jobEvaluations.explanation))
+        .orderBy(jobEvaluations.jobId, desc(jobEvaluations.createdAt)),
+    ]);
+    return {
+      latest: new Map(latestRows.map((row) => [row.jobId, row])),
+      explained: new Map(explainedRows.map((row) => [row.jobId, row])),
+    };
+  }
+
+  async getJobEvaluation(id: string): Promise<JobEvaluationRow | null> {
+    const [row] = await this.db.select().from(jobEvaluations).where(eq(jobEvaluations.id, id)).limit(1);
+    return row ?? null;
+  }
+
+  async getJobEvaluations(ids: string[]): Promise<JobEvaluationRow[]> {
+    if (ids.length === 0) return [];
+    return this.db.select().from(jobEvaluations).where(inArray(jobEvaluations.id, ids));
+  }
+
+  async insertJobFeedback(input: {
+    jobId: string;
+    evaluationId: string;
+    verdict: string;
+    reasons: string[];
+    note: string;
+  }): Promise<JobFeedbackRow> {
+    const [row] = await this.db
+      .insert(jobFeedback)
+      .values({ id: randomUUID(), ...input })
+      .returning();
+    if (!row) {
+      throw new Error("job feedback insert failed");
+    }
+    return row;
+  }
+
+  async listCompanyWatches(): Promise<CompanyWatchRow[]> {
+    return this.db.select().from(companyWatches).orderBy(companyWatches.createdAt);
+  }
+
+  async getCompanyWatch(companyId: string): Promise<CompanyWatchRow | null> {
+    const [row] = await this.db.select().from(companyWatches).where(eq(companyWatches.companyId, companyId)).limit(1);
+    return row ?? null;
+  }
+
+  // Watching a company again with another board starts its poll history over.
+  async upsertCompanyWatch(input: { companyId: string; source: string; boardToken: string }): Promise<CompanyWatchRow> {
+    const reset = {
+      source: input.source,
+      boardToken: input.boardToken,
+      lastPolledAt: null,
+      lastStatus: "NEVER",
+      lastError: "",
+      openPostings: null,
+      recentPostings: null,
+      newPostings: null,
+      updatedAt: new Date(),
+    };
+    const [row] = await this.db
+      .insert(companyWatches)
+      .values({ companyId: input.companyId, ...reset })
+      .onConflictDoUpdate({ target: companyWatches.companyId, set: reset })
+      .returning();
+    if (!row) {
+      throw new Error("company watch upsert failed");
+    }
+    return row;
+  }
+
+  async deleteCompanyWatch(companyId: string): Promise<boolean> {
+    const rows = await this.db.delete(companyWatches).where(eq(companyWatches.companyId, companyId)).returning();
+    return rows.length > 0;
+  }
+
+  async recordCompanyWatchPoll(
+    companyId: string,
+    result:
+      | { status: "OK"; polledAt: Date; openPostings: number; recentPostings: number; newPostings: number }
+      | { status: "FAILED"; polledAt: Date; error: string },
+  ): Promise<CompanyWatchRow | null> {
+    const set =
+      result.status === "OK"
+        ? {
+            lastPolledAt: result.polledAt,
+            lastStatus: "OK",
+            lastError: "",
+            openPostings: result.openPostings,
+            recentPostings: result.recentPostings,
+            newPostings: result.newPostings,
+            updatedAt: new Date(),
+          }
+        : { lastPolledAt: result.polledAt, lastStatus: "FAILED", lastError: result.error, updatedAt: new Date() };
+    const [row] = await this.db
+      .update(companyWatches)
+      .set(set)
+      .where(eq(companyWatches.companyId, companyId))
+      .returning();
+    return row ?? null;
+  }
+
+  async listTalentPlatformProfiles(): Promise<TalentPlatformProfileRow[]> {
+    return this.db.select().from(talentPlatformProfiles);
+  }
+
+  async upsertTalentPlatformProfile(input: { siteId: string; status: string; note: string }): Promise<TalentPlatformProfileRow> {
+    const set = { status: input.status, note: input.note, updatedAt: new Date() };
+    const [row] = await this.db
+      .insert(talentPlatformProfiles)
+      .values({ siteId: input.siteId, ...set })
+      .onConflictDoUpdate({ target: talentPlatformProfiles.siteId, set })
+      .returning();
+    if (!row) {
+      throw new Error("talent platform profile upsert failed");
+    }
+    return row;
+  }
+
+  // The current verdict per job: its newest feedback row.
+  async latestFeedbackByJob(): Promise<Map<string, JobFeedbackRow>> {
+    const rows = await this.db
+      .selectDistinctOn([jobFeedback.jobId])
+      .from(jobFeedback)
+      .orderBy(jobFeedback.jobId, desc(jobFeedback.createdAt));
+    return new Map(rows.map((row) => [row.jobId, row]));
+  }
+
+  // Explanations written since `since`, for the daily model-cost limit.
+  async countExplanationsSince(since: Date): Promise<number> {
+    const [row] = await this.db
+      .select({ value: count() })
+      .from(jobEvaluations)
+      .where(and(isNotNull(jobEvaluations.explanation), gte(jobEvaluations.createdAt, since)));
+    return row?.value ?? 0;
+  }
+
+  async getLatestJobEvaluation(jobId: string): Promise<JobEvaluationRow | null> {
+    const [row] = await this.db
+      .select()
+      .from(jobEvaluations)
+      .where(eq(jobEvaluations.jobId, jobId))
+      .orderBy(desc(jobEvaluations.createdAt))
+      .limit(1);
+    return row ?? null;
   }
 
   private async recordJobStatusEvent(jobId: string, status: string): Promise<void> {

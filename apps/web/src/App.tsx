@@ -10,6 +10,11 @@ import {
   type TextProviderName,
 } from "@studio/shared";
 import { CareerView } from "./CareerView";
+import { JobFeedView } from "./JobFeedView";
+import { JobSitesView } from "./JobSitesView";
+import { ApplicationsView } from "./ApplicationsView";
+import { OperationsView } from "./OperationsView";
+import { ApplicationDetailsView } from "./ApplicationDetailsView";
 import { ContentPlanView } from "./ContentPlanView";
 import { CustomTopicsView, type CustomTopicDraft } from "./CustomTopicsView";
 import { DiscoverView } from "./DiscoverView";
@@ -24,6 +29,7 @@ import {
   downloadResumePdf,
   emptyProfile,
   extractResumeDraft,
+  fetchAttention,
   fetchProfile,
   saveProfile,
   uploadPhoto,
@@ -44,12 +50,20 @@ const STEPS = [
   { id: "post", label: "Post" },
   { id: "history", label: "History" },
   { id: "career", label: "Career" },
+  { id: "feed", label: "Job feed" },
+  { id: "applications", label: "Applications" },
+  { id: "operations", label: "Operations" },
+  { id: "sites", label: "Job sites" },
+  { id: "application", label: "Application details" },
 ] as const;
 
 type StepId = (typeof STEPS)[number]["id"];
 
 export function App() {
-  const [step, setStep] = useState<StepId>("welcome");
+  // Back from connecting Gmail (?email=...), the Applications step shows how it went.
+  const [step, setStep] = useState<StepId>(() =>
+    new URLSearchParams(window.location.search).has("email") ? "applications" : "welcome",
+  );
   const [profile, setProfile] = useState<ProfileInput>(emptyProfile);
   const [saved, setSaved] = useState<ProfilePublic | null>(null);
   const [status, setStatus] = useState<"idle" | "loading" | "saving" | "uploading">("loading");
@@ -57,6 +71,13 @@ export function App() {
   const [editingPostId, setEditingPostId] = useState<string | null>(null);
   const [showDocs, setShowDocs] = useState(false);
   const [compareOpportunityId, setCompareOpportunityId] = useState<string | null>(null);
+  // What waits on you in Applications (Milestone 5), refreshed when you move between steps.
+  const [attention, setAttention] = useState(0);
+  useEffect(() => {
+    fetchAttention()
+      .then((count) => setAttention(count.total))
+      .catch(() => undefined);
+  }, [step]);
   const [resumeProvider, setResumeProvider] = useState<TextProviderName | "">("");
   const [resumeStatus, setResumeStatus] = useState<"idle" | "extracting">("idle");
   const resumeInputRef = useRef<HTMLInputElement | null>(null);
@@ -192,7 +213,11 @@ export function App() {
                         ? "Post history"
                         : step === "career"
                           ? "Career tracker"
-                          : "Professional profile"}
+                          : step === "feed"
+                            ? "Job Hunter"
+                            : step === "sites" || step === "application" || step === "applications" || step === "operations"
+                              ? "Job Hunter"
+                              : "Professional profile"}
           </p>
           <h2>
             {step === "persona"
@@ -209,7 +234,17 @@ export function App() {
                         ? "Everything you've written so far"
                         : step === "career"
                           ? "Track companies and roles you're pursuing"
-                          : "Tell the system who you actually are"}
+                          : step === "feed"
+                            ? "Remote jobs ranked for you, with the evidence"
+                            : step === "sites"
+                              ? "Every job site, and how each one is covered"
+                              : step === "application"
+                                ? "What application forms will ask you"
+                                : step === "applications"
+                                  ? "Review, approve and follow each application"
+                                : step === "operations"
+                                  ? "Where applications convert, and what it costs"
+                                : "Tell the system who you actually are"}
           </h2>
           <nav className="steps" aria-label="Profile sections">
             {STEPS.filter((item) => item.id !== "welcome").map((item) => (
@@ -225,6 +260,11 @@ export function App() {
                 type="button"
               >
                 {item.label}
+                {item.id === "applications" && attention > 0 ? (
+                  <span className="step-count" data-testid="applications-attention" aria-label={`${attention} waiting on you`}>
+                    {attention}
+                  </span>
+                ) : null}
               </button>
             ))}
           </nav>
@@ -237,7 +277,12 @@ export function App() {
           step !== "discover" &&
           step !== "post" &&
           step !== "history" &&
-          step !== "career" ? (
+          step !== "career" &&
+          step !== "feed" &&
+          step !== "applications" &&
+          step !== "operations" &&
+          step !== "sites" &&
+          step !== "application" ? (
             <div className="notice">{saved.evidenceWarning}</div>
           ) : null}
 
@@ -345,6 +390,11 @@ export function App() {
               }}
             />
           ) : null}
+          {step === "feed" ? <JobFeedView /> : null}
+          {step === "sites" ? <JobSitesView /> : null}
+          {step === "applications" ? <ApplicationsView /> : null}
+          {step === "operations" ? <OperationsView /> : null}
+          {step === "application" ? <ApplicationDetailsView /> : null}
           {step === "career" ? (
             <CareerView
               onDraftTopic={(draft) => {
@@ -360,7 +410,12 @@ export function App() {
           step !== "discover" &&
           step !== "post" &&
           step !== "history" &&
-          step !== "career" ? (
+          step !== "career" &&
+          step !== "feed" &&
+          step !== "applications" &&
+          step !== "operations" &&
+          step !== "sites" &&
+          step !== "application" ? (
           <div className="actions">
             <button
               className="btn ghost"

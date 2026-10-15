@@ -28,3 +28,20 @@ export function malformedAiOutput(
 ): AppError {
   return new AppError(ERROR_CODES.MALFORMED_AI_OUTPUT, message, 422);
 }
+
+export function conflict(message: string): AppError {
+  return new AppError(ERROR_CODES.CONFLICT, message, 409);
+}
+
+export function unauthenticated(message = "Sign in to continue."): AppError {
+  return new AppError(ERROR_CODES.UNAUTHENTICATED, message, 401);
+}
+
+export function forbidden(message: string): AppError {
+  return new AppError(ERROR_CODES.FORBIDDEN, message, 403);
+}
+
+// The monthly model budget (AI_MONTHLY_BUDGET_USD) is spent: optional calls stop until next month.
+export function budgetReached(message = "This month's AI budget is spent. Raise AI_MONTHLY_BUDGET_USD or wait for next month."): AppError {
+  return new AppError(ERROR_CODES.AI_BUDGET_REACHED, message, 429);
+}

@@ -9,7 +9,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json --noEmit",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "tsx --test src/profile.test.ts src/persona.test.ts",
+    "test": "tsx --test src/profile.test.ts src/persona.test.ts src/board-reference.test.ts src/job-sites.test.ts",
     "lint": "node -e \"process.exit(0)\""
   },
   "dependencies": {

@@ -1,6 +1,8 @@
 import {
+  boolean,
   integer,
   jsonb,
+  numeric,
   pgTable,
   text,
   timestamp,
@@ -40,6 +42,7 @@ export const profiles = pgTable("profiles", {
   desiredPerception: text("desired_perception").notNull().default(""),
   writingTones: jsonb("writing_tones").$type<string[]>().notNull().default([]),
   postLength: text("post_length").notNull().default("MEDIUM"),
+  version: integer("version").notNull().default(1),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
@@ -180,6 +183,46 @@ export const companies = pgTable("companies", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+// Target-company watchlist (Milestone 1.5): the ATS board polled daily for one company.
+export const companyWatches = pgTable("company_watches", {
+  companyId: uuid("company_id")
+    .primaryKey()
+    .references(() => companies.id, { onDelete: "cascade" }),
+  source: text("source").notNull(),
+  boardToken: text("board_token").notNull(),
+  lastPolledAt: timestamp("last_polled_at", { withTimezone: true }),
+  lastStatus: text("last_status").notNull().default("NEVER"),
+  lastError: text("last_error").notNull().default(""),
+  openPostings: integer("open_postings"),
+  recentPostings: integer("recent_postings"),
+  newPostings: integer("new_postings"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// Talent-platform checklist (Milestone 1.5): the user's status on each platform in the catalog.
+export const talentPlatformProfiles = pgTable("talent_platform_profiles", {
+  siteId: text("site_id").primaryKey(),
+  status: text("status").notNull(),
+  note: text("note").notNull().default(""),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const applicationDetails = pgTable("application_details", {
+  id: uuid("id").primaryKey(),
+  contact: jsonb("contact").$type<Record<string, string>>().notNull().default({}),
+  education: jsonb("education").$type<unknown[]>().notNull().default([]),
+  certifications: jsonb("certifications").$type<unknown[]>().notNull().default([]),
+  spokenLanguages: jsonb("spoken_languages").$type<unknown[]>().notNull().default([]),
+  workAuthorization: text("work_authorization").notNull().default(""),
+  requiresVisaSponsorship: boolean("requires_visa_sponsorship"),
+  noticePeriod: text("notice_period").notNull().default(""),
+  timeZone: text("time_zone").notNull().default(""),
+  salaryExpectation: jsonb("salary_expectation").$type<Record<string, unknown> | null>(),
+  version: integer("version").notNull().default(1),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 export const jobs = pgTable("jobs", {
   id: uuid("id").primaryKey(),
   companyId: uuid("company_id")
@@ -206,8 +249,106 @@ export const jobs = pgTable("jobs", {
   appliedAt: timestamp("applied_at", { withTimezone: true }),
   notes: text("notes").notNull().default(""),
   nextAction: text("next_action").notNull().default(""),
+  canonicalUrl: text("canonical_url").notNull().default(""),
+  rawDescription: text("raw_description").notNull().default(""),
+  contentHash: text("content_hash").notNull().default(""),
+  sourcePostedAt: timestamp("source_posted_at", { withTimezone: true }),
+  normalizedData: jsonb("normalized_data").$type<Record<string, unknown>>().notNull().default({}),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// UNIQUE (job_id, type, version) is in migration 0026.
+export const applicationDocuments = pgTable("application_documents", {
+  id: uuid("id").primaryKey(),
+  jobId: uuid("job_id")
+    .notNull()
+    .references(() => jobs.id, { onDelete: "cascade" }),
+  type: text("type").notNull(),
+  version: integer("version").notNull(),
+  origin: text("origin").notNull(),
+  profileVersion: integer("profile_version").notNull(),
+  detailsVersion: integer("details_version"),
+  content: jsonb("content").$type<Record<string, unknown>>().notNull(),
+  contentHash: text("content_hash").notNull(),
+  storageKey: text("storage_key"),
+  fileHash: text("file_hash"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// UNIQUE (job_id) is in migration 0027: one application per job.
+export const applications = pgTable("applications", {
+  id: uuid("id").primaryKey(),
+  jobId: uuid("job_id")
+    .notNull()
+    .references(() => jobs.id, { onDelete: "cascade" }),
+  status: text("status").notNull(),
+  mode: text("mode").notNull(),
+  portal: text("portal"),
+  destinationUrl: text("destination_url").notNull().default(""),
+  lastError: text("last_error").notNull().default(""),
+  formSnapshot: jsonb("form_snapshot").$type<Record<string, unknown>>(),
+  fieldPlan: jsonb("field_plan").$type<unknown[]>(),
+  preview: jsonb("preview").$type<Record<string, unknown>>(),
+  payloadHash: text("payload_hash"),
+  agreed: jsonb("agreed").$type<string[]>().notNull().default([]),
+  submittedAt: timestamp("submitted_at", { withTimezone: true }),
+  confirmationReference: text("confirmation_reference").notNull().default(""),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const approvals = pgTable("approvals", {
+  id: uuid("id").primaryKey(),
+  applicationId: uuid("application_id")
+    .notNull()
+    .references(() => applications.id, { onDelete: "cascade" }),
+  payloadHash: text("payload_hash").notNull(),
+  destinationUrl: text("destination_url").notNull(),
+  documentIds: jsonb("document_ids").$type<string[]>().notNull().default([]),
+  formRevision: text("form_revision").notNull().default(""),
+  decision: text("decision").notNull().default("APPROVED"),
+  decidedAt: timestamp("decided_at", { withTimezone: true }).notNull().defaultNow(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  invalidatedAt: timestamp("invalidated_at", { withTimezone: true }),
+  invalidationReason: text("invalidation_reason").notNull().default(""),
+});
+
+export const executions = pgTable("executions", {
+  id: uuid("id").primaryKey(),
+  applicationId: uuid("application_id")
+    .notNull()
+    .references(() => applications.id, { onDelete: "cascade" }),
+  approvalId: uuid("approval_id")
+    .notNull()
+    .references(() => approvals.id, { onDelete: "cascade" }),
+  attemptNumber: integer("attempt_number").notNull(),
+  startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
+  clickedAt: timestamp("clicked_at", { withTimezone: true }),
+  finishedAt: timestamp("finished_at", { withTimezone: true }),
+  result: text("result").notNull().default(""),
+  errorType: text("error_type").notNull().default(""),
+  submitStatus: integer("submit_status"),
+  confirmationReference: text("confirmation_reference").notNull().default(""),
+});
+
+export const savedFormAnswers = pgTable("saved_form_answers", {
+  questionKey: text("question_key").primaryKey(),
+  label: text("label").notNull(),
+  answer: text("answer").notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const applicationEvents = pgTable("application_events", {
+  id: uuid("id").primaryKey(),
+  applicationId: uuid("application_id")
+    .notNull()
+    .references(() => applications.id, { onDelete: "cascade" }),
+  fromStatus: text("from_status"),
+  toStatus: text("to_status").notNull(),
+  actor: text("actor").notNull(),
+  reason: text("reason").notNull().default(""),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
 export const recruiters = pgTable("recruiters", {
@@ -300,5 +441,125 @@ export const customTopics = pgTable("custom_topics", {
     () => contentOpportunities.id,
     { onDelete: "set null" },
   ),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const sources = pgTable("sources", {
+  id: text("id").primaryKey(),
+  domain: text("domain").notNull(),
+  adapterType: text("adapter_type").notNull(),
+  discoveryAllowed: boolean("discovery_allowed").notNull().default(true),
+  applicationMode: text("application_mode").notNull().default("MANUAL"),
+  termsUrl: text("terms_url").notNull().default(""),
+  enabled: boolean("enabled").notNull().default(true),
+  notes: text("notes").notNull().default(""),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const jobEvaluations = pgTable("job_evaluations", {
+  id: uuid("id").primaryKey(),
+  jobId: uuid("job_id")
+    .notNull()
+    .references(() => jobs.id, { onDelete: "cascade" }),
+  profileVersion: integer("profile_version").notNull(),
+  eligibility: text("eligibility").notNull(),
+  eligibilityReasons: jsonb("eligibility_reasons").$type<unknown[]>().notNull().default([]),
+  score: integer("score"),
+  scoreBreakdown: jsonb("score_breakdown").$type<Record<string, unknown>>().notNull().default({}),
+  confidence: integer("confidence"),
+  explanation: jsonb("explanation").$type<unknown>(),
+  evidence: jsonb("evidence").$type<unknown[]>().notNull().default([]),
+  modelVersion: text("model_version").notNull().default(""),
+  promptVersion: text("prompt_version").notNull().default(""),
+  inputTokens: integer("input_tokens").notNull().default(0),
+  outputTokens: integer("output_tokens").notNull().default(0),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const jobFeedback = pgTable("job_feedback", {
+  id: uuid("id").primaryKey(),
+  jobId: uuid("job_id")
+    .notNull()
+    .references(() => jobs.id, { onDelete: "cascade" }),
+  evaluationId: uuid("evaluation_id")
+    .notNull()
+    .references(() => jobEvaluations.id, { onDelete: "cascade" }),
+  verdict: text("verdict").notNull(),
+  reasons: jsonb("reasons").$type<string[]>().notNull().default([]),
+  note: text("note").notNull().default(""),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const auditEvents = pgTable("audit_events", {
+  id: uuid("id").primaryKey(),
+  eventType: text("event_type").notNull(),
+  actor: text("actor").notNull(),
+  entityType: text("entity_type").notNull(),
+  entityId: text("entity_id").notNull(),
+  correlationId: text("correlation_id").notNull().default(""),
+  payload: jsonb("payload").$type<Record<string, unknown>>().notNull().default({}),
+  occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// Milestone 5: the connected recruiter mailbox. The refresh token is sealed (secret-box.ts).
+export const emailAccounts = pgTable("email_accounts", {
+  id: uuid("id").primaryKey(),
+  provider: text("provider").notNull().unique(),
+  emailAddress: text("email_address").notNull(),
+  sealedRefreshToken: text("sealed_refresh_token").notNull(),
+  scope: text("scope").notNull(),
+  connectedAt: timestamp("connected_at", { withTimezone: true }).notNull().defaultNow(),
+  lastCheckedAt: timestamp("last_checked_at", { withTimezone: true }),
+  lastError: text("last_error").notNull().default(""),
+});
+
+// Milestone 5: replies about applications. Unmatched Gmail messages keep only their id.
+export const recruiterMessages = pgTable("recruiter_messages", {
+  id: uuid("id").primaryKey(),
+  source: text("source").notNull(),
+  providerMessageId: text("provider_message_id"),
+  applicationId: uuid("application_id").references(() => applications.id, { onDelete: "cascade" }),
+  senderDomain: text("sender_domain").notNull().default(""),
+  subject: text("subject").notNull().default(""),
+  body: text("body"),
+  receivedAt: timestamp("received_at", { withTimezone: true }),
+  matchConfidence: text("match_confidence").notNull().default(""),
+  matchReason: text("match_reason").notNull().default(""),
+  classification: text("classification").notNull().default(""),
+  evidence: text("evidence").notNull().default(""),
+  classifiedBy: text("classified_by").notNull().default(""),
+  suggestedStatus: text("suggested_status").notNull().default(""),
+  decision: text("decision").notNull().default(""),
+  decidedAt: timestamp("decided_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// Model and search cost ledger (Milestone 5, ticket 7). Inserted, never updated.
+export const aiUsage = pgTable("ai_usage", {
+  id: uuid("id").primaryKey(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  // TEXT for a model call, SEARCH for search queries.
+  kind: text("kind").notNull(),
+  purpose: text("purpose").notNull(),
+  provider: text("provider").notNull(),
+  model: text("model").notNull().default(""),
+  promptVersion: text("prompt_version").notNull().default(""),
+  inputTokens: integer("input_tokens").notNull().default(0),
+  outputTokens: integer("output_tokens").notNull().default(0),
+  queries: integer("queries").notNull().default(0),
+  estimatedUsd: numeric("estimated_usd", { precision: 12, scale: 6, mode: "number" }).notNull().default(0),
+  priceKnown: boolean("price_known").notNull().default(true),
+});
+
+// Telegram notifications sent (Milestone 5, ticket 6): one row per event key, no message text.
+export const notifications = pgTable("notifications", {
+  id: uuid("id").primaryKey(),
+  key: text("key").notNull().unique(),
+  kind: text("kind").notNull(),
+  // PENDING while sending, then SENT or FAILED.
+  status: text("status").notNull(),
+  error: text("error").notNull().default(""),
+  sentAt: timestamp("sent_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });

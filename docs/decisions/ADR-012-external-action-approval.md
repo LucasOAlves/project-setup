@@ -104,3 +104,9 @@ extends to actions), [ADR-011](./ADR-011-career-domain-boundaries.md) (domain bo
 policy governs), [ADR-003](./ADR-003-unauthenticated-workspace.md) (still unresolved: whether
 Career ever reaches a state where `EXECUTE` is implementable at all depends on an auth decision
 this ADR does not make).
+
+## Update (Milestone 4)
+
+Job application submission is the first EXECUTE action. Its approval is bound to one payload
+hash with a 24-hour expiry, needs the signed-in user ([ADR-021](./ADR-021-single-user-sign-in.md)),
+and is invalidated by any later change ([ADR-022](./ADR-022-payload-bound-approval.md)).

@@ -166,3 +166,18 @@ not superseded), [ADR-006](./ADR-006-content-plan-seed.md) and
 [ADR-010](./ADR-010-document-upload-drafts.md) (precedents for `source`-discriminated,
 provider-agnostic domain records this ADR follows), [ADR-012](./ADR-012-external-action-approval.md)
 (human-approval policy for any future write-capable Career action).
+
+## Update — Job Hunter sources and the source registry (ADR-015)
+
+Remotive and Himalayas joined the `JobSearchProvider` port as two more public, unauthenticated
+aggregators focused on remote roles. Unlike the first five, both terms require attribution (a
+link back and naming the source), so search results now show "via <source>". Every source is
+now also a row in the `sources` table, and `CareerService` checks `SourceRegistry` before
+calling either port, so a source can be switched off without touching code.
+
+## Update — Application split out (ADR-019)
+
+Milestone 3 brought the richer per-application state this ADR anticipated. `Application` is now
+its own table with an enforced state machine and a transition history
+([ADR-019](./ADR-019-application-entity-and-state-machine.md)). `jobs.status` stays the
+pursuit funnel and still allows any move.

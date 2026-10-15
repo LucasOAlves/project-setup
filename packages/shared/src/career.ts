@@ -34,12 +34,12 @@ export type JobStatus = (typeof JOB_STATUSES)[number];
 
 // Board sources: a per-company job board you import from by giving the company's own board
 // token/slug (see ADR-011's update note, and the follow-up note below for the newer three).
-export const JOB_BOARD_SOURCES = ["greenhouse", "lever", "ashby"] as const;
+export const JOB_BOARD_SOURCES = ["greenhouse", "lever", "ashby", "workable", "smartrecruiters"] as const;
 export type JobBoardSource = (typeof JOB_BOARD_SOURCES)[number];
 
 // Search sources: an aggregator you query by keyword — results span many companies, so
 // importing one may need to create a new Company on the fly (see CareerService.importSearchResult).
-export const JOB_SEARCH_SOURCES = ["remoteok", "arbeitnow", "adzuna"] as const;
+export const JOB_SEARCH_SOURCES = ["remoteok", "arbeitnow", "adzuna", "remotive", "himalayas", "weworkremotely"] as const;
 export type JobSearchSource = (typeof JOB_SEARCH_SOURCES)[number];
 
 export const JOB_SOURCES = [
@@ -129,6 +129,19 @@ export const jobSearchResultSchema = z.object({
   location: z.string(),
   description: z.string(),
   companyName: z.string(),
+  // Normalization inputs some sources report (JOB-006), round-tripped through the client
+  // between search and import.
+  salary: z
+    .object({
+      min: z.number().nullable().optional(),
+      max: z.number().nullable().optional(),
+      currency: z.string().nullable().optional(),
+      period: z.string().nullable().optional(),
+      text: z.string().nullable().optional(),
+    })
+    .optional(),
+  employmentType: z.string().nullable().optional(),
+  postedAt: z.string().nullable().optional(),
 });
 export type JobSearchResult = z.infer<typeof jobSearchResultSchema>;
 
@@ -275,3 +288,406 @@ export const outreachMessageSchema = z.object({
   message: z.string().trim().max(2000),
 });
 export type OutreachMessage = z.infer<typeof outreachMessageSchema>;
+
+// Per-source permission registry (Job Hunter, spec §6). Mirrors the `sources` table: whether
+// the source may be queried at all, and how far application automation may go through it.
+export const SOURCE_APPLICATION_MODES = ["MANUAL", "ASSISTED", "AUTOMATED"] as const;
+export type SourceApplicationMode = (typeof SOURCE_APPLICATION_MODES)[number];
+
+export const sourcePublicSchema = z.object({
+  id: z.string(),
+  domain: z.string(),
+  adapterType: z.enum(["BOARD", "SEARCH"]),
+  discoveryAllowed: z.boolean(),
+  applicationMode: z.enum(SOURCE_APPLICATION_MODES),
+  termsUrl: z.string(),
+  enabled: z.boolean(),
+  notes: z.string(),
+});
+export type SourcePublic = z.infer<typeof sourcePublicSchema>;
+
+// enabled turns a source on or off. applicationMode AUTOMATED lets the app submit approved
+// applications on that portal (Milestone 4); only Greenhouse, Lever and Ashby accept it.
+export const sourcePatchInputSchema = z
+  .object({ enabled: z.boolean().optional(), applicationMode: z.enum(SOURCE_APPLICATION_MODES).optional() })
+  .refine((input) => input.enabled !== undefined || input.applicationMode !== undefined);
+export type SourcePatchInput = z.infer<typeof sourcePatchInputSchema>;
+
+// Hard eligibility (Job Hunter, spec A03). UNKNOWN is never presented as ELIGIBLE.
+export const JOB_ELIGIBILITY_STATUSES = ["ELIGIBLE", "EXCLUDED", "UNKNOWN"] as const;
+export type JobEligibilityStatus = (typeof JOB_ELIGIBILITY_STATUSES)[number];
+
+export const eligibilityReasonSchema = z.object({
+  rule: z.string(),
+  effect: z.enum(["EXCLUDES", "CONFIRMS", "SUPPORTS"]),
+  field: z.enum(["title", "location", "description"]),
+  quote: z.string(),
+});
+export type EligibilityReasonPublic = z.infer<typeof eligibilityReasonSchema>;
+
+// Matching v2 (JOB-011): six weighted dimensions, each saying whether the posting gave
+// enough to score it. Confidence is the share of weight that was known.
+export const MATCH_DIMENSIONS = [
+  "technical",
+  "seniority",
+  "experience",
+  "geography",
+  "compensation",
+  "preferences",
+] as const;
+export type MatchDimensionName = (typeof MATCH_DIMENSIONS)[number];
+
+export const matchDimensionResultSchema = z.object({
+  score: z.number(),
+  known: z.boolean(),
+  weight: z.number(),
+  notes: z.array(z.string()),
+});
+
+export const matchBreakdownSchema = z.object({
+  version: z.string(),
+  dimensions: z.record(z.enum(MATCH_DIMENSIONS), matchDimensionResultSchema),
+  matchedSkills: z.array(z.string()),
+  missingSkills: z.array(z.string()),
+  flags: z.array(z.string()),
+});
+export type MatchBreakdown = z.infer<typeof matchBreakdownSchema>;
+
+// Explanation agent (spec A05, JOB-012/013). Every claim says whether it is a confirmed FACT
+// or an INFERENCE and quotes its evidence. The server checks each quote against the job's
+// own text or the saved profile before storing it (job-explanation-grounding.ts).
+export const EXPLANATION_EVIDENCE_SOURCES = ["JOB", "PROFILE"] as const;
+export const EXPLANATION_CLAIM_KINDS = ["FACT", "INFERENCE"] as const;
+export const EXPLANATION_ACTIONS = ["APPLY", "CONSIDER", "SKIP"] as const;
+export const EXPLANATION_CONFIDENCE_LEVELS = ["HIGH", "MEDIUM", "LOW"] as const;
+
+export const explanationEvidenceSchema = z.object({
+  source: z.enum(EXPLANATION_EVIDENCE_SOURCES),
+  quote: z.string().trim().min(1).max(400),
+});
+export type ExplanationEvidence = z.infer<typeof explanationEvidenceSchema>;
+
+export const explanationClaimSchema = z.object({
+  statement: z.string().trim().min(1).max(600),
+  kind: z.enum(EXPLANATION_CLAIM_KINDS),
+  evidence: z.array(explanationEvidenceSchema).max(4).default([]),
+});
+export type ExplanationClaim = z.infer<typeof explanationClaimSchema>;
+
+const claimList = (max: number) => z.array(explanationClaimSchema).max(max).default([]);
+
+export const jobExplanationSchema = z.object({
+  executiveSummary: z.string().trim().min(1).max(800),
+  whyShortlisted: claimList(6),
+  matchedRequirements: claimList(10),
+  gaps: claimList(10),
+  geographicEligibility: claimList(4),
+  compensation: claimList(4),
+  technicalRelevance: claimList(4),
+  applicationRisks: claimList(6),
+  cvEmphasis: z.array(z.string().trim().min(1).max(300)).max(6).default([]),
+  interviewTopics: z.array(z.string().trim().min(1).max(300)).max(8).default([]),
+  recommendedAction: z.enum(EXPLANATION_ACTIONS),
+  confidence: z.enum(EXPLANATION_CONFIDENCE_LEVELS),
+});
+export type JobExplanation = z.infer<typeof jobExplanationSchema>;
+
+export const groundedJobExplanationSchema = jobExplanationSchema.extend({
+  grounding: z.object({ droppedClaims: z.number(), downgradedClaims: z.number(), droppedQuotes: z.number() }),
+});
+export type GroundedJobExplanation = z.infer<typeof groundedJobExplanationSchema>;
+
+export const jobEvaluationPublicSchema = z.object({
+  id: z.string(),
+  jobId: z.string(),
+  profileVersion: z.number(),
+  eligibility: z.enum(JOB_ELIGIBILITY_STATUSES),
+  eligibilityReasons: z.array(eligibilityReasonSchema),
+  // Null when the job was excluded by the rules or no profile was saved yet.
+  score: z.number().nullable(),
+  confidence: z.number().nullable(),
+  match: matchBreakdownSchema.nullable(),
+  // Null unless the job was shortlisted and explained (JOB-012).
+  explanation: groundedJobExplanationSchema.nullable(),
+  modelVersion: z.string(),
+  promptVersion: z.string(),
+  createdAt: z.string(),
+});
+export type JobEvaluationPublic = z.infer<typeof jobEvaluationPublicSchema>;
+
+// Ranked job feed (JOB-008): each tracked job with its latest evaluation and, separately, its
+// latest explanation, so a later re-score that was not explained does not hide it.
+export const FEED_ELIGIBILITY_FILTERS = [...JOB_ELIGIBILITY_STATUSES, "NOT_EVALUATED"] as const;
+export type FeedEligibilityFilter = (typeof FEED_ELIGIBILITY_FILTERS)[number];
+
+export const jobFeedQuerySchema = z.object({
+  eligibility: z
+    .string()
+    .default("ELIGIBLE,UNKNOWN,NOT_EVALUATED")
+    .transform((value) => value.split(",").map((item) => item.trim()).filter(Boolean))
+    .pipe(z.array(z.enum(FEED_ELIGIBILITY_FILTERS)).min(1)),
+  // Jobs without a score are left out once this is above 0.
+  minScore: z.coerce.number().int().min(0).max(100).default(0),
+  source: z.enum(JOB_SOURCES).optional(),
+  q: z.string().trim().max(120).default(""),
+  postedWithinDays: z.coerce.number().int().positive().max(365).optional(),
+});
+export type JobFeedQuery = z.infer<typeof jobFeedQuerySchema>;
+
+// Relevance feedback (JOB-014): the user's verdict on one evaluation, used to calibrate the
+// match weights. Reasons are a fixed list so they can be counted.
+export const FEEDBACK_VERDICTS = ["RELEVANT", "NOT_RELEVANT"] as const;
+export const FEEDBACK_REASONS = [
+  "GREAT_MATCH",
+  "WRONG_STACK",
+  "WRONG_SENIORITY",
+  "PAY_TOO_LOW",
+  "LOCATION",
+  "ROLE_TYPE",
+  "COMPANY",
+  "OTHER",
+] as const;
+export type FeedbackReason = (typeof FEEDBACK_REASONS)[number];
+
+export const jobFeedbackInputSchema = z.object({
+  evaluationId: z.string().uuid(),
+  verdict: z.enum(FEEDBACK_VERDICTS),
+  reasons: z.array(z.enum(FEEDBACK_REASONS)).max(FEEDBACK_REASONS.length).default([]),
+  note: z.string().trim().max(500).default(""),
+});
+export type JobFeedbackInput = z.infer<typeof jobFeedbackInputSchema>;
+
+export const jobFeedbackPublicSchema = z.object({
+  id: z.string(),
+  jobId: z.string(),
+  evaluationId: z.string(),
+  verdict: z.enum(FEEDBACK_VERDICTS),
+  reasons: z.array(z.enum(FEEDBACK_REASONS)),
+  note: z.string(),
+  createdAt: z.string(),
+});
+export type JobFeedbackPublic = z.infer<typeof jobFeedbackPublicSchema>;
+
+// How the user's verdicts line up with the match score. agreementRate is the share of rated,
+// scored jobs where "relevant" sits at or above the threshold and "not relevant" below it.
+export const feedbackSummarySchema = z.object({
+  threshold: z.number(),
+  rated: z.number(),
+  relevant: z.number(),
+  notRelevant: z.number(),
+  agreementRate: z.number().nullable(),
+  dimensions: z.record(
+    z.enum(MATCH_DIMENSIONS),
+    z.object({ relevantAverage: z.number().nullable(), notRelevantAverage: z.number().nullable() }),
+  ),
+  reasons: z.array(z.object({ reason: z.enum(FEEDBACK_REASONS), count: z.number() })),
+});
+export type FeedbackSummary = z.infer<typeof feedbackSummarySchema>;
+
+// Freshness and trust signals shown on a feed card (Milestone 1.5): an old or undated posting
+// may no longer be open, and a published salary or a link to the company's own careers site
+// make a posting more trustworthy.
+export const JOB_FRESHNESS_SIGNALS = ["NO_POSTED_DATE", "STALE", "LIKELY_GHOST", "SALARY_PUBLISHED", "COMPANY_SITE"] as const;
+export type JobFreshnessSignal = (typeof JOB_FRESHNESS_SIGNALS)[number];
+
+export const jobFeedItemSchema = z.object({
+  job: jobPublicSchema,
+  companyName: z.string(),
+  // When the source says it was posted, else when it was discovered.
+  postedAt: z.string(),
+  evaluation: jobEvaluationPublicSchema.nullable(),
+  explanation: groundedJobExplanationSchema.nullable(),
+  explainedAt: z.string().nullable(),
+  feedback: jobFeedbackPublicSchema.nullable(),
+  signals: z.array(z.enum(JOB_FRESHNESS_SIGNALS)),
+});
+export type JobFeedItem = z.infer<typeof jobFeedItemSchema>;
+
+
+// Target-company watchlist (Milestone 1.5): a company's ATS board polled daily.
+export const COMPANY_WATCH_STATUSES = ["NEVER", "OK", "FAILED"] as const;
+export type CompanyWatchStatus = (typeof COMPANY_WATCH_STATUSES)[number];
+
+export const companyWatchInputSchema = z.object({
+  source: z.enum(JOB_BOARD_SOURCES),
+  boardToken: z.string().trim().min(1).max(100),
+});
+export type CompanyWatchInput = z.infer<typeof companyWatchInputSchema>;
+
+export const companyWatchPublicSchema = z.object({
+  companyId: z.string().uuid(),
+  companyName: z.string(),
+  source: z.enum(JOB_BOARD_SOURCES),
+  boardToken: z.string(),
+  lastPolledAt: z.string().nullable(),
+  lastStatus: z.enum(COMPANY_WATCH_STATUSES),
+  lastError: z.string(),
+  // From the last successful poll: postings on the board, how many were published in the last
+  // 30 days, and how many were new to the tracker.
+  openPostings: z.number().nullable(),
+  recentPostings: z.number().nullable(),
+  newPostings: z.number().nullable(),
+  hiringFast: z.boolean(),
+});
+export type CompanyWatchPublic = z.infer<typeof companyWatchPublicSchema>;
+
+// Application documents (Milestone 2): immutable versions per job and type.
+export const APPLICATION_DOCUMENT_TYPES = ["CV", "COVER_LETTER", "APPLICATION_ANSWERS"] as const;
+export type ApplicationDocumentType = (typeof APPLICATION_DOCUMENT_TYPES)[number];
+// GENERATED: built by the app from the profile; EDITED: the user changed a generated version.
+export const APPLICATION_DOCUMENT_ORIGINS = ["GENERATED", "EDITED"] as const;
+export type ApplicationDocumentOrigin = (typeof APPLICATION_DOCUMENT_ORIGINS)[number];
+
+export const applicationDocumentPublicSchema = z.object({
+  id: z.string().uuid(),
+  jobId: z.string().uuid(),
+  type: z.enum(APPLICATION_DOCUMENT_TYPES),
+  version: z.number().int().positive(),
+  origin: z.enum(APPLICATION_DOCUMENT_ORIGINS),
+  profileVersion: z.number().int(),
+  detailsVersion: z.number().int().nullable(),
+  content: z.record(z.unknown()),
+  contentHash: z.string(),
+  hasFile: z.boolean(),
+  fileHash: z.string().nullable(),
+  createdAt: z.string(),
+});
+export type ApplicationDocumentPublic = z.infer<typeof applicationDocumentPublicSchema>;
+
+// Tailored CV v2 (Milestone 2): what the model returns. Ids and strings are checked against the
+// profile afterwards (tailored-cv.ts), so the schema only bounds sizes.
+export const tailoredCvModelOutputSchema = z.object({
+  rationale: z.string().trim().max(600).default(""),
+  summary: z
+    .array(z.object({ text: z.string().trim().max(400), evidence: z.array(z.string().max(400)).max(4).default([]) }))
+    .max(6)
+    .default([]),
+  experiences: z
+    .array(z.object({ id: z.string().min(1).max(100), bulletIds: z.array(z.string().min(1).max(120)).max(12).default([]) }))
+    .max(20)
+    .default([]),
+  topSkillsOrder: z.array(z.string().trim().max(80)).max(30).default([]),
+  technologiesOrder: z.array(z.string().trim().max(80)).max(50).default([]),
+});
+export type TailoredCvModelOutput = z.infer<typeof tailoredCvModelOutputSchema>;
+
+// What a saved CV document holds: everything the PDF shows, so a version is a complete record.
+export const tailoredCvContentSchema = z.object({
+  format: z.literal("tailored-cv@1"),
+  promptVersion: z.string(),
+  job: z.object({ title: z.string(), companyName: z.string() }),
+  header: z.object({
+    fullName: z.string(),
+    headline: z.string(),
+    contactLine: z.string(),
+    links: z.array(z.string()),
+  }),
+  rationale: z.string(),
+  summary: z.array(z.string()),
+  droppedSummarySentences: z.number().int(),
+  experiences: z.array(
+    z.object({
+      id: z.string(),
+      role: z.string(),
+      company: z.string(),
+      startPeriod: z.string(),
+      endPeriod: z.string(),
+      highlights: z.array(z.string()),
+    }),
+  ),
+  topSkills: z.array(z.string()),
+  technologies: z.array(z.string()),
+  education: z.array(z.string()),
+  certifications: z.array(z.string()),
+  languages: z.array(z.string()),
+  gaps: z.array(z.string()),
+  // Application details not filled in yet that the CV would show.
+  missingDetails: z.array(z.string()),
+});
+export type TailoredCvContent = z.infer<typeof tailoredCvContentSchema>;
+
+// Cover letter (Milestone 2): what the model returns. Quotes are checked afterwards (cover-letter.ts).
+export const coverLetterModelOutputSchema = z.object({
+  paragraphs: z
+    .array(
+      z.object({
+        sentences: z
+          .array(
+            z.object({
+              text: z.string().trim().max(500),
+              evidence: z
+                .array(z.object({ source: z.enum(["PROFILE", "JOB"]), quote: z.string().max(400) }))
+                .max(4)
+                .default([]),
+            }),
+          )
+          .max(8)
+          .default([]),
+      }),
+    )
+    .max(6)
+    .default([]),
+});
+export type CoverLetterModelOutput = z.infer<typeof coverLetterModelOutputSchema>;
+
+export const coverLetterContentSchema = z.object({
+  format: z.literal("cover-letter@1"),
+  // null for a version the user wrote or edited.
+  promptVersion: z.string().nullable(),
+  job: z.object({ title: z.string(), companyName: z.string() }),
+  header: z.object({ fullName: z.string(), contactLine: z.string() }),
+  greeting: z.string(),
+  paragraphs: z.array(z.string()),
+  signOff: z.string(),
+  droppedSentences: z.number().int(),
+});
+export type CoverLetterContent = z.infer<typeof coverLetterContentSchema>;
+
+// The user's edit of a letter: their own words, saved as an EDITED version.
+export const coverLetterEditSchema = z.object({
+  greeting: z.string().trim().min(1).max(200),
+  paragraphs: z.array(z.string().trim().min(1).max(3000)).min(1).max(8),
+  signOff: z.string().trim().min(1).max(300),
+});
+export type CoverLetterEdit = z.infer<typeof coverLetterEditSchema>;
+
+// Application answers (Milestone 2): common form questions answered from what the user stated.
+export const APPLICATION_ANSWER_STATUSES = ["FROM_PROFILE", "DRAFTED", "NEEDS_INPUT", "FROM_YOU"] as const;
+export const applicationAnswerSchema = z.object({
+  id: z.string(),
+  question: z.string(),
+  answer: z.string(),
+  status: z.enum(APPLICATION_ANSWER_STATUSES),
+  note: z.string().optional(),
+});
+export type ApplicationAnswerPublic = z.infer<typeof applicationAnswerSchema>;
+
+export const applicationAnswersContentSchema = z.object({
+  format: z.literal("application-answers@1"),
+  promptVersion: z.string().nullable(),
+  job: z.object({ title: z.string(), companyName: z.string() }),
+  answers: z.array(applicationAnswerSchema),
+  droppedSentences: z.number().int(),
+});
+export type ApplicationAnswersContent = z.infer<typeof applicationAnswersContentSchema>;
+
+// The model drafts only the open question; quotes are checked like a cover letter's.
+export const openAnswerModelOutputSchema = z.object({
+  sentences: z
+    .array(
+      z.object({
+        text: z.string().trim().max(500),
+        evidence: z
+          .array(z.object({ source: z.enum(["PROFILE", "JOB"]), quote: z.string().max(400) }))
+          .max(4)
+          .default([]),
+      }),
+    )
+    .max(6)
+    .default([]),
+});
+
+export const applicationAnswersEditSchema = z.object({
+  answers: z.array(z.object({ id: z.string().min(1).max(120), answer: z.string().trim().max(3000) })).min(1).max(40),
+});
+export type ApplicationAnswersEdit = z.infer<typeof applicationAnswersEditSchema>;

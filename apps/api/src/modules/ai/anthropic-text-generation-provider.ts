@@ -48,6 +48,10 @@ export class AnthropicTextGenerationProvider implements TextGenerationProvider {
       return {
         text,
         model: response.model || this.model,
+        usage: {
+          inputTokens: response.usage.input_tokens,
+          outputTokens: response.usage.output_tokens,
+        },
       };
     } catch (error) {
       throw mapAnthropicError(error);

@@ -10,16 +10,55 @@ import {
   recruiterInputSchema,
   recruiterPatchInputSchema,
   resumeTailoringPlanSchema,
+  sourcePatchInputSchema,
+  talentProfileInputSchema,
   textProviderSchema,
 } from "@studio/shared";
 import type { FastifyInstance } from "fastify";
 import { validationError } from "../../app-error.js";
 import type { CareerService } from "./career-service.js";
+import type { ApplicationDocumentService } from "./application-document-service.js";
+import type { SourceRegistry } from "./source-registry.js";
 
 export async function registerCareerRoutes(
   app: FastifyInstance,
   service: CareerService,
+  sources: SourceRegistry,
+  documents?: Pick<ApplicationDocumentService, "deleteFilesForJob">,
 ): Promise<void> {
+  // Source settings (spec §8 GET /settings/sources). `enabled` and, for the three automated
+  // portals, the application mode are user-editable here; discovery permission changes through
+  // reviewed migrations.
+  app.get("/api/career/sources", async () => {
+    return { sources: await sources.list() };
+  });
+
+  app.patch("/api/career/sources/:id", async (request) => {
+    const { id } = request.params as { id: string };
+    const parsed = sourcePatchInputSchema.safeParse(request.body);
+    if (!parsed.success) {
+      throw validationError("Send enabled as true or false, or applicationMode as MANUAL, ASSISTED or AUTOMATED.");
+    }
+    let source = parsed.data.enabled !== undefined ? await sources.setEnabled(id, parsed.data.enabled) : null;
+    if (parsed.data.applicationMode !== undefined) source = await sources.setApplicationMode(id, parsed.data.applicationMode);
+    return { source };
+  });
+
+  // Talent-platform checklist for the job-site catalog (Milestone 1.5). The catalog itself is
+  // static and ships with @studio/shared.
+  app.get("/api/career/job-sites/profiles", async () => {
+    return { profiles: await service.listTalentProfiles() };
+  });
+
+  app.put("/api/career/job-sites/:id/profile", async (request) => {
+    const { id } = request.params as { id: string };
+    const parsed = talentProfileInputSchema.safeParse(request.body);
+    if (!parsed.success) {
+      throw validationError("Pick a status for this platform.");
+    }
+    return { profile: await service.setTalentProfile(id, parsed.data) };
+  });
+
   app.get("/api/career/analytics", async () => {
     const analytics = await service.getAnalytics();
     return { analytics };
@@ -76,6 +115,23 @@ export async function registerCareerRoutes(
     return reply.code(201).send({ job });
   });
 
+  // Ranked job feed (JOB-008). Query: eligibility (comma list), minScore, source, q,
+  // postedWithinDays.
+  app.get("/api/career/feed", async (request) => {
+    return { items: await service.getJobFeed(request.query) };
+  });
+
+  // Relevance feedback (JOB-014). Body: { evaluationId, verdict, reasons?, note? }.
+  app.post("/api/career/jobs/:id/feedback", async (request, reply) => {
+    const { id } = request.params as { id: string };
+    reply.code(201);
+    return { feedback: await service.submitFeedback(id, request.body) };
+  });
+
+  app.get("/api/career/feedback/summary", async () => {
+    return { summary: await service.getFeedbackSummary() };
+  });
+
   app.get("/api/career/jobs", async () => {
     const jobs = await service.listJobs();
     return { jobs };
@@ -108,6 +164,18 @@ export async function registerCareerRoutes(
     }
     const job = await service.patchJob(id, parsed.data);
     return { job };
+  });
+
+  // Spec §8 POST /jobs/:id/evaluate. Today this runs the hard eligibility rules (JOB-007);
+  // scoring and the explanation join the same evaluation in later tickets.
+  app.post("/api/career/jobs/:id/evaluate", async (request) => {
+    const { id } = request.params as { id: string };
+    return { evaluation: await service.evaluateJob(id) };
+  });
+
+  app.get("/api/career/jobs/:id/evaluation", async (request) => {
+    const { id } = request.params as { id: string };
+    return { evaluation: await service.getLatestEvaluation(id) };
   });
 
   app.post("/api/career/jobs/:id/fit", async (request) => {
@@ -144,6 +212,8 @@ export async function registerCareerRoutes(
 
   app.delete("/api/career/jobs/:id", async (request) => {
     const { id } = request.params as { id: string };
+    // Generated documents' rows go with the job; their files (CVs carry contact details) first.
+    await documents?.deleteFilesForJob(id);
     await service.removeJob(id);
     const jobs = await service.listJobs();
     return { jobs };

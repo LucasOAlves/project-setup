@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import {
   JOB_BOARD_SOURCES,
+  detectBoardReference,
   JOB_EMPLOYMENT_TYPES,
   JOB_SEARCH_SOURCES,
   JOB_STATUSES,
@@ -9,6 +10,7 @@ import {
   TEXT_PROVIDERS,
   TEXT_PROVIDER_LABELS,
   type CompanyPublic,
+  type CompanyWatchPublic,
   type JobBoardSource,
   type JobEmploymentType,
   type JobFitResult,
@@ -41,6 +43,10 @@ import {
   generateOutreachMessage,
   generateResumeTailoringPlan,
   importFromBoard,
+  fetchWatchlist,
+  watchCompany,
+  unwatchCompany,
+  checkWatchNow,
   importSearchResult,
   patchJob,
   patchRecruiter,
@@ -57,12 +63,17 @@ const BOARD_SOURCE_LABELS: Record<JobBoardSource, string> = {
   greenhouse: "Greenhouse",
   lever: "Lever",
   ashby: "Ashby",
+  workable: "Workable",
+  smartrecruiters: "SmartRecruiters",
 };
 
 const SEARCH_SOURCE_LABELS: Record<JobSearchSource, string> = {
   remoteok: "RemoteOK",
   arbeitnow: "Arbeitnow",
   adzuna: "Adzuna",
+  remotive: "Remotive",
+  himalayas: "Himalayas",
+  weworkremotely: "We Work Remotely",
 };
 
 const CONNECTION_STATUS_LABELS: Record<RecruiterConnectionStatus, string> = {
@@ -132,12 +143,17 @@ export function CareerView({
   const [analytics, setAnalytics] = useState<CareerAnalytics | null>(null);
   const [importingCompanyId, setImportingCompanyId] = useState<string | null>(null);
   const [importResults, setImportResults] = useState<Record<string, { imported: number; skipped: number }>>({});
+  const [watches, setWatches] = useState<Record<string, CompanyWatchPublic>>({});
+  const [watchNotices, setWatchNotices] = useState<Record<string, string>>({});
   const [contentSuggestions, setContentSuggestions] = useState<ContentTopicSuggestion[]>([]);
   const [searchSource, setSearchSource] = useState<JobSearchSource>("remoteok");
   const [searchKeywords, setSearchKeywords] = useState("");
   const [searchLocation, setSearchLocation] = useState("");
   const [searching, setSearching] = useState(false);
   const [searchResults, setSearchResults] = useState<JobSearchResult[]>([]);
+  // The source the current results came from: the dropdown may change after a search, and
+  // both the import and the source attribution must use the source that produced them.
+  const [resultsSource, setResultsSource] = useState<JobSearchSource>("remoteok");
   const [addingResultId, setAddingResultId] = useState<string | null>(null);
   const [addedResultIds, setAddedResultIds] = useState<Set<string>>(new Set());
 
@@ -168,6 +184,59 @@ export function CareerView({
       cancelled = true;
     };
   }, []);
+
+  // The watchlist loads on its own so a failure there never blocks the rest of the page.
+  useEffect(() => {
+    let cancelled = false;
+    fetchWatchlist()
+      .then((list) => {
+        if (!cancelled) setWatches(Object.fromEntries(list.map((watch) => [watch.companyId, watch])));
+      })
+      .catch((err: ApiError) => {
+        if (!cancelled) setError(err.message);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  async function startWatching(companyId: string, source: JobBoardSource, boardToken: string) {
+    setError(null);
+    try {
+      const watch = await watchCompany(companyId, source, boardToken);
+      setWatches((current) => ({ ...current, [companyId]: watch }));
+      setWatchNotices((current) => ({ ...current, [companyId]: "Watching. The worker checks this board every day." }));
+    } catch (err) {
+      setError((err as ApiError).message);
+    }
+  }
+
+  async function stopWatching(companyId: string) {
+    setError(null);
+    try {
+      await unwatchCompany(companyId);
+      setWatches(({ [companyId]: _removed, ...rest }) => rest);
+      setWatchNotices(({ [companyId]: _notice, ...rest }) => rest);
+    } catch (err) {
+      setError((err as ApiError).message);
+    }
+  }
+
+  async function checkNow(companyId: string) {
+    setError(null);
+    try {
+      const result = await checkWatchNow(companyId);
+      setWatchNotices((current) => ({
+        ...current,
+        [companyId]:
+          result === "QUEUED"
+            ? "Check queued. New jobs show up in the Job feed once the worker has read the board."
+            : "Already checked this hour. Boards are read at most once an hour.",
+      }));
+    } catch (err) {
+      setError((err as ApiError).message);
+    }
+  }
 
   async function refreshAnalytics() {
     try {
@@ -240,6 +309,7 @@ export function CareerView({
     try {
       const results = await searchJobs(searchSource, searchKeywords.trim(), searchLocation.trim() || undefined);
       setSearchResults(results);
+      setResultsSource(searchSource);
       setAddedResultIds(new Set());
     } catch (err) {
       setError((err as ApiError).message);
@@ -252,7 +322,7 @@ export function CareerView({
     setError(null);
     setAddingResultId(posting.externalId);
     try {
-      const job = await importSearchResult(searchSource, posting);
+      const job = await importSearchResult(resultsSource, posting);
       setJobs((current) => [job, ...current]);
       setAddedResultIds((current) => new Set(current).add(posting.externalId));
       void refreshAnalytics();
@@ -561,6 +631,11 @@ export function CareerView({
               importing={importingCompanyId === company.id}
               importResult={importResults[company.id] ?? null}
               onImport={(source, boardToken) => void importBoard(company.id, source, boardToken)}
+              watch={watches[company.id] ?? null}
+              watchNotice={watchNotices[company.id] ?? null}
+              onWatch={(source, boardToken) => void startWatching(company.id, source, boardToken)}
+              onUnwatch={() => void stopWatching(company.id)}
+              onCheckNow={() => void checkNow(company.id)}
             />
           ))}
         </div>
@@ -617,6 +692,13 @@ export function CareerView({
                 {posting.location ? ` · ${posting.location}` : ""}
               </p>
               <h3>{posting.title}</h3>
+              {/* Remotive, Himalayas and We Work Remotely require a link back and naming them as the source. */}
+              <p className="eyebrow">
+                via{" "}
+                <a href={posting.url} target="_blank" rel="noreferrer">
+                  {SEARCH_SOURCE_LABELS[resultsSource]}
+                </a>
+              </p>
               <div className="actions" style={{ justifyContent: "flex-start" }}>
                 <button
                   className="btn ghost"
@@ -1187,14 +1269,28 @@ function CompanyCard({
   importing,
   importResult,
   onImport,
+  watch,
+  watchNotice,
+  onWatch,
+  onUnwatch,
+  onCheckNow,
 }: {
   company: CompanyPublic;
   importing: boolean;
   importResult: { imported: number; skipped: number } | null;
   onImport: (source: JobBoardSource, boardToken: string) => void;
+  watch: CompanyWatchPublic | null;
+  watchNotice: string | null;
+  onWatch: (source: JobBoardSource, boardToken: string) => void;
+  onUnwatch: () => void;
+  onCheckNow: () => void;
 }) {
   const [source, setSource] = useState<JobBoardSource>("greenhouse");
   const [boardToken, setBoardToken] = useState("");
+  // A pasted board or posting URL decides the source and token, whatever the select says.
+  const detected = detectBoardReference(boardToken);
+  const effectiveSource = detected?.source ?? source;
+  const effectiveToken = detected?.token ?? boardToken.trim();
 
   return (
     <article className="article-card">
@@ -1204,7 +1300,11 @@ function CompanyCard({
       <div className="grid-2">
         <label className="field">
           Board source
-          <select value={source} onChange={(event) => setSource(event.target.value as JobBoardSource)}>
+          <select
+            value={effectiveSource}
+            disabled={detected !== null}
+            onChange={(event) => setSource(event.target.value as JobBoardSource)}
+          >
             {JOB_BOARD_SOURCES.map((option) => (
               <option key={option} value={option}>
                 {BOARD_SOURCE_LABELS[option]}
@@ -1213,11 +1313,11 @@ function CompanyCard({
           </select>
         </label>
         <label className="field">
-          Board token
+          Board token or careers URL
           <input
             value={boardToken}
             onChange={(event) => setBoardToken(event.target.value)}
-            placeholder="e.g. nimbus"
+            placeholder="e.g. nimbus or https://jobs.ashbyhq.com/nimbus"
           />
         </label>
       </div>
@@ -1225,12 +1325,29 @@ function CompanyCard({
         <button
           className="btn ghost"
           type="button"
-          disabled={importing || !boardToken.trim()}
-          onClick={() => onImport(source, boardToken.trim())}
+          disabled={importing || !effectiveToken}
+          onClick={() => onImport(effectiveSource, effectiveToken)}
         >
-          {importing ? "Importing…" : `Import from ${BOARD_SOURCE_LABELS[source]}`}
+          {importing ? "Importing…" : `Import from ${BOARD_SOURCE_LABELS[effectiveSource]}`}
         </button>
+        {watch ? null : (
+          <button
+            className="btn ghost"
+            type="button"
+            disabled={!effectiveToken}
+            onClick={() => onWatch(effectiveSource, effectiveToken)}
+          >
+            Watch daily
+          </button>
+        )}
       </div>
+      {detected ? (
+        <p className="status">
+          Recognized {BOARD_SOURCE_LABELS[detected.source]} board: <code>{detected.token}</code>
+        </p>
+      ) : null}
+      {watch ? <WatchStatus watch={watch} onUnwatch={onUnwatch} onCheckNow={onCheckNow} /> : null}
+      {watchNotice ? <p className="status">{watchNotice}</p> : null}
       {importResult ? (
         <p className="status">
           Imported {importResult.imported} new job{importResult.imported === 1 ? "" : "s"}
@@ -1238,6 +1355,46 @@ function CompanyCard({
         </p>
       ) : null}
     </article>
+  );
+}
+
+function WatchStatus({
+  watch,
+  onUnwatch,
+  onCheckNow,
+}: {
+  watch: CompanyWatchPublic;
+  onUnwatch: () => void;
+  onCheckNow: () => void;
+}) {
+  let summary = "Not checked yet. The worker reads the board on its next daily run.";
+  if (watch.lastStatus === "FAILED") {
+    summary = `Last check failed: ${watch.lastError || "the board could not be read."}`;
+  } else if (watch.lastStatus === "OK") {
+    summary = `${watch.openPostings ?? 0} open roles, ${watch.recentPostings ?? 0} posted in the last 30 days, ${
+      watch.newPostings ?? 0
+    } new on the last check.`;
+  }
+
+  return (
+    <div className="notice">
+      <p>
+        <strong>Watching</strong> {BOARD_SOURCE_LABELS[watch.source]} · <code>{watch.boardToken}</code>
+        {watch.hiringFast ? <span className="tag" style={{ marginLeft: 8 }}>Hiring fast</span> : null}
+      </p>
+      <p>
+        {summary}
+        {watch.lastPolledAt ? ` Checked ${new Date(watch.lastPolledAt).toLocaleString()}.` : ""}
+      </p>
+      <div className="actions" style={{ justifyContent: "flex-start" }}>
+        <button className="btn ghost" type="button" onClick={onCheckNow}>
+          Check now
+        </button>
+        <button className="btn ghost" type="button" onClick={onUnwatch}>
+          Stop watching
+        </button>
+      </div>
+    </div>
   );
 }
 
@@ -1261,7 +1418,8 @@ function JobSourceGuide() {
             <p>
               <strong>Greenhouse.</strong> A hiring platform many companies use for their careers
               page. If a company's job listings live at{" "}
-              <code>boards.greenhouse.io/&lt;token&gt;</code>, that last part is the board token —
+              <code>job-boards.greenhouse.io/&lt;token&gt;</code> (or the older{" "}
+              <code>boards.greenhouse.io/&lt;token&gt;</code>), that last part is the board token —
               use it above.
             </p>
             <p>
@@ -1274,9 +1432,18 @@ function JobSourceGuide() {
               — same pattern, the token is the slug.
             </p>
             <p>
+              <strong>Workable.</strong> Job listings at <code>apply.workable.com/&lt;token&gt;</code>{" "}
+              (or <code>&lt;token&gt;.workable.com</code>) — the token is the account name.
+            </p>
+            <p>
+              <strong>SmartRecruiters.</strong> Job listings at{" "}
+              <code>jobs.smartrecruiters.com/&lt;token&gt;</code> — the token is the company identifier.
+            </p>
+            <p>
               To find a company's token: open their careers page, look for a "powered by
-              Greenhouse/Lever/Ashby" link, or check if their job URLs already match one of the
-              patterns above.
+              Greenhouse/Lever/Ashby/Workable/SmartRecruiters" link, or check if their job URLs already match one of the
+              patterns above. You can also paste a board or job URL into the token field and the
+              source and token are worked out for you.
             </p>
           </div>
           <div>
@@ -1293,6 +1460,11 @@ function JobSourceGuide() {
               search, but it needs a free API key. Get one instantly at{" "}
               <code>developer.adzuna.com</code>, then set <code>ADZUNA_APP_ID</code> and{" "}
               <code>ADZUNA_APP_KEY</code> in this workspace's environment.
+            </p>
+            <p>
+              <strong>We Work Remotely.</strong> A long-running remote-only board. Its public feed
+              of programming jobs is filtered by your keywords; every result links back to the
+              posting on We Work Remotely.
             </p>
           </div>
         </div>
