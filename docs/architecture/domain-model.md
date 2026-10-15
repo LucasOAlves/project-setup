@@ -477,6 +477,13 @@ version, input and output tokens or query count, the estimated cost in USD, and 
 was in the price table (an unknown model is counted at a high-end price for its provider). Rows
 are never updated. The month's sum is checked against `AI_MONTHLY_BUDGET_USD`.
 
+## Notification (Job Hunter)
+
+One row per event the app announced on Telegram (`notifications`, migration 0040): a unique key
+(for example `message.<id>`, `digest.<date>`, `follow-up.<application id>`), the kind, PENDING then
+SENT or FAILED with the error, and when it was sent. The key is claimed before sending, so an event
+goes out once. The message text is not kept.
+
 ## EmailAccount (Job Hunter)
 
 The mailbox the app reads recruiter replies from (`email_accounts`, migration 0036; ADR-023). One

@@ -41,6 +41,9 @@ import { defaultTextProvider, recruiterMailServiceFromEnv } from "./modules/emai
 import { MeteredSearchClient } from "./modules/usage/metered-providers.js";
 import type { UsageLedger } from "./modules/usage/usage-ledger.js";
 import { usageLedgerFromEnv } from "./modules/usage/usage-setup.js";
+import { notifierFromEnv } from "./modules/notifications/notification-setup.js";
+import { ResponseTrackingService } from "./modules/email/response-tracking-service.js";
+import { RecruiterMessageRepository } from "./modules/email/recruiter-message-repository.js";
 loadDotenv({
   path: path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../.env"),
 });
@@ -86,9 +89,18 @@ async function main() {
     { pattern: "15 * * * *", tz: env.DISCOVERY_TZ },
     { name: MONITORING_JOBS.emailCheck, data: { correlationId: "scheduled.email-check" }, opts: { attempts: 1 } },
   );
-  // Every model call and search query goes through the cost ledger (ticket 7).
-  const usage = usageLedgerFromEnv(env, db);
-  const recruiterMail = recruiterMailServiceFromEnv(env, db, usage);
+  // Telegram notifications (ticket 6), and the cost ledger every model call and search query
+  // goes through (ticket 7).
+  const notifier = notifierFromEnv(env, db);
+  const usage = usageLedgerFromEnv(env, db, (crossing) => notifier.budgetCrossed(crossing));
+  const recruiterMail = recruiterMailServiceFromEnv(env, db, usage, notifier);
+  const responses = new ResponseTrackingService(new RecruiterMessageRepository(db), async () => undefined, new AuditRepository(db), env.FOLLOW_UP_AFTER_DAYS);
+  await monitoringQueue.upsertJobScheduler(
+    MONITORING_JOBS.dailyNotifications,
+    { pattern: "0 8 * * *", tz: env.DISCOVERY_TZ },
+    { name: MONITORING_JOBS.dailyNotifications, data: { correlationId: "scheduled.daily-notifications" }, opts: { attempts: 1 } },
+  );
+  if (!notifier.enabled) logger.info("notifications disabled", { reason: "TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID are not both set" });
 
   const careerRepo = new CareerRepository(db);
   const profileRepo = new ProfileRepository(db);
@@ -184,6 +196,7 @@ async function main() {
     },
     [QUEUE_NAMES.monitoring]: async (job) => {
       if (job.name === MONITORING_JOBS.emailCheck) return recruiterMail.check();
+      if (job.name === MONITORING_JOBS.dailyNotifications) return notifier.daily(() => responses.list());
       throw new Error(`Unknown monitoring job: ${job.name}`);
     },
     [QUEUE_NAMES.system]: async (job) => {

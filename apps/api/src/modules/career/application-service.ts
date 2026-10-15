@@ -36,6 +36,8 @@ type JobLookup = (jobId: string) => Promise<{ id: string; url: string } | null>;
 type SubmissionCheck = (application: { mode: string; portal: string | null }) => Promise<SubmissionPermission>;
 // Moves the job's pursuit status to APPLIED once its application is sent (Milestone 5).
 type OnSubmitted = (jobId: string, at: Date) => Promise<unknown>;
+// Told about every status change, after it is stored (Milestone 5: notifications).
+type OnStateChange = (change: { applicationId: string; from: string; to: string; actor: string; at: Date }) => Promise<unknown>;
 
 const SWITCHED_OFF: SubmissionCheck = async () => ({ allowed: false, reason: "SWITCHED_OFF" });
 
@@ -62,6 +64,7 @@ export class ApplicationService {
     private readonly now: () => Date = () => new Date(),
     private readonly submissionCheck: SubmissionCheck = SWITCHED_OFF,
     private readonly onSubmitted: OnSubmitted = async () => undefined,
+    private readonly onStateChange: OnStateChange = async () => undefined,
   ) {}
 
   async getForJob(jobId: string): Promise<ApplicationPublic | null> {
@@ -297,6 +300,7 @@ export class ApplicationService {
       // The pursuit status follows the submission. Failing to move it never undoes what was sent.
       await this.onSubmitted(updated.jobId, updated.submittedAt ?? this.now()).catch(() => undefined);
     }
+    await this.onStateChange({ applicationId: updated.id, from, to, actor, at: updated.updatedAt ?? this.now() }).catch(() => undefined);
     return updated;
   }
 

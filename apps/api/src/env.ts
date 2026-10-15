@@ -92,6 +92,13 @@ const envSchema = z.object({
   // Model cost ledger (Milestone 5): monthly budget in USD for estimated model and search cost.
   // 0 turns the budget off (costs are still recorded). Optional calls stop once it is reached.
   AI_MONTHLY_BUDGET_USD: z.coerce.number().min(0).default(0),
+  // Telegram notifications (Milestone 5): off until both are set.
+  TELEGRAM_BOT_TOKEN: z.string().optional().default(""),
+  TELEGRAM_CHAT_ID: z.string().optional().default(""),
+  // The daily digest lists new jobs scoring at least this.
+  NOTIFY_DIGEST_MIN_SCORE: z.coerce.number().int().min(0).max(100).default(80),
+  // The app's address, linked from notifications. Empty leaves links out.
+  APP_PUBLIC_URL: z.string().optional().default(""),
   // Response tracking (Milestone 5): days without a reply before "consider following up".
   FOLLOW_UP_AFTER_DAYS: z.coerce.number().int().min(1).default(10),
 }).superRefine((env, context) => {

@@ -60,6 +60,8 @@ import { registerApplicationRoutes } from "./modules/career/application-routes.j
 import { emailAccountServiceFromEnv, mailCheckQueue, recruiterMailServiceFromEnv } from "./modules/email/email-setup.js";
 import { MeteredTextProvider } from "./modules/usage/metered-providers.js";
 import { usageLedgerFromEnv } from "./modules/usage/usage-setup.js";
+import { notifierFromEnv } from "./modules/notifications/notification-setup.js";
+import { registerAttentionRoute } from "./modules/notifications/notification-routes.js";
 import { registerUsageRoutes } from "./modules/usage/usage-routes.js";
 import { ResponseTrackingService } from "./modules/email/response-tracking-service.js";
 import { RecruiterMessageRepository } from "./modules/email/recruiter-message-repository.js";
@@ -89,8 +91,10 @@ export async function buildApp(env: Env, db: Database) {
   });
 
   const storage = new LocalStorageProvider(env.STORAGE_DIR);
-  // Every model call goes through the cost ledger (Milestone 5, ticket 7).
-  const usage = usageLedgerFromEnv(env, db);
+  // Telegram notifications (Milestone 5, ticket 6), and the cost ledger every model call goes
+  // through (ticket 7).
+  const notifier = notifierFromEnv(env, db);
+  const usage = usageLedgerFromEnv(env, db, (crossing) => notifier.budgetCrossed(crossing));
   const textProviders: Record<TextProviderName, TextGenerationProvider> = {
     openai: new MeteredTextProvider(new OpenAITextGenerationProvider(env.OPENAI_API_KEY, env.OPENAI_TEXT_MODEL), "openai", usage),
     anthropic: new MeteredTextProvider(new AnthropicTextGenerationProvider(env.ANTHROPIC_API_KEY, env.ANTHROPIC_TEXT_MODEL), "anthropic", usage),
@@ -210,6 +214,7 @@ export async function buildApp(env: Env, db: Database) {
     () => new Date(),
     submissionCheckFor(env.APPLICATION_SUBMISSION_ENABLED, (portal) => sourceRegistry.applicationPolicy(portal)),
     (jobId, at) => careerRepository.markApplied(jobId, at),
+    (change) => notifier.applicationChanged(change),
   );
 
   const authConfig = authConfigFromEnv(env);
@@ -241,10 +246,12 @@ export async function buildApp(env: Env, db: Database) {
     }),
     env.APPLICATION_SUBMISSION_ENABLED,
   );
+  const responses = new ResponseTrackingService(new RecruiterMessageRepository(db), (jobId, status) => career.updateJobStatus(jobId, status), new AuditRepository(db), env.FOLLOW_UP_AFTER_DAYS);
   await registerDiscoveryRoutes(app, env, new CompanyWatchService(new CareerRepository(db)));
-  await registerEmailRoutes(app, emailAccountServiceFromEnv(env, db), recruiterMailServiceFromEnv(env, db, usage), mailCheckQueue(env.REDIS_URL), authConfig.secureCookie,
-    new ResponseTrackingService(new RecruiterMessageRepository(db), (jobId, status) => career.updateJobStatus(jobId, status), new AuditRepository(db), env.FOLLOW_UP_AFTER_DAYS),
+  await registerEmailRoutes(app, emailAccountServiceFromEnv(env, db), recruiterMailServiceFromEnv(env, db, usage, notifier), mailCheckQueue(env.REDIS_URL), authConfig.secureCookie,
+    responses,
   );
+  await registerAttentionRoute(app, applications, responses);
 
   await registerUsageRoutes(app, usage);
 

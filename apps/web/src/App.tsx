@@ -28,6 +28,7 @@ import {
   downloadResumePdf,
   emptyProfile,
   extractResumeDraft,
+  fetchAttention,
   fetchProfile,
   saveProfile,
   uploadPhoto,
@@ -68,6 +69,13 @@ export function App() {
   const [editingPostId, setEditingPostId] = useState<string | null>(null);
   const [showDocs, setShowDocs] = useState(false);
   const [compareOpportunityId, setCompareOpportunityId] = useState<string | null>(null);
+  // What waits on you in Applications (Milestone 5), refreshed when you move between steps.
+  const [attention, setAttention] = useState(0);
+  useEffect(() => {
+    fetchAttention()
+      .then((count) => setAttention(count.total))
+      .catch(() => undefined);
+  }, [step]);
   const [resumeProvider, setResumeProvider] = useState<TextProviderName | "">("");
   const [resumeStatus, setResumeStatus] = useState<"idle" | "extracting">("idle");
   const resumeInputRef = useRef<HTMLInputElement | null>(null);
@@ -248,6 +256,11 @@ export function App() {
                 type="button"
               >
                 {item.label}
+                {item.id === "applications" && attention > 0 ? (
+                  <span className="step-count" data-testid="applications-attention" aria-label={`${attention} waiting on you`}>
+                    {attention}
+                  </span>
+                ) : null}
               </button>
             ))}
           </nav>

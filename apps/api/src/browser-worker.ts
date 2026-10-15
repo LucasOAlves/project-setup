@@ -32,6 +32,7 @@ import { LocalStorageProvider } from "./modules/uploads/local-storage.js";
 import { createLogger } from "./observability/logger.js";
 import { attachObservability } from "./worker/observability.js";
 import { createRedisConnection, QUEUE_NAMES } from "./worker/queues.js";
+import { notifierFromEnv } from "./modules/notifications/notification-setup.js";
 
 loadDotenv({
   path: path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../.env"),
@@ -53,6 +54,8 @@ async function main() {
   const careerRepo = new CareerRepository(db);
   const applicationRepo = new ApplicationRepository(db);
   const sourceRegistry = new SourceRegistry(db);
+  // Telegram notifications (Milestone 5): ready for review and submission results.
+  const notifier = notifierFromEnv(env, db);
   const applications = new ApplicationService(
     applicationRepo,
     audit,
@@ -63,6 +66,7 @@ async function main() {
     () => new Date(),
     submissionCheckFor(env.APPLICATION_SUBMISSION_ENABLED, (portal) => sourceRegistry.applicationPolicy(portal)),
     (jobId, at) => careerRepo.markApplied(jobId, at),
+    (change) => notifier.applicationChanged(change),
   );
   if (env.BROWSER_MOCK_PORTALS && env.NODE_ENV === "production") {
     throw new Error("BROWSER_MOCK_PORTALS is for local development only.");

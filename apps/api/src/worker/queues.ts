@@ -25,6 +25,7 @@ export const SYSTEM_JOBS = {
 
 export const MONITORING_JOBS = {
   emailCheck: "email-check",
+  dailyNotifications: "daily-notifications",
 } as const;
 
 export type DiscoveryJobData = { sourceId: string; correlationId: string };

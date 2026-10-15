@@ -1182,3 +1182,10 @@ export async function pasteRecruiterMessage(applicationId: string, input: { subj
   if (!response.ok) throw await parseError(response);
   return ((await response.json()) as { message: RecruiterMessagePublic }).message;
 }
+
+// What waits on the user in Applications: reviews, status suggestions and follow-ups due.
+export async function fetchAttention(): Promise<{ applications: number; suggestions: number; followUps: number; total: number }> {
+  const response = await fetch("/api/career/attention");
+  if (!response.ok) throw await parseError(response);
+  return (await response.json()) as { applications: number; suggestions: number; followUps: number; total: number };
+}

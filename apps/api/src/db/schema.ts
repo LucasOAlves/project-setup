@@ -551,3 +551,15 @@ export const aiUsage = pgTable("ai_usage", {
   estimatedUsd: numeric("estimated_usd", { precision: 12, scale: 6, mode: "number" }).notNull().default(0),
   priceKnown: boolean("price_known").notNull().default(true),
 });
+
+// Telegram notifications sent (Milestone 5, ticket 6): one row per event key, no message text.
+export const notifications = pgTable("notifications", {
+  id: uuid("id").primaryKey(),
+  key: text("key").notNull().unique(),
+  kind: text("kind").notNull(),
+  // PENDING while sending, then SENT or FAILED.
+  status: text("status").notNull(),
+  error: text("error").notNull().default(""),
+  sentAt: timestamp("sent_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});

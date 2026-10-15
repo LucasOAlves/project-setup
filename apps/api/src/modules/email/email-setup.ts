@@ -19,6 +19,7 @@ import { OpenAITextGenerationProvider } from "../ai/openai-text-generation-provi
 import type { TextGenerationProvider } from "../ai/text-generation-provider.js";
 import { MeteredTextProvider } from "../usage/metered-providers.js";
 import type { UsageLedger } from "../usage/usage-ledger.js";
+import type { Notifier } from "../notifications/notifier.js";
 
 // The same mailbox service for the API (connect, disconnect) and the worker (reading).
 export function emailAccountServiceFromEnv(env: Env, db: Database): EmailAccountService {
@@ -41,24 +42,30 @@ export function defaultTextProvider(env: Env, usage: UsageLedger): TextGeneratio
 
 // Each stored message is classified right away (by rules, then the default text provider),
 // and its class becomes a status suggestion when it would move the job forward.
-export function classifyStoredMessage(repo: Pick<RecruiterMessageRepository, "jobFor" | "setClassification">, classifier: Pick<MessageClassifier, "classify">) {
+export function classifyStoredMessage(
+  repo: Pick<RecruiterMessageRepository, "jobFor" | "setClassification">,
+  classifier: Pick<MessageClassifier, "classify">,
+  onClassified: (message: RecruiterMessageRow) => Promise<unknown> = async () => undefined,
+) {
   return async (message: RecruiterMessageRow): Promise<RecruiterMessageRow | null> => {
     if (!message.applicationId || message.body === null) return null;
     const result = await classifier.classify({ subject: message.subject, body: message.body });
     const job = await repo.jobFor(message.applicationId);
     const suggestedStatus = job ? suggestionFor(result.classification, job.status) : "";
-    return repo.setClassification(message.id, { ...result, suggestedStatus });
+    const stored = await repo.setClassification(message.id, { ...result, suggestedStatus });
+    if (stored) await onClassified(stored).catch(() => undefined);
+    return stored;
   };
 }
 
-export function recruiterMailServiceFromEnv(env: Env, db: Database, usage: UsageLedger): RecruiterMailService {
+export function recruiterMailServiceFromEnv(env: Env, db: Database, usage: UsageLedger, notifier?: Pick<Notifier, "messageClassified">): RecruiterMailService {
   const applications = new ApplicationRepository(db);
   const repo = new RecruiterMessageRepository(db);
   return new RecruiterMailService(
     repo,
     emailAccountServiceFromEnv(env, db),
     async (applicationId) => (await applications.get(applicationId)) !== null,
-    classifyStoredMessage(repo, new MessageClassifier(defaultTextProvider(env, usage))),
+    classifyStoredMessage(repo, new MessageClassifier(defaultTextProvider(env, usage)), async (message) => notifier?.messageClassified(message)),
   );
 }
 

@@ -128,6 +128,20 @@ h3 {
   border-color: var(--ink);
 }
 
+/* What waits on you in a step (Applications: reviews, suggestions, follow-ups). */
+.step-count {
+  display: inline-block;
+  margin-left: 6px;
+  min-width: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--copper);
+  color: var(--paper-strong);
+  font-size: 12px;
+  line-height: 18px;
+  text-align: center;
+}
+
 .grid-2 {
   display: grid;
   grid-template-columns: 1fr 1fr;
