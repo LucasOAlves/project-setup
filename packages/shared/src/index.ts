@@ -339,4 +339,7 @@ export {
   RECRUITER_MESSAGE_CLASSES,
   recruiterMessageClassificationSchema,
   type RecruiterMessageClass,
+  MESSAGE_DECISIONS,
+  sentApplicationSchema,
+  type SentApplication,
 } from "./applications.js";

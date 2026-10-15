@@ -56,11 +56,70 @@ export class RecruiterMessageRepository {
       .orderBy(asc(recruiterMessages.receivedAt));
   }
 
-  async setClassification(id: string, result: { classification: string; evidence: string; classifiedBy: string }): Promise<RecruiterMessageRow | null> {
+  async setClassification(
+    id: string,
+    result: { classification: string; evidence: string; classifiedBy: string; suggestedStatus: string },
+  ): Promise<RecruiterMessageRow | null> {
     const [row] = await this.db
       .update(recruiterMessages)
-      .set({ classification: result.classification, evidence: result.evidence, classifiedBy: result.classifiedBy })
+      .set({ classification: result.classification, evidence: result.evidence, classifiedBy: result.classifiedBy, suggestedStatus: result.suggestedStatus })
       .where(eq(recruiterMessages.id, id))
+      .returning();
+    return row ?? null;
+  }
+
+  // The job behind an application, with its pursuit status.
+  async jobFor(applicationId: string): Promise<{ jobId: string; status: string } | null> {
+    const [row] = await this.db
+      .select({ jobId: jobs.id, status: jobs.status })
+      .from(applications)
+      .innerJoin(jobs, eq(jobs.id, applications.jobId))
+      .where(eq(applications.id, applicationId));
+    return row ?? null;
+  }
+
+  // Sent applications with their job's pursuit status, newest first.
+  async sentApplications(): Promise<Array<{ applicationId: string; applicationStatus: string; submittedAt: Date; jobId: string; jobTitle: string; jobStatus: string; company: string }>> {
+    const rows = await this.db
+      .select({
+        applicationId: applications.id,
+        applicationStatus: applications.status,
+        submittedAt: applications.submittedAt,
+        updatedAt: applications.updatedAt,
+        jobId: jobs.id,
+        jobTitle: jobs.title,
+        jobStatus: jobs.status,
+        company: companies.name,
+      })
+      .from(applications)
+      .innerJoin(jobs, eq(jobs.id, applications.jobId))
+      .innerJoin(companies, eq(companies.id, jobs.companyId))
+      .where(inArray(applications.status, FOLLOWED));
+    return rows
+      .map(({ updatedAt, submittedAt, ...row }) => ({ ...row, submittedAt: submittedAt ?? updatedAt }))
+      .sort((a, b) => b.submittedAt.getTime() - a.submittedAt.getTime());
+  }
+
+  async forApplications(applicationIds: string[]): Promise<RecruiterMessageRow[]> {
+    if (applicationIds.length === 0) return [];
+    return this.db
+      .select()
+      .from(recruiterMessages)
+      .where(inArray(recruiterMessages.applicationId, applicationIds))
+      .orderBy(asc(recruiterMessages.receivedAt));
+  }
+
+  async get(id: string): Promise<RecruiterMessageRow | null> {
+    const [row] = await this.db.select().from(recruiterMessages).where(eq(recruiterMessages.id, id));
+    return row ?? null;
+  }
+
+  // Records the user's answer to a suggestion, once: a decided message is left as it is.
+  async decide(id: string, decision: string, at: Date): Promise<RecruiterMessageRow | null> {
+    const [row] = await this.db
+      .update(recruiterMessages)
+      .set({ decision, decidedAt: at })
+      .where(and(eq(recruiterMessages.id, id), eq(recruiterMessages.decision, "")))
       .returning();
     return row ?? null;
   }

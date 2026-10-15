@@ -68,7 +68,13 @@ they are not read again. Bodies are cleared after 180 days. Each kept message is
 (received, rejection, interview, assessment, offer, outreach, other or unclear) with the sentence
 that shows it: rules for the usual ATS templates, then the text model, which sees the subject and
 body with addresses, phone numbers and links masked. Without a quote from the message, it stays
-unclear. Without Gmail, you can paste a message
+unclear.
+
+**Sent applications** (on the Applications step) lists every sent application with its replies.
+A reply can suggest moving the job forward (applied, screening, interview, offer, or rejected); the
+job changes only when you accept. An application with no reply after `FOLLOW_UP_AFTER_DAYS` (10 by
+default) is flagged "consider following up". The app never writes to anyone. You can also paste a
+reply there. Without Gmail, you can paste a message
 on an application instead (`POST /api/career/applications/:id/messages`).
 
 Slice 1 is available: progressive professional profile, experiences, positioning, writing preferences, and up to three reference photos. On the Identity step, upload a resume PDF to pre-fill these forms (nothing is saved until you review and click Save and continue); on the Experience step, download a résumé PDF generated from the current saved profile, any time new information is added.

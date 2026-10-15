@@ -487,6 +487,8 @@ the reason). A Gmail message that matched nothing keeps only its provider id, so
 again, and Gmail ids are unique. Bodies older than 180 days are cleared. Each matched message gets a classification
 (APPLICATION_RECEIVED, REJECTION, INTERVIEW_REQUEST, ASSESSMENT, OFFER, RECRUITER_OUTREACH, OTHER or
 UNCLEAR), the quote it rests on, and `classified_by` (RULES, the prompt version, or NONE). A class
-without a quote from the message is UNCLEAR. The suggested pursuit status and the user's decision
-on it are filled by ticket 5.
+without a quote from the message is UNCLEAR. A class that would move the job forward becomes a
+`suggested_status` (APPLIED, SCREENING, INTERVIEW, OFFER or REJECTED). Only the signed-in user
+answers it: `decision` ACCEPTED (the job's status changes, with a status event and an audit event)
+or DISMISSED, with `decided_at`. A suggestion is answered once.
 

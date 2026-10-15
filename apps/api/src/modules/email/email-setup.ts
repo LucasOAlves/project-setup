@@ -13,6 +13,7 @@ import { ApplicationRepository } from "../career/application-repository.js";
 import type { RecruiterMessageRow } from "./recruiter-message-repository.js";
 import { parseEncryptionKey } from "./secret-box.js";
 import { MessageClassifier } from "./message-classifier.js";
+import { suggestionFor } from "./response-tracking.js";
 import { AnthropicTextGenerationProvider } from "../ai/anthropic-text-generation-provider.js";
 import { OpenAITextGenerationProvider } from "../ai/openai-text-generation-provider.js";
 import type { TextGenerationProvider } from "../ai/text-generation-provider.js";
@@ -33,12 +34,15 @@ export function defaultTextProvider(env: Env): TextGenerationProvider | null {
   return env.OPENAI_API_KEY ? new OpenAITextGenerationProvider(env.OPENAI_API_KEY, env.OPENAI_TEXT_MODEL) : null;
 }
 
-// Each stored message is classified right away: by rules, then the default text provider.
-export function classifyStoredMessage(repo: RecruiterMessageRepository, classifier: MessageClassifier) {
+// Each stored message is classified right away (by rules, then the default text provider),
+// and its class becomes a status suggestion when it would move the job forward.
+export function classifyStoredMessage(repo: Pick<RecruiterMessageRepository, "jobFor" | "setClassification">, classifier: Pick<MessageClassifier, "classify">) {
   return async (message: RecruiterMessageRow): Promise<RecruiterMessageRow | null> => {
     if (!message.applicationId || message.body === null) return null;
     const result = await classifier.classify({ subject: message.subject, body: message.body });
-    return repo.setClassification(message.id, result);
+    const job = await repo.jobFor(message.applicationId);
+    const suggestedStatus = job ? suggestionFor(result.classification, job.status) : "";
+    return repo.setClassification(message.id, { ...result, suggestedStatus });
   };
 }
 

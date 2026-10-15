@@ -89,6 +89,8 @@ const envSchema = z.object({
   // Explanation agent (JOB-012): shortlist threshold and the daily model-cost limit.
   EXPLANATION_MIN_SCORE: z.coerce.number().int().min(0).max(100).default(60),
   EXPLANATION_DAILY_LIMIT: z.coerce.number().int().min(0).default(25),
+  // Response tracking (Milestone 5): days without a reply before "consider following up".
+  FOLLOW_UP_AFTER_DAYS: z.coerce.number().int().min(1).default(10),
 }).superRefine((env, context) => {
   if (env.APP_PASSWORD_HASH && !isPasswordHash(env.APP_PASSWORD_HASH)) {
     context.addIssue({ code: "custom", path: ["APP_PASSWORD_HASH"], message: "Not a hash from `npm run hash-password`." });

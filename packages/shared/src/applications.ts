@@ -271,6 +271,19 @@ export const recruiterMessagePublicSchema = z.object({
 });
 export type RecruiterMessagePublic = z.infer<typeof recruiterMessagePublicSchema>;
 
+// A sent application and what came back (Milestone 5, ticket 5).
+export const MESSAGE_DECISIONS = ["ACCEPTED", "DISMISSED"] as const;
+export const sentApplicationSchema = z.object({
+  applicationId: z.string().uuid(),
+  applicationStatus: z.string(),
+  submittedAt: z.string(),
+  job: z.object({ id: z.string().uuid(), title: z.string(), company: z.string(), status: z.string() }),
+  messages: z.array(recruiterMessagePublicSchema),
+  // "Consider following up": no reply after the configured days, the job still at APPLIED.
+  followUp: z.object({ due: z.boolean(), waitingDays: z.number().int() }),
+});
+export type SentApplication = z.infer<typeof sentApplicationSchema>;
+
 export const pastedMessageInputSchema = z.object({
   subject: z.string().trim().max(500).default(""),
   body: z.string().trim().min(1).max(20_000),

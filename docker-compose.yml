@@ -57,6 +57,7 @@ services:
       WEB_SEARCH_TITLES: ${WEB_SEARCH_TITLES:-senior software engineer,senior fullstack engineer,tech lead,forward deployed engineer,ai engineer}
       EXPLANATION_MIN_SCORE: ${EXPLANATION_MIN_SCORE:-60}
       EXPLANATION_DAILY_LIMIT: ${EXPLANATION_DAILY_LIMIT:-25}
+      FOLLOW_UP_AFTER_DAYS: ${FOLLOW_UP_AFTER_DAYS:-10}
       APP_PASSWORD_HASH: ${APP_PASSWORD_HASH:-}
       SESSION_SECRET: ${SESSION_SECRET:-}
       SESSION_TTL_HOURS: ${SESSION_TTL_HOURS:-168}

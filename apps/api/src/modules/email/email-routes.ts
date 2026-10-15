@@ -3,6 +3,7 @@ import { readCookie } from "../auth/request-guard.js";
 import { z } from "zod";
 import { notFound, providerUnavailable } from "../../app-error.js";
 import type { EmailAccountService } from "./email-account-service.js";
+import type { ResponseTrackingService } from "./response-tracking-service.js";
 import type { RecruiterMailService } from "./recruiter-mail-service.js";
 
 export type MailCheckQueue = { enqueue(): Promise<void>; close(): Promise<void> };
@@ -20,6 +21,7 @@ export async function registerEmailRoutes(
   mail: Pick<RecruiterMailService, "paste" | "list">,
   checkQueue: MailCheckQueue,
   secureCookie: boolean,
+  responses: Pick<ResponseTrackingService, "list" | "accept" | "dismiss">,
 ): Promise<void> {
   app.addHook("onClose", async () => {
     await checkQueue.close();
@@ -27,6 +29,11 @@ export async function registerEmailRoutes(
   const applicationId = (raw: unknown) => {
     const parsed = z.string().uuid().safeParse(raw);
     if (!parsed.success) throw notFound("Application not found.");
+    return parsed.data;
+  };
+  const messageId = (raw: unknown) => {
+    const parsed = z.string().uuid().safeParse(raw);
+    if (!parsed.success) throw notFound("Message not found.");
     return parsed.data;
   };
   const stateCookie = (value: string, maxAge: number) =>
@@ -73,6 +80,20 @@ export async function registerEmailRoutes(
   app.get("/api/career/applications/:id/messages", async (request) => {
     const { id } = request.params as { id: string };
     return { messages: await mail.list(applicationId(id)) };
+  });
+
+  // Sent applications with their replies, suggestions and follow-up flags (ticket 5).
+  app.get("/api/career/responses", async () => ({ items: await responses.list() }));
+
+  // Only the signed-in user answers a suggestion; accepting changes the job's pursuit status.
+  app.post("/api/career/messages/:id/accept", { config: { signedIn: true } }, async (request) => {
+    const { id } = request.params as { id: string };
+    return { message: await responses.accept(messageId(id)) };
+  });
+
+  app.post("/api/career/messages/:id/dismiss", { config: { signedIn: true } }, async (request) => {
+    const { id } = request.params as { id: string };
+    return { message: await responses.dismiss(messageId(id)) };
   });
 
   app.post("/api/career/applications/:id/messages", async (request) => {

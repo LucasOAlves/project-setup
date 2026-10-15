@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { ApplicationInbox, ApplicationInboxItem, ApplicationState, SourcePublic } from "@studio/shared";
 import { ApplicationPanel } from "./ApplicationPanel";
+import { SentApplications } from "./SentApplications";
 import {
   checkEmailNow,
   disconnectEmail,
@@ -94,6 +95,7 @@ export function ApplicationsView() {
           }}
         />
       ))}
+      <SentApplications />
       <RecruiterEmail />
       {inbox ? <SubmissionSettings submissionEnabled={inbox.submissionEnabled} /> : null}
     </div>

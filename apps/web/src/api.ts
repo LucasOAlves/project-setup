@@ -1,5 +1,7 @@
 import type {
   ApplicationInbox,
+  RecruiterMessagePublic,
+  SentApplication,
   SourcePublic,
   SourceApplicationMode,
   AngleType,
@@ -1156,4 +1158,27 @@ export async function disconnectEmail(): Promise<EmailAccountStatus> {
   const response = await fetch("/api/email/disconnect", { method: "POST" });
   if (!response.ok) throw await parseError(response);
   return (await response.json()) as EmailAccountStatus;
+}
+
+// Sent applications with their replies, status suggestions and follow-up flags (Milestone 5).
+export async function fetchSentApplications(): Promise<SentApplication[]> {
+  const response = await fetch("/api/career/responses");
+  if (!response.ok) throw await parseError(response);
+  return ((await response.json()) as { items: SentApplication[] }).items;
+}
+
+export async function answerSuggestion(messageId: string, answer: "accept" | "dismiss"): Promise<RecruiterMessagePublic> {
+  const response = await fetch(`/api/career/messages/${encodeURIComponent(messageId)}/${answer}`, { method: "POST" });
+  if (!response.ok) throw await parseError(response);
+  return ((await response.json()) as { message: RecruiterMessagePublic }).message;
+}
+
+export async function pasteRecruiterMessage(applicationId: string, input: { subject: string; body: string }): Promise<RecruiterMessagePublic> {
+  const response = await fetch(`/api/career/applications/${encodeURIComponent(applicationId)}/messages`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!response.ok) throw await parseError(response);
+  return ((await response.json()) as { message: RecruiterMessagePublic }).message;
 }
