@@ -28,6 +28,8 @@ export const MONITORING_JOBS = {
   dailyNotifications: "daily-notifications",
   // Milestone 6: the encrypted daily backup.
   backup: "backup",
+  // Milestone 6: screenshots, message text, unmatched Gmail ids and notification records.
+  retention: "retention",
 } as const;
 
 export type DiscoveryJobData = { sourceId: string; correlationId: string };

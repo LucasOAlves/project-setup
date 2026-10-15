@@ -79,6 +79,7 @@ import { ApplicationAnswersGenerator } from "./modules/career/application-answer
 import { evaluationSettingsFromEnv } from "./modules/career/job-intake.js";
 import { authConfigFromEnv, registerAuth } from "./modules/auth/auth-routes.js";
 import { registerProfileRoutes } from "./modules/profile/profile-routes.js";
+import { retentionPolicyFromEnv } from "./modules/backup/retention-service.js";
 import { ProfileService } from "./modules/profile/profile-service.js";
 
 export async function buildApp(env: Env, db: Database) {
@@ -257,7 +258,11 @@ export async function buildApp(env: Env, db: Database) {
   await registerAttentionRoute(app, applications, responses);
 
   await registerUsageRoutes(app, usage);
-  await registerOperationsRoutes(app, new OperationsService(new OperationsRepository(db), usage, () => career.getFeedbackSummary()));
+  const dataSafety = {
+    retention: retentionPolicyFromEnv(env),
+    backups: { enabled: Boolean(env.BACKUP_DIR && env.BACKUP_ENCRYPTION_KEY), keep: env.BACKUP_KEEP },
+  };
+  await registerOperationsRoutes(app, new OperationsService(new OperationsRepository(db), usage, () => career.getFeedbackSummary(), dataSafety));
 
   app.setErrorHandler((error, _request, reply) => {
     if (error instanceof AppError) {

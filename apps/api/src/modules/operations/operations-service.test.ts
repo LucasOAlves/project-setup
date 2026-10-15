@@ -19,13 +19,18 @@ function setup() {
       costsSince = since;
       return [{ month: "2026-10", purpose: "job-explanation", usd: 0.42, calls: 30 }];
     },
+    async lastWorkerRun(job: string) {
+      if (job === "retention") return { eventType: "WORKER_JOB_COMPLETED", payload: { job, result: { screenshots: 2, messageBodies: 0 } }, occurredAt: NOW };
+      return { eventType: "WORKER_JOB_FAILED", payload: { job, error: { name: "Error", message: "disk full" } }, occurredAt: NOW };
+    },
     async auditEvents(query: AuditEventQuery) {
       queries.push(query);
       return [{ id: "e1", eventType: "SUBMISSION_FINISHED", actor: "WORKER", entityType: "application", entityId: "a1", correlationId: "", payload: { outcome: "SUBMITTED" }, occurredAt: NOW }];
     },
   };
   const usage = { summary: async () => ({ month: "2026-10", spentUsd: 0.42, budgetUsd: 10, state: "OK" as const }) };
-  const service = new OperationsService(repo, usage, async () => null, () => NOW);
+  const dataSafety = { retention: { screenshotDays: 30, messageBodyDays: 180, unmatchedMessageDays: 60, notificationDays: 180 }, backups: { enabled: true, keep: 7 } };
+  const service = new OperationsService(repo, usage, async () => null, dataSafety, () => NOW);
   return { service, queries, since: () => costsSince };
 }
 
@@ -49,4 +54,13 @@ test("audit events are filtered and paged, and a bad filter is refused", async (
   assert.deepEqual(queries[0], { actor: "WORKER", limit: 20, before: "2026-10-15T00:00:00.000Z" });
   await assert.rejects(service.auditEvents({ actor: "ROBOT" }), /Invalid audit filter/);
   await assert.rejects(service.auditEvents({ limit: "1000" }), /Invalid audit filter/);
+});
+
+test("the report shows the retention policy, the backup setting and the last run of each", async () => {
+  const { service } = setup();
+  const { dataSafety } = await service.report();
+  assert.equal(dataSafety.retention.screenshotDays, 30);
+  assert.deepEqual(dataSafety.backups, { enabled: true, keep: 7 });
+  assert.deepEqual(dataSafety.lastRetention, { at: NOW.toISOString(), ok: true, summary: { screenshots: 2, messageBodies: 0 } });
+  assert.deepEqual(dataSafety.lastBackup, { at: NOW.toISOString(), ok: false, summary: { name: "Error", message: "disk full" } });
 });

@@ -98,6 +98,10 @@ const envSchema = z.object({
   BACKUP_ENCRYPTION_KEY: z.string().optional().default(""),
   BACKUP_DIR: z.string().optional().default(""),
   BACKUP_KEEP: z.coerce.number().int().min(1).default(7),
+  // Retention (Milestone 6): the main worker's daily job deletes preview screenshots and clears
+  // matched recruiter message text after these many days.
+  SCREENSHOT_RETENTION_DAYS: z.coerce.number().int().min(1).default(30),
+  MESSAGE_BODY_RETENTION_DAYS: z.coerce.number().int().min(1).default(180),
   // Telegram notifications (Milestone 5): off until both are set.
   TELEGRAM_BOT_TOKEN: z.string().optional().default(""),
   TELEGRAM_CHAT_ID: z.string().optional().default(""),

@@ -16,7 +16,6 @@ import { BrowserApplicationSubmitter } from "./modules/browser/application-submi
 import { CareerRepository } from "./modules/career/career-repository.js";
 import {
   ApplicationPrepProcessor,
-  expireOldScreenshots,
   type ApplicationPrepJob,
 } from "./modules/browser/application-prep-processor.js";
 import { BrowserApplicationPreparer } from "./modules/browser/application-preparer.js";
@@ -115,16 +114,7 @@ async function main() {
     },
   });
 
-  const sweepScreenshots = async () => {
-    try {
-      const expired = await expireOldScreenshots(applicationRepo, (key) => storage.delete(key));
-      if (expired > 0) logger.info("expired preview screenshots", { count: expired });
-    } catch (error) {
-      logger.error("screenshot retention sweep failed", { error });
-    }
-  };
-  await sweepScreenshots();
-  const sweepTimer = setInterval(() => void sweepScreenshots(), 6 * 60 * 60 * 1000);
+  // Old preview screenshots are deleted by the main worker's daily retention job (Milestone 6).
 
   const submitProcessor = new ApplicationSubmitProcessor({
     applications,
@@ -155,7 +145,6 @@ async function main() {
   });
 
   const shutdown = async () => {
-    clearInterval(sweepTimer);
     await submitWorker.close();
     await worker.close();
     await connection.quit();

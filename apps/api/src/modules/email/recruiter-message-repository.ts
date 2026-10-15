@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, asc, eq, inArray, isNotNull, lt } from "drizzle-orm";
+import { and, asc, eq, inArray, isNotNull, isNull, lt, sql } from "drizzle-orm";
 import type { Database } from "../../db/client.js";
 import { applications, companies, jobs, recruiterMessages } from "../../db/schema.js";
 
@@ -124,11 +124,24 @@ export class RecruiterMessageRepository {
     return row ?? null;
   }
 
-  // Retention: the text goes, the classification and evidence quote stay.
-  async clearBodiesBefore(cutoff: Date): Promise<void> {
-    await this.db
+  // Retention (Milestone 6): the text goes, the classification and evidence quote stay. A
+  // pasted message without a received date counts from when it was stored.
+  async clearBodiesBefore(cutoff: Date): Promise<number> {
+    const rows = await this.db
       .update(recruiterMessages)
       .set({ body: null })
-      .where(and(isNotNull(recruiterMessages.body), lt(recruiterMessages.receivedAt, cutoff)));
+      .where(and(isNotNull(recruiterMessages.body), sql`COALESCE(${recruiterMessages.receivedAt}, ${recruiterMessages.createdAt}) < ${cutoff.toISOString()}::timestamptz`))
+      .returning({ id: recruiterMessages.id });
+    return rows.length;
+  }
+
+  // Gmail ids of messages that matched no application, kept only so a search does not open
+  // them again; after the cutoff the search can no longer find them.
+  async deleteUnmatchedBefore(cutoff: Date): Promise<number> {
+    const rows = await this.db
+      .delete(recruiterMessages)
+      .where(and(eq(recruiterMessages.source, "GMAIL"), isNull(recruiterMessages.applicationId), isNull(recruiterMessages.body), lt(recruiterMessages.createdAt, cutoff)))
+      .returning({ id: recruiterMessages.id });
+    return rows.length;
   }
 }

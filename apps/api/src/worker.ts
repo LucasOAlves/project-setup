@@ -45,6 +45,10 @@ import { notifierFromEnv } from "./modules/notifications/notification-setup.js";
 import { ResponseTrackingService } from "./modules/email/response-tracking-service.js";
 import { RecruiterMessageRepository } from "./modules/email/recruiter-message-repository.js";
 import { backupKey, pruneBackups, writeBackup } from "./modules/backup/backup-runner.js";
+import { applyRetention, retentionPolicyFromEnv } from "./modules/backup/retention-service.js";
+import { ApplicationRepository } from "./modules/career/application-repository.js";
+import { NotificationRepository } from "./modules/notifications/notification-repository.js";
+import { LocalStorageProvider } from "./modules/uploads/local-storage.js";
 loadDotenv({
   path: path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../.env"),
 });
@@ -113,6 +117,20 @@ async function main() {
     await monitoringQueue.removeJobScheduler(MONITORING_JOBS.backup);
     logger.warn("daily backup disabled", { reason: "BACKUP_DIR and BACKUP_ENCRYPTION_KEY are not both set" });
   }
+  // Retention (Milestone 6, ticket 4), daily at 04:00.
+  const retention = retentionPolicyFromEnv(env);
+  await monitoringQueue.upsertJobScheduler(
+    MONITORING_JOBS.retention,
+    { pattern: "0 4 * * *", tz: env.DISCOVERY_TZ },
+    { name: MONITORING_JOBS.retention, data: { correlationId: "scheduled.retention" }, opts: { attempts: 2, backoff: { type: "fixed", delay: 60_000 } } },
+  );
+  const storage = new LocalStorageProvider(env.STORAGE_DIR);
+  const retentionDeps = {
+    screenshots: new ApplicationRepository(db),
+    deleteFile: (key: string) => storage.delete(key),
+    messages: new RecruiterMessageRepository(db),
+    notifications: new NotificationRepository(db),
+  };
   if (!notifier.enabled) logger.info("notifications disabled", { reason: "TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID are not both set" });
 
   const careerRepo = new CareerRepository(db);
@@ -210,6 +228,7 @@ async function main() {
     [QUEUE_NAMES.monitoring]: async (job) => {
       if (job.name === MONITORING_JOBS.emailCheck) return recruiterMail.check();
       if (job.name === MONITORING_JOBS.dailyNotifications) return notifier.daily(() => responses.list());
+      if (job.name === MONITORING_JOBS.retention) return applyRetention(retentionDeps, retention);
       if (job.name === MONITORING_JOBS.backup) {
         const written = await writeBackup(sql, env, { dir: env.BACKUP_DIR });
         const pruned = await pruneBackups(env.BACKUP_DIR, env.BACKUP_KEEP);

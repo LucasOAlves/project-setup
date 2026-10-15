@@ -305,6 +305,28 @@ export const funnelGroupSchema = z.object({
 });
 export type FunnelGroup = z.infer<typeof funnelGroupSchema>;
 
+// Milestone 6: the retention policy, the backup setting and when each last ran.
+export const workerRunSchema = z.object({
+  at: z.string(),
+  ok: z.boolean(),
+  // The run's counts (or its error), as recorded in the audit history.
+  summary: z.record(z.union([z.string(), z.number(), z.boolean()])),
+});
+export type WorkerRun = z.infer<typeof workerRunSchema>;
+
+export const dataSafetySchema = z.object({
+  retention: z.object({
+    screenshotDays: z.number().int(),
+    messageBodyDays: z.number().int(),
+    unmatchedMessageDays: z.number().int(),
+    notificationDays: z.number().int(),
+  }),
+  backups: z.object({ enabled: z.boolean(), keep: z.number().int() }),
+  lastRetention: workerRunSchema.nullable(),
+  lastBackup: workerRunSchema.nullable(),
+});
+export type DataSafety = z.infer<typeof dataSafetySchema>;
+
 export const operationsReportSchema = z.object({
   funnel: z.array(z.object({ stage: z.string(), count: z.number().int() })),
   bySource: z.array(funnelGroupSchema),
@@ -315,6 +337,7 @@ export const operationsReportSchema = z.object({
   budget: z.object({ month: z.string(), spentUsd: z.number(), budgetUsd: z.number(), state: z.string() }),
   // Shown to the user; the matching weights are never changed from here.
   suggestions: z.array(z.string()),
+  dataSafety: dataSafetySchema,
 });
 export type OperationsReport = z.infer<typeof operationsReportSchema>;
 

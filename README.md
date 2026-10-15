@@ -64,7 +64,7 @@ Once connected, the worker reads Gmail every hour (and on **Check now**): only m
 30 days that comes from an ATS (Greenhouse, Lever, Ashby and others) or from a company you applied
 to, never your sent mail. A message is kept with the application it is about when it comes from the
 company's own domain, or from an ATS and names the company; other messages keep only their id, so
-they are not read again. Bodies are cleared after 180 days. Each kept message is labelled
+they are not read again. Bodies are cleared after `MESSAGE_BODY_RETENTION_DAYS` (180). Each kept message is labelled
 (received, rejection, interview, assessment, offer, outreach, other or unclear) with the sentence
 that shows it: rules for the usual ATS templates, then the text model, which sees the subject and
 body with addresses, phone numbers and links masked. Without a quote from the message, it stays
@@ -116,6 +116,15 @@ restore -w @studio/api -- <file>`: it refuses a database with data in it, a wron
 from a newer version. Keep `BACKUP_ENCRYPTION_KEY` and `APP_ENCRYPTION_KEY` somewhere outside the
 machine, because without the first a backup cannot be opened, and without the second a restored
 Gmail connection has to be made again (see [ADR-024](docs/decisions/ADR-024-application-level-backups.md)).
+
+### Retention
+
+A daily job (04:00) deletes preview screenshots after `SCREENSHOT_RETENTION_DAYS` (30), clears the
+text of recruiter messages after `MESSAGE_BODY_RETENTION_DAYS` (180, the label and quote stay),
+drops the ids of unmatched Gmail messages after 60 days and notification records after 180 (except
+follow-ups, so none is sent twice). Browser sessions are never kept: each run uses a fresh context
+that closes with it. The **Operations** step shows the policy and when the retention job and the
+backup last ran.
 
 ### Export and deletion
 

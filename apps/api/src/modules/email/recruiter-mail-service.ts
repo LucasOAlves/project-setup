@@ -6,9 +6,8 @@ import { buildMailQuery, matchMessage, parseGmailMessage, senderDomain, type Mat
 
 export const MAIL_LOOKBACK_DAYS = 30;
 export const MAIL_BATCH_LIMIT = 50;
-export const MESSAGE_BODY_RETENTION_DAYS = 180;
 
-type Repo = Pick<RecruiterMessageRepository, "followedApplications" | "knownProviderIds" | "insert" | "forApplication" | "clearBodiesBefore">;
+type Repo = Pick<RecruiterMessageRepository, "followedApplications" | "knownProviderIds" | "insert" | "forApplication">;
 type Accounts = Pick<EmailAccountService, "reader" | "recordCheck">;
 // Called with each newly stored message, so the next step (classification) can run. It may
 // return the updated row.
@@ -36,7 +35,6 @@ export class RecruiterMailService {
     const reader = await this.accounts.reader();
     if (!reader) return { status: "NOT_CONNECTED" };
     try {
-      await this.repo.clearBodiesBefore(new Date(this.now().getTime() - MESSAGE_BODY_RETENTION_DAYS * 24 * 60 * 60 * 1000));
       const followed = await this.repo.followedApplications();
       if (followed.length === 0) {
         await this.accounts.recordCheck();

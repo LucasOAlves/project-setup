@@ -303,7 +303,7 @@ exactly one row (`job_id` UNIQUE). It records:
 - `preview` (migration 0030): when the last run filled the form, its time, the landed page URL,
   how many fields the page showed back exactly as planned (`filled-values.ts`), which it could
   not report back, how many requests the guard refused, and the key of a full-page screenshot
-  with every typed value masked. Screenshots are deleted after 30 days and the counts stay. A
+  with every typed value masked. Screenshots are deleted after `SCREENSHOT_RETENTION_DAYS` (30) by the daily retention job and the counts stay. A
   value the page did not keep is not claimed: that field becomes a question again.
 - `payloadHash` (`application-payload.ts`, test-first): the identity of the exact payload. It
   covers the job, the destination URL, the form's shape (each question, its kind, whether it is
@@ -499,7 +499,7 @@ A message about an application (`recruiter_messages`, migration 0037), read from
 the user (`source` GMAIL or PASTED). A matched message holds the application, the sender's domain,
 subject, body as text, when it arrived, and how it was matched (`match_confidence` HIGH or LOW, with
 the reason). A Gmail message that matched nothing keeps only its provider id, so it is never fetched
-again, and Gmail ids are unique. Bodies older than 180 days are cleared. Each matched message gets a classification
+again, and Gmail ids are unique. The daily retention job clears bodies after `MESSAGE_BODY_RETENTION_DAYS` (180, counted from arrival, or from storage for a pasted message without a date) and deletes unmatched ids after 60 days, once a search can no longer find them. Each matched message gets a classification
 (APPLICATION_RECEIVED, REJECTION, INTERVIEW_REQUEST, ASSESSMENT, OFFER, RECRUITER_OUTREACH, OTHER or
 UNCLEAR), the quote it rests on, and `classified_by` (RULES, the prompt version, or NONE). A class
 without a quote from the message is UNCLEAR. A class that would move the job forward becomes a

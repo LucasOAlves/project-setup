@@ -156,7 +156,7 @@ test("screenshots past the retention limit are deleted and unlinked", async () =
     async (key) => {
       deletedFiles.push(key);
     },
-    new Date("2026-10-31T00:00:00Z"),
+    new Date("2026-10-01T00:00:00Z"),
   );
   assert.equal(count, 1);
   assert.equal(cutoff!.toISOString(), "2026-10-01T00:00:00.000Z");

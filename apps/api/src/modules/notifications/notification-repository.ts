@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, desc, eq, gte, inArray } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, lt, notInArray } from "drizzle-orm";
 import type { Database } from "../../db/client.js";
 import { applications, companies, jobEvaluations, jobs, notifications } from "../../db/schema.js";
 
@@ -10,6 +10,15 @@ export class NotificationRepository {
   async claim(key: string, kind: string): Promise<boolean> {
     const [row] = await this.db.insert(notifications).values({ id: randomUUID(), key, kind, status: "PENDING" }).onConflictDoNothing().returning({ id: notifications.id });
     return Boolean(row);
+  }
+
+  // Retention (Milestone 6): send records older than the cutoff, except the kinds kept.
+  async pruneBefore(cutoff: Date, keptKinds: string[]): Promise<number> {
+    const rows = await this.db
+      .delete(notifications)
+      .where(and(lt(notifications.createdAt, cutoff), keptKinds.length > 0 ? notInArray(notifications.kind, keptKinds) : undefined))
+      .returning({ id: notifications.id });
+    return rows.length;
   }
 
   async finish(key: string, status: "SENT" | "FAILED", error = ""): Promise<void> {

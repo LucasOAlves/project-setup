@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, lt, notInArray, sql, type SQL } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, lt, notInArray, sql, type SQL } from "drizzle-orm";
 import { detectBoardReference, type AuditEventQuery } from "@studio/shared";
 import type { Database } from "../../db/client.js";
 import { aiUsage, applications, auditEvents, jobEvaluations, jobStatusEvents, jobs, recruiterMessages } from "../../db/schema.js";
@@ -53,6 +53,18 @@ export class OperationsRepository {
       .groupBy(month, aiUsage.purpose)
       .orderBy(desc(month), desc(sql`SUM(${aiUsage.estimatedUsd})`));
     return rows.map((row) => ({ month: row.month, purpose: row.purpose, usd: Number(row.usd), calls: Number(row.calls) }));
+  }
+
+  // The latest completed or failed run of a main-worker job (backup, retention), from the
+  // audit events the worker writes for every job.
+  async lastWorkerRun(job: string) {
+    const [row] = await this.db
+      .select({ eventType: auditEvents.eventType, payload: auditEvents.payload, occurredAt: auditEvents.occurredAt })
+      .from(auditEvents)
+      .where(and(inArray(auditEvents.eventType, ["WORKER_JOB_COMPLETED", "WORKER_JOB_FAILED"]), sql`${auditEvents.payload}->>'job' = ${job}`))
+      .orderBy(desc(auditEvents.occurredAt))
+      .limit(1);
+    return row ?? null;
   }
 
   async auditEvents(query: AuditEventQuery) {

@@ -22,7 +22,6 @@ function setup(options: { connected?: boolean; followed?: boolean; failSearch?: 
   const queries: string[] = [];
   const opened: string[] = [];
   const stored: RecruiterMessageRow[] = [];
-  let cleared: Date | null = null;
   const inbox = [
     gmail("g1", "Acme <no-reply@hire.lever.co>", "Thanks for applying to Acme", "We received your application for Senior Engineer."),
     gmail("g2", "Newsletter <news@shop.example>", "Big sale", "Unrelated."),
@@ -50,9 +49,6 @@ function setup(options: { connected?: boolean; followed?: boolean; failSearch?: 
         return row;
       },
       forApplication: async (id) => rows.filter((row) => row.applicationId === id),
-      clearBodiesBefore: async (cutoff) => {
-        cleared = cutoff;
-      },
     },
     {
       reader: async () => (options.connected === false ? null : (reader as never)),
@@ -62,11 +58,11 @@ function setup(options: { connected?: boolean; followed?: boolean; failSearch?: 
     async (row) => void stored.push(row),
     () => NOW,
   );
-  return { service, rows, checks, queries, opened, stored, cleared: () => cleared };
+  return { service, rows, checks, queries, opened, stored };
 }
 
 test("a check opens what the narrowed search returns, keeps matched messages and only the id of the rest", async () => {
-  const { service, rows, checks, queries, stored, cleared } = setup();
+  const { service, rows, checks, queries, stored } = setup();
   const result = await service.check();
   assert.deepEqual(result, { status: "CHECKED", read: 2, matched: 1 });
   assert.match(queries[0]!, /from:acme\.io/);
@@ -79,7 +75,6 @@ test("a check opens what the narrowed search returns, keeps matched messages and
   assert.deepEqual([other.applicationId, other.subject, other.body, other.senderDomain], [null, "", null, ""], "nothing of an unrelated message is kept");
   assert.equal(stored.length, 1, "only the matched message goes on to classification");
   assert.deepEqual(checks, [""]);
-  assert.equal(cleared()?.toISOString(), "2026-04-18T12:00:00.000Z", "bodies older than 180 days are cleared");
 });
 
 test("a second check opens nothing it already read", async () => {

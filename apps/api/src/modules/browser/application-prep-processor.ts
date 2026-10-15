@@ -94,16 +94,14 @@ export class ApplicationPrepProcessor {
   }
 }
 
-export const SCREENSHOT_RETENTION_DAYS = 30;
-
-// Deletes preview screenshots older than the retention limit (spec section 6 "Define
-// retention limits for screenshots"). The preview keeps its counts.
+// Deletes preview screenshots taken before the cutoff (spec section 6 "Define retention limits
+// for screenshots"; SCREENSHOT_RETENTION_DAYS, run by the main worker's daily retention job).
+// The preview keeps its counts.
 export async function expireOldScreenshots(
   repo: { withScreenshotsBefore(cutoff: Date): Promise<Array<{ id: string; preview: Record<string, unknown> | null }>>; clearScreenshot(id: string): Promise<void> },
   deleteFile: (key: string) => Promise<void>,
-  now = new Date(),
+  cutoff: Date,
 ): Promise<number> {
-  const cutoff = new Date(now.getTime() - SCREENSHOT_RETENTION_DAYS * 24 * 60 * 60 * 1000);
   const expired = await repo.withScreenshotsBefore(cutoff);
   for (const row of expired) {
     const key = row.preview?.screenshotKey;

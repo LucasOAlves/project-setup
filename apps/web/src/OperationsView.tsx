@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { AuditEventPublic, FunnelGroup, OperationsReport } from "@studio/shared";
+import type { AuditEventPublic, DataSafety, FunnelGroup, OperationsReport, WorkerRun } from "@studio/shared";
 import { fetchAuditEvents, fetchOperationsReport, type ApiError } from "./api";
 
 // The Operations step (Milestone 5): where applications convert, what the models cost, and a
@@ -100,6 +100,7 @@ export function OperationsView() {
             )}
             <p className="status">Estimates from list prices. Your provider's invoice is the real figure.</p>
           </section>
+          <DataSafetyCard safety={report.dataSafety} />
         </>
       ) : null}
       <AuditHistory />
@@ -135,6 +136,61 @@ function Conversion({ title, groups }: { title: string; groups: FunnelGroup[] })
               <td>{group.offer}</td>
             </tr>
           ))}
+        </tbody>
+      </table>
+    </section>
+  );
+}
+
+function lastRun(run: WorkerRun | null, never: string): string {
+  if (!run) return never;
+  const when = new Date(run.at).toLocaleString();
+  if (!run.ok) return `Failed ${when}: ${String(run.summary.message ?? "see the audit history")}`;
+  const counts = Object.entries(run.summary)
+    .map(([key, value]) => `${key} ${String(value)}`)
+    .join(", ");
+  return `${when}${counts ? ` (${counts})` : ""}`;
+}
+
+function DataSafetyCard({ safety }: { safety: DataSafety }) {
+  const { retention, backups } = safety;
+  return (
+    <section className="article-card" data-testid="operations-data-safety">
+      <h3>Data safety</h3>
+      <table className="doc-table">
+        <tbody>
+          <tr>
+            <th>Preview screenshots</th>
+            <td>deleted after {retention.screenshotDays} days</td>
+          </tr>
+          <tr>
+            <th>Recruiter message text</th>
+            <td>cleared after {retention.messageBodyDays} days (the class and quote stay)</td>
+          </tr>
+          <tr>
+            <th>Unmatched Gmail ids</th>
+            <td>deleted after {retention.unmatchedMessageDays} days</td>
+          </tr>
+          <tr>
+            <th>Notification records</th>
+            <td>deleted after {retention.notificationDays} days (follow-ups are kept so none is sent twice)</td>
+          </tr>
+          <tr>
+            <th>Browser sessions</th>
+            <td>never kept: each run uses a fresh browser context</td>
+          </tr>
+          <tr>
+            <th>Last retention run</th>
+            <td>{lastRun(safety.lastRetention, "not yet (daily at 04:00)")}</td>
+          </tr>
+          <tr>
+            <th>Daily backup</th>
+            <td>{backups.enabled ? `on, keeping the newest ${backups.keep}` : "off: set BACKUP_DIR and BACKUP_ENCRYPTION_KEY"}</td>
+          </tr>
+          <tr>
+            <th>Last backup</th>
+            <td>{lastRun(safety.lastBackup, backups.enabled ? "not yet (daily at 03:00)" : "none")}</td>
+          </tr>
         </tbody>
       </table>
     </section>
