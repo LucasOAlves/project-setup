@@ -106,6 +106,17 @@ to cap the month: at 80% an `AI_BUDGET_WARNING` audit event is written, and at 1
 calls stop until the next month (both are also sent as notifications) (job explanations, cover letters, and recruiter message
 classification, which then uses its rules only). `GET /api/usage/summary` shows the month so far.
 
+### Backups
+
+Set `BACKUP_ENCRYPTION_KEY` (`openssl rand -base64 32`) and the worker writes an encrypted backup
+of the database and the stored files (CV, PDFs, screenshots) to `BACKUP_DIR` (`./backups` under
+Docker Compose) every day at 03:00, keeping the newest `BACKUP_KEEP` (7). `npm run backup -w
+@studio/api` makes one now. To restore, point the app at a new, empty database and run `npm run
+restore -w @studio/api -- <file>`: it refuses a database with data in it, a wrong key and a backup
+from a newer version. Keep `BACKUP_ENCRYPTION_KEY` and `APP_ENCRYPTION_KEY` somewhere outside the
+machine, because without the first a backup cannot be opened, and without the second a restored
+Gmail connection has to be made again (see [ADR-024](docs/decisions/ADR-024-application-level-backups.md)).
+
 Slice 1 is available: progressive professional profile, experiences, positioning, writing preferences, and up to three reference photos. On the Identity step, upload a resume PDF to pre-fill these forms (nothing is saved until you review and click Save and continue); on the Experience step, download a résumé PDF generated from the current saved profile, any time new information is added.
 
 Slice 2 is available: generate a structured professional persona and authority map from the saved profile. Set `OPENAI_API_KEY` in `.env` before generating.

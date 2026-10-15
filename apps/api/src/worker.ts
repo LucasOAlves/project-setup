@@ -44,6 +44,7 @@ import { usageLedgerFromEnv } from "./modules/usage/usage-setup.js";
 import { notifierFromEnv } from "./modules/notifications/notification-setup.js";
 import { ResponseTrackingService } from "./modules/email/response-tracking-service.js";
 import { RecruiterMessageRepository } from "./modules/email/recruiter-message-repository.js";
+import { backupKey, pruneBackups, writeBackup } from "./modules/backup/backup-runner.js";
 loadDotenv({
   path: path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../.env"),
 });
@@ -100,6 +101,18 @@ async function main() {
     { pattern: "0 8 * * *", tz: env.DISCOVERY_TZ },
     { name: MONITORING_JOBS.dailyNotifications, data: { correlationId: "scheduled.daily-notifications" }, opts: { attempts: 1 } },
   );
+  // Encrypted daily backup (Milestone 6, JOB-031) when BACKUP_DIR and BACKUP_ENCRYPTION_KEY are set.
+  const backupsOn = Boolean(env.BACKUP_DIR && backupKey(env));
+  if (backupsOn) {
+    await monitoringQueue.upsertJobScheduler(
+      MONITORING_JOBS.backup,
+      { pattern: "0 3 * * *", tz: env.DISCOVERY_TZ },
+      { name: MONITORING_JOBS.backup, data: { correlationId: "scheduled.backup" }, opts: { attempts: 2, backoff: { type: "fixed", delay: 60_000 } } },
+    );
+  } else {
+    await monitoringQueue.removeJobScheduler(MONITORING_JOBS.backup);
+    logger.warn("daily backup disabled", { reason: "BACKUP_DIR and BACKUP_ENCRYPTION_KEY are not both set" });
+  }
   if (!notifier.enabled) logger.info("notifications disabled", { reason: "TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID are not both set" });
 
   const careerRepo = new CareerRepository(db);
@@ -197,6 +210,11 @@ async function main() {
     [QUEUE_NAMES.monitoring]: async (job) => {
       if (job.name === MONITORING_JOBS.emailCheck) return recruiterMail.check();
       if (job.name === MONITORING_JOBS.dailyNotifications) return notifier.daily(() => responses.list());
+      if (job.name === MONITORING_JOBS.backup) {
+        const written = await writeBackup(sql, env, { dir: env.BACKUP_DIR });
+        const pruned = await pruneBackups(env.BACKUP_DIR, env.BACKUP_KEEP);
+        return { file: path.basename(written.file), bytes: written.bytes, rows: written.rows, files: written.files, pruned: pruned.length };
+      }
       throw new Error(`Unknown monitoring job: ${job.name}`);
     },
     [QUEUE_NAMES.system]: async (job) => {

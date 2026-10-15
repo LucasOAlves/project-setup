@@ -67,15 +67,15 @@ services:
       SESSION_TTL_HOURS: ${SESSION_TTL_HOURS:-168}
       APP_ORIGINS: ${APP_ORIGINS:-}
       APPLICATION_SUBMISSION_ENABLED: ${APPLICATION_SUBMISSION_ENABLED:-false}
-      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
-      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
-      APP_PUBLIC_URL: ${APP_PUBLIC_URL:-}
+      BACKUP_ENCRYPTION_KEY: ${BACKUP_ENCRYPTION_KEY:-}
+      BACKUP_DIR: /data/backups
       APP_ENCRYPTION_KEY: ${APP_ENCRYPTION_KEY:-}
       GOOGLE_OAUTH_CLIENT_ID: ${GOOGLE_OAUTH_CLIENT_ID:-}
       GOOGLE_OAUTH_CLIENT_SECRET: ${GOOGLE_OAUTH_CLIENT_SECRET:-}
       GOOGLE_OAUTH_REDIRECT_URI: ${GOOGLE_OAUTH_REDIRECT_URI:-}
     volumes:
       - media_data:/data/storage
+      - ./backups:/data/backups
       - ./apps/api/src:/app/apps/api/src
       - ./packages/shared/src:/app/packages/shared/src
     ports:
@@ -127,7 +127,14 @@ services:
       OPENAI_TEXT_MODEL: ${OPENAI_TEXT_MODEL:-gpt-4.1}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       ANTHROPIC_TEXT_MODEL: ${ANTHROPIC_TEXT_MODEL:-claude-opus-5}
+      # The daily encrypted backup (Milestone 6) of the database and the stored files, at 03:00.
+      STORAGE_DIR: /data/storage
+      BACKUP_DIR: /data/backups
+      BACKUP_ENCRYPTION_KEY: ${BACKUP_ENCRYPTION_KEY:-}
+      BACKUP_KEEP: ${BACKUP_KEEP:-7}
     volumes:
+      - media_data:/data/storage
+      - ./backups:/data/backups
       - ./apps/api/src:/app/apps/api/src
       - ./packages/shared/src:/app/packages/shared/src
 

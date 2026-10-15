@@ -10,6 +10,8 @@ coverage
 apps/api/data
 apps/api/.storage
 storage
+backups
+*.jhb
 .vscode
 .idea
 *.tsbuildinfo

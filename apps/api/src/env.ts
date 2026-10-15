@@ -92,6 +92,12 @@ const envSchema = z.object({
   // Model cost ledger (Milestone 5): monthly budget in USD for estimated model and search cost.
   // 0 turns the budget off (costs are still recorded). Optional calls stop once it is reached.
   AI_MONTHLY_BUDGET_USD: z.coerce.number().min(0).default(0),
+  // Backups (Milestone 6): 32 bytes as base64 or hex (`openssl rand -base64 32`), kept apart from
+  // APP_ENCRYPTION_KEY and outside the backups. With BACKUP_DIR set the worker writes one daily
+  // and keeps the newest BACKUP_KEEP.
+  BACKUP_ENCRYPTION_KEY: z.string().optional().default(""),
+  BACKUP_DIR: z.string().optional().default(""),
+  BACKUP_KEEP: z.coerce.number().int().min(1).default(7),
   // Telegram notifications (Milestone 5): off until both are set.
   TELEGRAM_BOT_TOKEN: z.string().optional().default(""),
   TELEGRAM_CHAT_ID: z.string().optional().default(""),
@@ -102,6 +108,9 @@ const envSchema = z.object({
   // Response tracking (Milestone 5): days without a reply before "consider following up".
   FOLLOW_UP_AFTER_DAYS: z.coerce.number().int().min(1).default(10),
 }).superRefine((env, context) => {
+  if (env.BACKUP_ENCRYPTION_KEY && !parseEncryptionKey(env.BACKUP_ENCRYPTION_KEY)) {
+    context.addIssue({ code: "custom", path: ["BACKUP_ENCRYPTION_KEY"], message: "Must be 32 bytes as base64 or hex (openssl rand -base64 32)." });
+  }
   if (env.APP_PASSWORD_HASH && !isPasswordHash(env.APP_PASSWORD_HASH)) {
     context.addIssue({ code: "custom", path: ["APP_PASSWORD_HASH"], message: "Not a hash from `npm run hash-password`." });
   }

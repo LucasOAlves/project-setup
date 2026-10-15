@@ -153,4 +153,23 @@ Decision for Lucas: how the app reads recruiter email.
 Option 3 is built in any case as the fallback: paste a message into an application.
 
 Not in this milestone: backup, restore and retention controls (JOB-031) and the deployment
-runbook (JOB-032). They are proposed as Milestone 6.
+runbook (JOB-032). They are Milestone 6.
+
+## Milestone 6 — backup, retention and operations runbook
+
+Approved on 2026-10-15 ("Pode seguir com todos faltando"). Done when spec section 6's privacy
+items are covered ("Encrypt backups and provide local export/deletion. Define retention limits
+for screenshots and browser sessions") and someone other than the author could deploy, back up,
+restore and troubleshoot the app from the docs alone.
+
+| # | Spec ticket | Scope | Depends on | Test-first |
+| --- | --- | --- | --- | --- |
+| 1 | JOB-031 | Encrypted backup: one archive with every table's rows and every stored file (CVs, letters, screenshots), gzip then AES-256-GCM under `BACKUP_ENCRYPTION_KEY` (separate from `APP_ENCRYPTION_KEY`). `npm run backup` writes it; the worker also writes one daily to `BACKUP_DIR` and keeps the newest `BACKUP_KEEP` (7) when both are set | — | yes (archive format, table order) |
+| 2 | JOB-031 | Restore: `npm run restore -- <file>` into an empty, migrated database, refusing a non-empty one, a wrong key or an archive from a newer schema; rows in foreign-key order, files back into storage | 1 | yes (table order) |
+| 3 | JOB-031 | Local export and deletion: `npm run backup -- --plain` writes an unencrypted export (with a warning), and `npm run delete-my-data -- --yes-delete-everything` removes the profile, application details, documents, applications, messages, the mailbox connection (token revoked) and all stored files, keeping only the audit log of what was done | 1 | no |
+| 4 | JOB-031 | Retention controls: a daily worker job applies `SCREENSHOT_RETENTION_DAYS` (30), `MESSAGE_BODY_RETENTION_DAYS` (180), id-only Gmail rows after 60 days and notification records after 180 days. Browser sessions are throwaway contexts that never outlive a run, which the runbook states. The Operations step shows the policy and the last run | — | yes (cutoffs) |
+| 5 | JOB-032 | `docs/operations/runbook.md`: deployment with Compose, generating secrets, first sign-in, Google and Telegram setup, backups and a restore drill, key loss and rotation, upgrades and migrations, monitoring (health, logs, audit, notifications) and what to do for each known failure (Redis down, stuck run, unknown submission, Gmail revoked, budget reached, portal blocked) | 1–4 | no |
+
+Defaults: backups are application-level (rows as JSON plus files) rather than `pg_dump`, so one
+command covers the database and the stored files and needs no Postgres client in the image (an
+ADR records the choice). Deletion is a command-line step only, never an API route.
