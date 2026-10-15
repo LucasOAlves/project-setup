@@ -8,6 +8,7 @@
     "start": "tsx src/index.ts",
     "backup": "tsx src/backup-cli.ts backup",
     "restore": "tsx src/backup-cli.ts restore",
+    "delete-my-data": "tsx src/backup-cli.ts delete-my-data",
     "dev:worker": "tsx watch src/worker.ts",
     "worker": "tsx src/worker.ts",
     "browser-worker": "tsx src/browser-worker.ts",

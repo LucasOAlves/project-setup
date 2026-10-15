@@ -71,8 +71,15 @@ export class EmailAccountService {
   }
 
   async disconnect(): Promise<EmailAccountStatus> {
+    await this.forget();
+    return this.status();
+  }
+
+  // Revokes the grant at Google and removes the stored token. Whether Google confirmed the
+  // revocation, or null when no mailbox was connected (also used by delete-my-data).
+  async forget(): Promise<boolean | null> {
     const row = await this.repo.get(PROVIDER);
-    if (!row) return this.status();
+    if (!row) return null;
     let revoked = false;
     if (this.key) {
       try {
@@ -83,7 +90,7 @@ export class EmailAccountService {
     }
     await this.repo.remove(PROVIDER);
     await this.audit.record({ eventType: "EMAIL_DISCONNECTED", actor: "USER", entityType: "email_account", entityId: PROVIDER, payload: { provider: PROVIDER, revoked } });
-    return this.status();
+    return revoked;
   }
 
   // A reader with a fresh access token, or null when no mailbox is connected. A revoked grant

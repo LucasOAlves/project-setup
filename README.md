@@ -117,6 +117,15 @@ from a newer version. Keep `BACKUP_ENCRYPTION_KEY` and `APP_ENCRYPTION_KEY` some
 machine, because without the first a backup cannot be opened, and without the second a restored
 Gmail connection has to be made again (see [ADR-024](docs/decisions/ADR-024-application-level-backups.md)).
 
+### Export and deletion
+
+`npm run backup -w @studio/api -- --plain` writes an unencrypted JSON export of everything (with
+a warning, since it holds your CV and messages). `npm run delete-my-data -w @studio/api --
+--yes-delete-everything` revokes the Gmail grant at Google, then deletes the profile, CV, jobs,
+applications, documents, recruiter messages and every stored file. It keeps only the audit log
+(which records the deletion), the AI cost ledger and the job source settings. It is a command-line
+step on purpose, with no button or API route; make a backup and stop the worker first.
+
 Slice 1 is available: progressive professional profile, experiences, positioning, writing preferences, and up to three reference photos. On the Identity step, upload a resume PDF to pre-fill these forms (nothing is saved until you review and click Save and continue); on the Experience step, download a résumé PDF generated from the current saved profile, any time new information is added.
 
 Slice 2 is available: generate a structured professional persona and authority map from the saved profile. Set `OPENAI_API_KEY` in `.env` before generating.
