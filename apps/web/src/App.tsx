@@ -57,7 +57,10 @@ const STEPS = [
 type StepId = (typeof STEPS)[number]["id"];
 
 export function App() {
-  const [step, setStep] = useState<StepId>("welcome");
+  // Back from connecting Gmail (?email=...), the Applications step shows how it went.
+  const [step, setStep] = useState<StepId>(() =>
+    new URLSearchParams(window.location.search).has("email") ? "applications" : "welcome",
+  );
   const [profile, setProfile] = useState<ProfileInput>(emptyProfile);
   const [saved, setSaved] = useState<ProfilePublic | null>(null);
   const [status, setStatus] = useState<"idle" | "loading" | "saving" | "uploading">("loading");

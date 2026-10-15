@@ -1,6 +1,7 @@
 import { JOB_SEARCH_SOURCES } from "@studio/shared";
 import { z } from "zod";
 import { isPasswordHash } from "./modules/auth/password.js";
+import { parseEncryptionKey } from "./modules/email/secret-box.js";
 
 function splitList(value: string): string[] {
   return value
@@ -48,6 +49,14 @@ const envSchema = z.object({
     .enum(["true", "false"])
     .default("false")
     .transform((value) => value === "true"),
+  // Encryption at rest for stored secrets such as the Gmail refresh token (Milestone 5): 32
+  // random bytes as base64 or hex, e.g. `openssl rand -base64 32`.
+  APP_ENCRYPTION_KEY: z.string().optional().default(""),
+  // Recruiter email (Milestone 5): your own Google OAuth client, read-only Gmail scope. The
+  // redirect URI is this app's /api/email/google/callback, as registered on the client.
+  GOOGLE_OAUTH_CLIENT_ID: z.string().optional().default(""),
+  GOOGLE_OAUTH_CLIENT_SECRET: z.string().optional().default(""),
+  GOOGLE_OAUTH_REDIRECT_URI: z.string().optional().default(""),
   // Development only: serve the mock portals instead of the network, to try the flow locally.
   BROWSER_MOCK_PORTALS: z
     .enum(["true", "false"])
@@ -86,6 +95,18 @@ const envSchema = z.object({
   }
   if (env.APP_PASSWORD_HASH && env.SESSION_SECRET.length < 32) {
     context.addIssue({ code: "custom", path: ["SESSION_SECRET"], message: "Set at least 32 random characters when APP_PASSWORD_HASH is set." });
+  }
+  try {
+    parseEncryptionKey(env.APP_ENCRYPTION_KEY);
+  } catch (error) {
+    context.addIssue({ code: "custom", path: ["APP_ENCRYPTION_KEY"], message: (error as Error).message });
+  }
+  if (env.GOOGLE_OAUTH_CLIENT_ID && (!env.GOOGLE_OAUTH_CLIENT_SECRET || !env.GOOGLE_OAUTH_REDIRECT_URI || !env.APP_ENCRYPTION_KEY)) {
+    context.addIssue({
+      code: "custom",
+      path: ["GOOGLE_OAUTH_CLIENT_ID"],
+      message: "Gmail needs GOOGLE_OAUTH_CLIENT_SECRET, GOOGLE_OAUTH_REDIRECT_URI and APP_ENCRYPTION_KEY too.",
+    });
   }
   if (env.NODE_ENV === "production" && !env.APP_PASSWORD_HASH) {
     context.addIssue({ code: "custom", path: ["APP_PASSWORD_HASH"], message: "Production needs a sign-in password." });

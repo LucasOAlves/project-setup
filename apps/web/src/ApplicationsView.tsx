@@ -1,7 +1,16 @@
 import { useEffect, useRef, useState } from "react";
 import type { ApplicationInbox, ApplicationInboxItem, ApplicationState, SourcePublic } from "@studio/shared";
 import { ApplicationPanel } from "./ApplicationPanel";
-import { fetchApplicationInbox, fetchSources, setSourceApplicationMode, type ApiError } from "./api";
+import {
+  disconnectEmail,
+  fetchApplicationInbox,
+  fetchEmailAccount,
+  fetchSources,
+  setSourceApplicationMode,
+  startGmailConnect,
+  type ApiError,
+  type EmailAccountStatus,
+} from "./api";
 
 // The order the inbox shows: what needs a decision first, then what is running.
 const INBOX_ORDER: ApplicationState[] = [
@@ -84,6 +93,7 @@ export function ApplicationsView() {
           }}
         />
       ))}
+      <RecruiterEmail />
       {inbox ? <SubmissionSettings submissionEnabled={inbox.submissionEnabled} /> : null}
     </div>
   );
@@ -107,6 +117,88 @@ function InboxItem({ item, open, onToggle, onChange }: { item: ApplicationInboxI
         </button>
       </div>
       {open ? <ApplicationPanel jobId={job.id} jobUrl={application.destinationUrl} onChange={onChange} /> : null}
+    </section>
+  );
+}
+
+// The mailbox the app reads recruiter replies from (Milestone 5): Gmail, read-only.
+function RecruiterEmail() {
+  const [status, setStatus] = useState<EmailAccountStatus | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [returned] = useState(() => new URLSearchParams(window.location.search).get("email"));
+
+  useEffect(() => {
+    fetchEmailAccount()
+      .then(setStatus)
+      .catch((caught: ApiError) => setError(caught.message));
+    if (returned) window.history.replaceState(null, "", window.location.pathname);
+  }, [returned]);
+
+  async function connect() {
+    setBusy(true);
+    setError(null);
+    try {
+      window.location.assign(await startGmailConnect());
+    } catch (caught) {
+      setError((caught as ApiError).message);
+      setBusy(false);
+    }
+  }
+
+  async function disconnect() {
+    setBusy(true);
+    setError(null);
+    try {
+      setStatus(await disconnectEmail());
+    } catch (caught) {
+      setError((caught as ApiError).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const account = status?.account;
+  return (
+    <section className="article-card" data-testid="recruiter-email">
+      <h3>Recruiter email</h3>
+      <p className="status">
+        The app reads replies to your applications from Gmail with read-only access: it can never send, change or delete mail, and
+        only messages from the companies and portals you applied to are kept.
+      </p>
+      {returned === "connected" ? <p className="status">Gmail is connected.</p> : null}
+      {returned === "failed" ? <div className="error">Gmail was not connected. Try again, and allow read access when Google asks.</div> : null}
+      {error ? <div className="error">{error}</div> : null}
+      {status && !status.configured ? (
+        <p className="status" data-testid="email-not-configured">
+          Not set up on this deployment. See "Recruiter email" in the README to create your Google OAuth client.
+        </p>
+      ) : null}
+      {account ? (
+        <>
+          <p data-testid="email-connected">
+            Connected: <strong>{account.emailAddress}</strong> since {new Date(account.connectedAt).toLocaleDateString()}
+            {account.lastCheckedAt ? `, last checked ${new Date(account.lastCheckedAt).toLocaleString()}` : ""}.
+          </p>
+          {account.lastError ? <div className="error">{account.lastError}</div> : null}
+          <div className="actions" style={{ justifyContent: "flex-start" }}>
+            {account.lastError ? (
+              <button className="btn" type="button" disabled={busy} onClick={() => void connect()}>
+                Connect Gmail again
+              </button>
+            ) : null}
+            <button className="btn ghost" type="button" disabled={busy} onClick={() => void disconnect()}>
+              Disconnect
+            </button>
+          </div>
+        </>
+      ) : status?.configured ? (
+        <div className="actions" style={{ justifyContent: "flex-start" }}>
+          <button className="btn" type="button" disabled={busy} onClick={() => void connect()}>
+            Connect Gmail (read-only)
+          </button>
+        </div>
+      ) : null}
     </section>
   );
 }

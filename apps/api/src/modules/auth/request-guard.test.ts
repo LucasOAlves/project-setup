@@ -40,8 +40,8 @@ test("readCookie finds one cookie among several", () => {
 
 const base: AccessInput = { mode: "SIGN_IN", path: "/api/career/jobs", signedIn: false, requiresSignIn: false };
 
-test("health and the auth routes are always public", () => {
-  for (const path of ["/health", "/api/auth/session", "/api/auth/sign-in", "/api/auth/sign-out"]) {
+test("health, the auth routes and the Gmail callback are always public", () => {
+  for (const path of ["/health", "/api/auth/session", "/api/auth/sign-in", "/api/auth/sign-out", "/api/email/google/callback"]) {
     assert.equal(accessDecision({ ...base, path }), "ALLOW", path);
     assert.equal(accessDecision({ ...base, path, mode: "OPEN" }), "ALLOW", path);
   }
@@ -51,6 +51,8 @@ test("with a password set, every other /api route needs a session", () => {
   assert.equal(accessDecision(base), "UNAUTHENTICATED");
   assert.equal(accessDecision({ ...base, signedIn: true }), "ALLOW");
   assert.equal(accessDecision({ ...base, path: "/api/auth/sign-in-extra" }), "UNAUTHENTICATED");
+  assert.equal(accessDecision({ ...base, path: "/api/email/google/start" }), "UNAUTHENTICATED");
+  assert.equal(accessDecision({ ...base, path: "/api/email/account" }), "UNAUTHENTICATED");
 });
 
 test("without a password, ordinary routes stay open but sign-in-only routes are refused", () => {

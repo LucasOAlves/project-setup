@@ -1128,3 +1128,27 @@ export async function setSourceApplicationMode(sourceId: string, applicationMode
   if (!response.ok) throw await parseError(response);
   return ((await response.json()) as { source: SourcePublic }).source;
 }
+
+export type EmailAccountStatus = {
+  configured: boolean;
+  account: { provider: string; emailAddress: string; connectedAt: string; lastCheckedAt: string | null; lastError: string } | null;
+};
+
+export async function fetchEmailAccount(): Promise<EmailAccountStatus> {
+  const response = await fetch("/api/email/account");
+  if (!response.ok) throw await parseError(response);
+  return (await response.json()) as EmailAccountStatus;
+}
+
+// Returns Google's consent URL; the caller sends the browser there.
+export async function startGmailConnect(): Promise<string> {
+  const response = await fetch("/api/email/google/start", { method: "POST" });
+  if (!response.ok) throw await parseError(response);
+  return ((await response.json()) as { url: string }).url;
+}
+
+export async function disconnectEmail(): Promise<EmailAccountStatus> {
+  const response = await fetch("/api/email/disconnect", { method: "POST" });
+  if (!response.ok) throw await parseError(response);
+  return (await response.json()) as EmailAccountStatus;
+}

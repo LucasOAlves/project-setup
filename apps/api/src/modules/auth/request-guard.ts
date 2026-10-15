@@ -1,7 +1,9 @@
 // Who may reach a route (Milestone 4, ticket 1). Pure decisions; auth-hooks.ts applies them.
 
 const READING_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
-const PUBLIC_PATHS = new Set(["/health", "/api/auth/session", "/api/auth/sign-in", "/api/auth/sign-out"]);
+// The Gmail callback is Google's redirect back, which carries no session cookie: it checks its
+// own signed state instead (email-routes.ts).
+const PUBLIC_PATHS = new Set(["/health", "/api/auth/session", "/api/auth/sign-in", "/api/auth/sign-out", "/api/email/google/callback"]);
 
 // A request that changes state must come from this app's own page, or from an origin the
 // deployment lists. A request with no Origin header is not a browser form post from another

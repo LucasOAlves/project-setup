@@ -57,6 +57,8 @@ import { ApplicationRepository } from "./modules/career/application-repository.j
 import { ApplicationService } from "./modules/career/application-service.js";
 import { submissionCheckFor } from "./modules/career/submission-permission.js";
 import { registerApplicationRoutes } from "./modules/career/application-routes.js";
+import { emailAccountServiceFromEnv } from "./modules/email/email-setup.js";
+import { registerEmailRoutes } from "./modules/email/email-routes.js";
 import { ApplicationDispatcher } from "./modules/career/application-dispatcher.js";
 import { ApplicationAnswerService } from "./modules/career/application-answer-service.js";
 import { SavedAnswerRepository } from "./modules/career/saved-answer-repository.js";
@@ -203,7 +205,8 @@ export async function buildApp(env: Env, db: Database) {
     (jobId, at) => careerRepository.markApplied(jobId, at),
   );
 
-  await registerAuth(app, authConfigFromEnv(env), new AuditRepository(db));
+  const authConfig = authConfigFromEnv(env);
+  await registerAuth(app, authConfig, new AuditRepository(db));
 
   app.get("/health", async () => ({ ok: true }));
 
@@ -232,6 +235,7 @@ export async function buildApp(env: Env, db: Database) {
     env.APPLICATION_SUBMISSION_ENABLED,
   );
   await registerDiscoveryRoutes(app, env, new CompanyWatchService(new CareerRepository(db)));
+  await registerEmailRoutes(app, emailAccountServiceFromEnv(env, db), authConfig.secureCookie);
 
   app.setErrorHandler((error, _request, reply) => {
     if (error instanceof AppError) {

@@ -39,6 +39,27 @@ Compose also starts Redis and a background `worker` (BullMQ, see [ADR-015](docs/
 
 Compose also starts a `browser-worker` (Playwright's image, Chromium inside) that prepares job applications for Greenhouse, Lever and Ashby postings, and submits one only after you approve it and only when submission is switched on. It has no model keys, only opens the job's own application site, and every request that could submit the form is blocked, except the one submit request of an approved run (see [ADR-020](docs/decisions/ADR-020-isolated-browser-worker.md) and [ADR-022](docs/decisions/ADR-022-payload-bound-approval.md)). To run it on the host: `npm run browser-worker -w @studio/api`, with `BROWSER_EXECUTABLE_PATH` pointing at a Chromium if Playwright's is not installed. Set `BROWSER_MOCK_PORTALS=true` to try the flow locally against mock Greenhouse, Lever and Ashby pages (`apps/api/src/modules/browser/mock-portals.ts`) with no network. Jobs whose link is one of the `MOCK_POSTINGS` URLs then prepare end to end. The browser tests, including the end-to-end submission tests for the spec's safety criteria (`submission-e2e.test.ts`), run in a real headless Chromium and are skipped when none is found; set `BROWSER_EXECUTABLE_PATH` to run them.
 
+### Recruiter email
+
+The **Applications** step can connect your Gmail with read-only access, so the app can follow
+replies to your applications (see [ADR-023](docs/decisions/ADR-023-gmail-read-only-access.md)).
+It can never send, change or delete mail. It uses your own Google OAuth client:
+
+1. In the Google Cloud console, create a project and enable the **Gmail API**.
+2. Under **Google Auth Platform**, set the app up as **External**, and in **Data access** add only
+   the `https://www.googleapis.com/auth/gmail.readonly` scope.
+3. Create an OAuth client of type **Web application**, with the authorized redirect URI
+   `http://localhost:5173/api/email/google/callback` (or your deployment's address with the same
+   path).
+4. In **Audience**, publish the app. While it stays in "Testing", Google expires the access every
+   7 days. Since the app is unverified, Google shows a warning on the consent screen once. Choose
+   to continue: you are the only user.
+5. Put the client id and secret in `GOOGLE_OAUTH_CLIENT_ID` and `GOOGLE_OAUTH_CLIENT_SECRET`, the
+   redirect URI in `GOOGLE_OAUTH_REDIRECT_URI`, and a key from `openssl rand -base64 32` in
+   `APP_ENCRYPTION_KEY`. The refresh token is stored encrypted with that key.
+
+Connecting needs sign-in. **Disconnect** revokes the access at Google and deletes the token.
+
 Slice 1 is available: progressive professional profile, experiences, positioning, writing preferences, and up to three reference photos. On the Identity step, upload a resume PDF to pre-fill these forms (nothing is saved until you review and click Save and continue); on the Experience step, download a résumé PDF generated from the current saved profile, any time new information is added.
 
 Slice 2 is available: generate a structured professional persona and authority map from the saved profile. Set `OPENAI_API_KEY` in `.env` before generating.

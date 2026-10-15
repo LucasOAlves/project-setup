@@ -468,3 +468,13 @@ deliberately not built, since this app has no real engagement data to build it f
 - model chain-of-thought
 - discarded candidates that never reached the UI
 - raw provider error bodies
+
+## EmailAccount (Job Hunter)
+
+The mailbox the app reads recruiter replies from (`email_accounts`, migration 0036; ADR-023). One
+row per provider, since the app has one user: today only `gmail`. It holds the address, the
+granted scope (always Gmail read-only), the refresh token sealed with `APP_ENCRYPTION_KEY`, when
+it was connected and last checked, and the last error (for example, Google no longer accepting
+the access). Connecting again replaces it, and disconnecting revokes the token at Google and
+deletes the row.
+

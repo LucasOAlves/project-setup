@@ -500,3 +500,15 @@ export const auditEvents = pgTable("audit_events", {
   payload: jsonb("payload").$type<Record<string, unknown>>().notNull().default({}),
   occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+// Milestone 5: the connected recruiter mailbox. The refresh token is sealed (secret-box.ts).
+export const emailAccounts = pgTable("email_accounts", {
+  id: uuid("id").primaryKey(),
+  provider: text("provider").notNull().unique(),
+  emailAddress: text("email_address").notNull(),
+  sealedRefreshToken: text("sealed_refresh_token").notNull(),
+  scope: text("scope").notNull(),
+  connectedAt: timestamp("connected_at", { withTimezone: true }).notNull().defaultNow(),
+  lastCheckedAt: timestamp("last_checked_at", { withTimezone: true }),
+  lastError: text("last_error").notNull().default(""),
+});
