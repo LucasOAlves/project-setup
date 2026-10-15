@@ -527,6 +527,7 @@ export const recruiterMessages = pgTable("recruiter_messages", {
   matchReason: text("match_reason").notNull().default(""),
   classification: text("classification").notNull().default(""),
   evidence: text("evidence").notNull().default(""),
+  classifiedBy: text("classified_by").notNull().default(""),
   suggestedStatus: text("suggested_status").notNull().default(""),
   decision: text("decision").notNull().default(""),
   decidedAt: timestamp("decided_at", { withTimezone: true }),

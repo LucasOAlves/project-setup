@@ -10,8 +10,9 @@ export const MESSAGE_BODY_RETENTION_DAYS = 180;
 
 type Repo = Pick<RecruiterMessageRepository, "followedApplications" | "knownProviderIds" | "insert" | "forApplication" | "clearBodiesBefore">;
 type Accounts = Pick<EmailAccountService, "reader" | "recordCheck">;
-// Called with each newly stored message, so the next step (classification) can run.
-type OnStored = (message: RecruiterMessageRow) => Promise<void>;
+// Called with each newly stored message, so the next step (classification) can run. It may
+// return the updated row.
+type OnStored = (message: RecruiterMessageRow) => Promise<RecruiterMessageRow | null | void>;
 
 export type MailCheckResult =
   | { status: "NOT_CONNECTED" }
@@ -108,8 +109,7 @@ export class RecruiterMailService {
       matchReason: "pasted by you into this application",
     });
     if (!stored) throw validationError("The message could not be saved.");
-    await this.onStored(stored);
-    return toPublicMessage(stored);
+    return toPublicMessage((await this.onStored(stored)) || stored);
   }
 
   async list(applicationId: string): Promise<RecruiterMessagePublic[]> {
@@ -154,6 +154,7 @@ export function toPublicMessage(row: RecruiterMessageRow): RecruiterMessagePubli
     matchReason: row.matchReason,
     classification: row.classification,
     evidence: row.evidence,
+    classifiedBy: row.classifiedBy,
     suggestedStatus: row.suggestedStatus,
     decision: row.decision,
   };

@@ -52,3 +52,13 @@ Option 2 would support other providers but would keep a password with full mailb
 Option 3 keeps no access at all, but replies would be missed. Option 1 costs a one-time Google
 Cloud setup and an "unverified app" screen, in exchange for the narrowest access that works
 without the user's daily attention.
+
+## Update (Milestone 5, ticket 4)
+
+Messages are classified as they are stored. Before any model call, email addresses, phone
+numbers and links are replaced by `[email]`, `[phone]` and `[link]`, and only the subject and
+body are sent, never the sender's address. Rules handle the ATS rejection and confirmation
+templates; a thank-you that also mentions an interview, an assessment or a call goes to the
+model. Without a model, or when the call fails, the message is UNCLEAR, and `classified_by`
+records RULES, the prompt version, or NONE. The evidence check is described in ADR-016's
+Milestone 5 note.

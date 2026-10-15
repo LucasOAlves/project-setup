@@ -231,6 +231,26 @@ export type ApplicationInbox = z.infer<typeof applicationInboxSchema>;
 // A reply about an application (Milestone 5): read from Gmail or pasted by the user. Its text is
 // the sender's, kept as data.
 export const RECRUITER_MESSAGE_SOURCES = ["GMAIL", "PASTED"] as const;
+
+// What a recruiter message says (Milestone 5, ticket 4). UNCLEAR when nothing in the message
+// proves a class.
+export const RECRUITER_MESSAGE_CLASSES = [
+  "APPLICATION_RECEIVED",
+  "REJECTION",
+  "INTERVIEW_REQUEST",
+  "ASSESSMENT",
+  "OFFER",
+  "RECRUITER_OUTREACH",
+  "OTHER",
+  "UNCLEAR",
+] as const;
+export type RecruiterMessageClass = (typeof RECRUITER_MESSAGE_CLASSES)[number];
+
+// The model's answer for recruiter-message.v1: one class and the quote it rests on.
+export const recruiterMessageClassificationSchema = z.object({
+  classification: z.enum(RECRUITER_MESSAGE_CLASSES),
+  evidence: z.string().max(600),
+});
 export const recruiterMessagePublicSchema = z.object({
   id: z.string().uuid(),
   source: z.enum(RECRUITER_MESSAGE_SOURCES),
@@ -241,8 +261,11 @@ export const recruiterMessagePublicSchema = z.object({
   receivedAt: z.string().nullable(),
   matchConfidence: z.string(),
   matchReason: z.string(),
+  // "" until classified, then one of RECRUITER_MESSAGE_CLASSES.
   classification: z.string(),
   evidence: z.string(),
+  // RULES, the prompt version (recruiter-message.v1), or NONE.
+  classifiedBy: z.string(),
   suggestedStatus: z.string(),
   decision: z.string(),
 });

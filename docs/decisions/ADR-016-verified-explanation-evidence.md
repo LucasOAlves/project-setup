@@ -61,3 +61,12 @@ most. Option 3 doubles the cost per job and replaces one model's judgment with a
 Option 2 is cheap and deterministic, but it is strict about wording: a paraphrased quote is
 discarded even when the claim is true, which can leave an explanation thinner than the
 model wrote it.
+
+## Update (Milestone 5)
+
+The same quote check now backs recruiter message classification (`message-classification.ts`,
+prompt `recruiter-message.v1`). A class other than UNCLEAR stands only on a quote found in the
+masked subject and body the model saw, using the same `quoteAppearsIn` matching. Here a missing
+quote does not downgrade the answer to an inference: it makes the message UNCLEAR, because a
+class is what a status suggestion is built on (spec A10). Rejections and plain confirmations
+from ATS templates are classified by rules first, without a model call.

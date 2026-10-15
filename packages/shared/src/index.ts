@@ -336,4 +336,7 @@ export {
   pastedMessageInputSchema,
   type RecruiterMessagePublic,
   type PastedMessageInput,
+  RECRUITER_MESSAGE_CLASSES,
+  recruiterMessageClassificationSchema,
+  type RecruiterMessageClass,
 } from "./applications.js";

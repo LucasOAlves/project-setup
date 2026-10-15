@@ -56,6 +56,15 @@ export class RecruiterMessageRepository {
       .orderBy(asc(recruiterMessages.receivedAt));
   }
 
+  async setClassification(id: string, result: { classification: string; evidence: string; classifiedBy: string }): Promise<RecruiterMessageRow | null> {
+    const [row] = await this.db
+      .update(recruiterMessages)
+      .set({ classification: result.classification, evidence: result.evidence, classifiedBy: result.classifiedBy })
+      .where(eq(recruiterMessages.id, id))
+      .returning();
+    return row ?? null;
+  }
+
   // Retention: the text goes, the classification and evidence quote stay.
   async clearBodiesBefore(cutoff: Date): Promise<void> {
     await this.db

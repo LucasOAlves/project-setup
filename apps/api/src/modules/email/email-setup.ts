@@ -12,6 +12,10 @@ import { RecruiterMessageRepository } from "./recruiter-message-repository.js";
 import { ApplicationRepository } from "../career/application-repository.js";
 import type { RecruiterMessageRow } from "./recruiter-message-repository.js";
 import { parseEncryptionKey } from "./secret-box.js";
+import { MessageClassifier } from "./message-classifier.js";
+import { AnthropicTextGenerationProvider } from "../ai/anthropic-text-generation-provider.js";
+import { OpenAITextGenerationProvider } from "../ai/openai-text-generation-provider.js";
+import type { TextGenerationProvider } from "../ai/text-generation-provider.js";
 
 // The same mailbox service for the API (connect, disconnect) and the worker (reading).
 export function emailAccountServiceFromEnv(env: Env, db: Database): EmailAccountService {
@@ -21,17 +25,31 @@ export function emailAccountServiceFromEnv(env: Env, db: Database): EmailAccount
   return new EmailAccountService(new EmailAccountRepository(db), new AuditRepository(db), client, parseEncryptionKey(env.APP_ENCRYPTION_KEY));
 }
 
-export function recruiterMailServiceFromEnv(
-  env: Env,
-  db: Database,
-  onStored: (message: RecruiterMessageRow) => Promise<void> = async () => undefined,
-): RecruiterMailService {
+// The configured default text provider, or null without its API key.
+export function defaultTextProvider(env: Env): TextGenerationProvider | null {
+  if (env.TEXT_PROVIDER === "anthropic") {
+    return env.ANTHROPIC_API_KEY ? new AnthropicTextGenerationProvider(env.ANTHROPIC_API_KEY, env.ANTHROPIC_TEXT_MODEL) : null;
+  }
+  return env.OPENAI_API_KEY ? new OpenAITextGenerationProvider(env.OPENAI_API_KEY, env.OPENAI_TEXT_MODEL) : null;
+}
+
+// Each stored message is classified right away: by rules, then the default text provider.
+export function classifyStoredMessage(repo: RecruiterMessageRepository, classifier: MessageClassifier) {
+  return async (message: RecruiterMessageRow): Promise<RecruiterMessageRow | null> => {
+    if (!message.applicationId || message.body === null) return null;
+    const result = await classifier.classify({ subject: message.subject, body: message.body });
+    return repo.setClassification(message.id, result);
+  };
+}
+
+export function recruiterMailServiceFromEnv(env: Env, db: Database): RecruiterMailService {
   const applications = new ApplicationRepository(db);
+  const repo = new RecruiterMessageRepository(db);
   return new RecruiterMailService(
-    new RecruiterMessageRepository(db),
+    repo,
     emailAccountServiceFromEnv(env, db),
     async (applicationId) => (await applications.get(applicationId)) !== null,
-    onStored,
+    classifyStoredMessage(repo, new MessageClassifier(defaultTextProvider(env))),
   );
 }
 
