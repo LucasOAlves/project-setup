@@ -89,6 +89,9 @@ const envSchema = z.object({
   // Explanation agent (JOB-012): shortlist threshold and the daily model-cost limit.
   EXPLANATION_MIN_SCORE: z.coerce.number().int().min(0).max(100).default(60),
   EXPLANATION_DAILY_LIMIT: z.coerce.number().int().min(0).default(25),
+  // Model cost ledger (Milestone 5): monthly budget in USD for estimated model and search cost.
+  // 0 turns the budget off (costs are still recorded). Optional calls stop once it is reached.
+  AI_MONTHLY_BUDGET_USD: z.coerce.number().min(0).default(0),
   // Response tracking (Milestone 5): days without a reply before "consider following up".
   FOLLOW_UP_AFTER_DAYS: z.coerce.number().int().min(1).default(10),
 }).superRefine((env, context) => {

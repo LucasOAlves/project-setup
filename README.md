@@ -73,9 +73,17 @@ unclear.
 **Sent applications** (on the Applications step) lists every sent application with its replies.
 A reply can suggest moving the job forward (applied, screening, interview, offer, or rejected); the
 job changes only when you accept. An application with no reply after `FOLLOW_UP_AFTER_DAYS` (10 by
-default) is flagged "consider following up". The app never writes to anyone. You can also paste a
-reply there. Without Gmail, you can paste a message
-on an application instead (`POST /api/career/applications/:id/messages`).
+default) is flagged "consider following up". The app never writes to anyone. Without Gmail, paste
+replies there instead.
+
+### AI cost and budget
+
+Every model call and Brave search query is recorded in the `ai_usage` table with its purpose,
+model, tokens and an estimated cost from the price table in `apps/api/src/modules/usage/cost-estimate.ts`
+(list prices, an estimate: your provider's invoice is the real figure). Set `AI_MONTHLY_BUDGET_USD`
+to cap the month: at 80% an `AI_BUDGET_WARNING` audit event is written, and at 100% the optional
+calls stop until the next month (job explanations, cover letters, and recruiter message
+classification, which then uses its rules only). `GET /api/usage/summary` shows the month so far.
 
 Slice 1 is available: progressive professional profile, experiences, positioning, writing preferences, and up to three reference photos. On the Identity step, upload a resume PDF to pre-fill these forms (nothing is saved until you review and click Save and continue); on the Experience step, download a résumé PDF generated from the current saved profile, any time new information is added.
 

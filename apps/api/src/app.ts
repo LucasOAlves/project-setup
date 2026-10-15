@@ -58,6 +58,9 @@ import { ApplicationService } from "./modules/career/application-service.js";
 import { submissionCheckFor } from "./modules/career/submission-permission.js";
 import { registerApplicationRoutes } from "./modules/career/application-routes.js";
 import { emailAccountServiceFromEnv, mailCheckQueue, recruiterMailServiceFromEnv } from "./modules/email/email-setup.js";
+import { MeteredTextProvider } from "./modules/usage/metered-providers.js";
+import { usageLedgerFromEnv } from "./modules/usage/usage-setup.js";
+import { registerUsageRoutes } from "./modules/usage/usage-routes.js";
 import { ResponseTrackingService } from "./modules/email/response-tracking-service.js";
 import { RecruiterMessageRepository } from "./modules/email/recruiter-message-repository.js";
 import { registerEmailRoutes } from "./modules/email/email-routes.js";
@@ -86,9 +89,11 @@ export async function buildApp(env: Env, db: Database) {
   });
 
   const storage = new LocalStorageProvider(env.STORAGE_DIR);
+  // Every model call goes through the cost ledger (Milestone 5, ticket 7).
+  const usage = usageLedgerFromEnv(env, db);
   const textProviders: Record<TextProviderName, TextGenerationProvider> = {
-    openai: new OpenAITextGenerationProvider(env.OPENAI_API_KEY, env.OPENAI_TEXT_MODEL),
-    anthropic: new AnthropicTextGenerationProvider(env.ANTHROPIC_API_KEY, env.ANTHROPIC_TEXT_MODEL),
+    openai: new MeteredTextProvider(new OpenAITextGenerationProvider(env.OPENAI_API_KEY, env.OPENAI_TEXT_MODEL), "openai", usage),
+    anthropic: new MeteredTextProvider(new AnthropicTextGenerationProvider(env.ANTHROPIC_API_KEY, env.ANTHROPIC_TEXT_MODEL), "anthropic", usage),
   };
   const defaultTextProvider: TextProviderName = env.TEXT_PROVIDER;
   const imageProviders: Record<ImageProviderName, ImageGenerationProvider> = {
@@ -237,9 +242,11 @@ export async function buildApp(env: Env, db: Database) {
     env.APPLICATION_SUBMISSION_ENABLED,
   );
   await registerDiscoveryRoutes(app, env, new CompanyWatchService(new CareerRepository(db)));
-  await registerEmailRoutes(app, emailAccountServiceFromEnv(env, db), recruiterMailServiceFromEnv(env, db), mailCheckQueue(env.REDIS_URL), authConfig.secureCookie,
+  await registerEmailRoutes(app, emailAccountServiceFromEnv(env, db), recruiterMailServiceFromEnv(env, db, usage), mailCheckQueue(env.REDIS_URL), authConfig.secureCookie,
     new ResponseTrackingService(new RecruiterMessageRepository(db), (jobId, status) => career.updateJobStatus(jobId, status), new AuditRepository(db), env.FOLLOW_UP_AFTER_DAYS),
   );
+
+  await registerUsageRoutes(app, usage);
 
   app.setErrorHandler((error, _request, reply) => {
     if (error instanceof AppError) {

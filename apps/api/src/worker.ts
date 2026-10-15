@@ -16,8 +16,6 @@ import { JobIntake } from "./modules/career/job-intake.js";
 import { evaluationSettingsFromEnv } from "./modules/career/job-intake.js";
 import { JobExplainer } from "./modules/career/job-explanation.js";
 import type { MatchProfile } from "./modules/career/job-matching.js";
-import { AnthropicTextGenerationProvider } from "./modules/ai/anthropic-text-generation-provider.js";
-import { OpenAITextGenerationProvider } from "./modules/ai/openai-text-generation-provider.js";
 import { ProfileRepository } from "./modules/profile/profile-repository.js";
 import { createSearchProviders } from "./modules/career/search-providers.js";
 import { SourceRegistry } from "./modules/career/source-registry.js";
@@ -39,7 +37,10 @@ import {
   type QueueName,
 } from "./worker/queues.js";
 
-import { recruiterMailServiceFromEnv } from "./modules/email/email-setup.js";
+import { defaultTextProvider, recruiterMailServiceFromEnv } from "./modules/email/email-setup.js";
+import { MeteredSearchClient } from "./modules/usage/metered-providers.js";
+import type { UsageLedger } from "./modules/usage/usage-ledger.js";
+import { usageLedgerFromEnv } from "./modules/usage/usage-setup.js";
 loadDotenv({
   path: path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../.env"),
 });
@@ -85,12 +86,14 @@ async function main() {
     { pattern: "15 * * * *", tz: env.DISCOVERY_TZ },
     { name: MONITORING_JOBS.emailCheck, data: { correlationId: "scheduled.email-check" }, opts: { attempts: 1 } },
   );
-  const recruiterMail = recruiterMailServiceFromEnv(env, db);
+  // Every model call and search query goes through the cost ledger (ticket 7).
+  const usage = usageLedgerFromEnv(env, db);
+  const recruiterMail = recruiterMailServiceFromEnv(env, db, usage);
 
   const careerRepo = new CareerRepository(db);
   const profileRepo = new ProfileRepository(db);
   const intake = new JobIntake(careerRepo, evaluationSettingsFromEnv(env));
-  const explainer = createExplainer(env);
+  const explainer = createExplainer(env, usage);
   if (!explainer) {
     logger.warn("explanations disabled", { reason: `no API key for TEXT_PROVIDER=${env.TEXT_PROVIDER}` });
   }
@@ -115,7 +118,7 @@ async function main() {
 
   const webDiscovery = env.BRAVE_SEARCH_API_KEY
     ? new WebDiscoveryService({
-        search: new BraveSearchClient(env.BRAVE_SEARCH_API_KEY),
+        search: new MeteredSearchClient(new BraveSearchClient(env.BRAVE_SEARCH_API_KEY), "brave", usage),
         intake,
         providers: createBoardProviders(),
         sourceGate: new SourceRegistry(db),
@@ -214,15 +217,9 @@ const WATCH_SPACING_MS = 5_000;
 
 // Explanations use the configured default text provider. Without its API key they are off,
 // and evaluations store the score alone.
-function createExplainer(env: Env): JobExplainer | null {
-  if (env.TEXT_PROVIDER === "anthropic") {
-    return env.ANTHROPIC_API_KEY
-      ? new JobExplainer(new AnthropicTextGenerationProvider(env.ANTHROPIC_API_KEY, env.ANTHROPIC_TEXT_MODEL))
-      : null;
-  }
-  return env.OPENAI_API_KEY
-    ? new JobExplainer(new OpenAITextGenerationProvider(env.OPENAI_API_KEY, env.OPENAI_TEXT_MODEL))
-    : null;
+function createExplainer(env: Env, usage: UsageLedger): JobExplainer | null {
+  const text = defaultTextProvider(env, usage);
+  return text ? new JobExplainer(text) : null;
 }
 
 // The worker reads the profile straight from the repository: the API's ProfileService also

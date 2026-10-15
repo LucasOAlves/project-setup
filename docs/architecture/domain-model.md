@@ -469,6 +469,14 @@ deliberately not built, since this app has no real engagement data to build it f
 - discarded candidates that never reached the UI
 - raw provider error bodies
 
+## AiUsage (Job Hunter)
+
+One row per model call or search query (`ai_usage`, migration 0039): kind (TEXT or SEARCH),
+purpose (the prompt version without its version, or `web-discovery`), provider, model, prompt
+version, input and output tokens or query count, the estimated cost in USD, and whether the model
+was in the price table (an unknown model is counted at a high-end price for its provider). Rows
+are never updated. The month's sum is checked against `AI_MONTHLY_BUDGET_USD`.
+
 ## EmailAccount (Job Hunter)
 
 The mailbox the app reads recruiter replies from (`email_accounts`, migration 0036; ADR-023). One

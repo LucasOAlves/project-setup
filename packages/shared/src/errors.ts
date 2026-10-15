@@ -12,6 +12,7 @@ export const ERROR_CODES = {
   UNAUTHENTICATED: "UNAUTHENTICATED",
   FORBIDDEN: "FORBIDDEN",
   RATE_LIMITED: "RATE_LIMITED",
+  AI_BUDGET_REACHED: "AI_BUDGET_REACHED",
 } as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[keyof typeof ERROR_CODES];

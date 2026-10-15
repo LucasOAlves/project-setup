@@ -2,6 +2,7 @@ import {
   boolean,
   integer,
   jsonb,
+  numeric,
   pgTable,
   text,
   timestamp,
@@ -532,4 +533,21 @@ export const recruiterMessages = pgTable("recruiter_messages", {
   decision: text("decision").notNull().default(""),
   decidedAt: timestamp("decided_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// Model and search cost ledger (Milestone 5, ticket 7). Inserted, never updated.
+export const aiUsage = pgTable("ai_usage", {
+  id: uuid("id").primaryKey(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  // TEXT for a model call, SEARCH for search queries.
+  kind: text("kind").notNull(),
+  purpose: text("purpose").notNull(),
+  provider: text("provider").notNull(),
+  model: text("model").notNull().default(""),
+  promptVersion: text("prompt_version").notNull().default(""),
+  inputTokens: integer("input_tokens").notNull().default(0),
+  outputTokens: integer("output_tokens").notNull().default(0),
+  queries: integer("queries").notNull().default(0),
+  estimatedUsd: numeric("estimated_usd", { precision: 12, scale: 6, mode: "number" }).notNull().default(0),
+  priceKnown: boolean("price_known").notNull().default(true),
 });

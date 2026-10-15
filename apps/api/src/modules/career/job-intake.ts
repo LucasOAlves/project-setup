@@ -1,3 +1,5 @@
+import { ERROR_CODES } from "@studio/shared";
+import { AppError } from "../../app-error.js";
 import type { CareerRepository, JobEvaluationRow, JobRow } from "./career-repository.js";
 import { BRAZIL_REMOTE_CANDIDATE, evaluateEligibility } from "./job-eligibility.js";
 import { prepareImportedJob, type ImportedJobFields, type JobNormalizedData } from "./job-import.js";
@@ -66,6 +68,7 @@ export type ExplanationStatus =
   | "EXPLAINED"
   | "NOT_SHORTLISTED"
   | "DAILY_LIMIT_REACHED"
+  | "BUDGET_REACHED"
   | "DISABLED"
   | "FAILED";
 
@@ -204,8 +207,14 @@ export class JobIntake {
           });
           status = "EXPLAINED";
         } catch (error) {
-          if (options.onExplanationFailure !== "skip") throw error;
-          status = "FAILED";
+          // The monthly AI budget is spent: keep the score, explain nothing, retry nothing.
+          if (error instanceof AppError && error.code === ERROR_CODES.AI_BUDGET_REACHED) {
+            status = "BUDGET_REACHED";
+          } else if (options.onExplanationFailure !== "skip") {
+            throw error;
+          } else {
+            status = "FAILED";
+          }
         }
       }
     }

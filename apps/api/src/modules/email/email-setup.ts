@@ -17,6 +17,8 @@ import { suggestionFor } from "./response-tracking.js";
 import { AnthropicTextGenerationProvider } from "../ai/anthropic-text-generation-provider.js";
 import { OpenAITextGenerationProvider } from "../ai/openai-text-generation-provider.js";
 import type { TextGenerationProvider } from "../ai/text-generation-provider.js";
+import { MeteredTextProvider } from "../usage/metered-providers.js";
+import type { UsageLedger } from "../usage/usage-ledger.js";
 
 // The same mailbox service for the API (connect, disconnect) and the worker (reading).
 export function emailAccountServiceFromEnv(env: Env, db: Database): EmailAccountService {
@@ -26,12 +28,15 @@ export function emailAccountServiceFromEnv(env: Env, db: Database): EmailAccount
   return new EmailAccountService(new EmailAccountRepository(db), new AuditRepository(db), client, parseEncryptionKey(env.APP_ENCRYPTION_KEY));
 }
 
-// The configured default text provider, or null without its API key.
-export function defaultTextProvider(env: Env): TextGenerationProvider | null {
+// The configured default text provider, metered through the cost ledger, or null without its
+// API key.
+export function defaultTextProvider(env: Env, usage: UsageLedger): TextGenerationProvider | null {
   if (env.TEXT_PROVIDER === "anthropic") {
-    return env.ANTHROPIC_API_KEY ? new AnthropicTextGenerationProvider(env.ANTHROPIC_API_KEY, env.ANTHROPIC_TEXT_MODEL) : null;
+    return env.ANTHROPIC_API_KEY
+      ? new MeteredTextProvider(new AnthropicTextGenerationProvider(env.ANTHROPIC_API_KEY, env.ANTHROPIC_TEXT_MODEL), "anthropic", usage)
+      : null;
   }
-  return env.OPENAI_API_KEY ? new OpenAITextGenerationProvider(env.OPENAI_API_KEY, env.OPENAI_TEXT_MODEL) : null;
+  return env.OPENAI_API_KEY ? new MeteredTextProvider(new OpenAITextGenerationProvider(env.OPENAI_API_KEY, env.OPENAI_TEXT_MODEL), "openai", usage) : null;
 }
 
 // Each stored message is classified right away (by rules, then the default text provider),
@@ -46,14 +51,14 @@ export function classifyStoredMessage(repo: Pick<RecruiterMessageRepository, "jo
   };
 }
 
-export function recruiterMailServiceFromEnv(env: Env, db: Database): RecruiterMailService {
+export function recruiterMailServiceFromEnv(env: Env, db: Database, usage: UsageLedger): RecruiterMailService {
   const applications = new ApplicationRepository(db);
   const repo = new RecruiterMessageRepository(db);
   return new RecruiterMailService(
     repo,
     emailAccountServiceFromEnv(env, db),
     async (applicationId) => (await applications.get(applicationId)) !== null,
-    classifyStoredMessage(repo, new MessageClassifier(defaultTextProvider(env))),
+    classifyStoredMessage(repo, new MessageClassifier(defaultTextProvider(env, usage))),
   );
 }
 
