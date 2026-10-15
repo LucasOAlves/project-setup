@@ -31,7 +31,9 @@ cp .env.example .env
 docker compose up --build
 ```
 
-Then open `http://localhost:5173`.
+Then open `http://localhost:5173`. The [operations runbook](docs/operations/runbook.md) covers a
+full deployment: secrets, backups and a restore drill, upgrades, key loss and what to do when
+something goes wrong.
 
 To require sign-in, run `npm run hash-password -w @studio/api`, type a password of at least 12 characters, and paste the two lines it prints (`APP_PASSWORD_HASH`, `SESSION_SECRET`) into `.env`. The app then asks for that password, keeps you signed in for `SESSION_TTL_HOURS` (default 7 days) with an httpOnly cookie, and refuses state-changing requests from other sites. Without a password the app stays open as before, but approving and submitting job applications are refused, because only the signed-in user may approve one (see [ADR-021](docs/decisions/ADR-021-single-user-sign-in.md)).
 

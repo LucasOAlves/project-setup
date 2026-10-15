@@ -157,7 +157,7 @@ runbook (JOB-032). They are Milestone 6.
 
 ## Milestone 6 — backup, retention and operations runbook
 
-Approved on 2026-10-15 ("Pode seguir com todos faltando"). Done when spec section 6's privacy
+Approved on 2026-10-15 ("Pode seguir com todos faltando") and built on PR #1 the same day. Done when spec section 6's privacy
 items are covered ("Encrypt backups and provide local export/deletion. Define retention limits
 for screenshots and browser sessions") and someone other than the author could deploy, back up,
 restore and troubleshoot the app from the docs alone.
