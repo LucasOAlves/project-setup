@@ -63,6 +63,9 @@ import { usageLedgerFromEnv } from "./modules/usage/usage-setup.js";
 import { notifierFromEnv } from "./modules/notifications/notification-setup.js";
 import { registerAttentionRoute } from "./modules/notifications/notification-routes.js";
 import { registerUsageRoutes } from "./modules/usage/usage-routes.js";
+import { registerOperationsRoutes } from "./modules/operations/operations-routes.js";
+import { OperationsService } from "./modules/operations/operations-service.js";
+import { OperationsRepository } from "./modules/operations/operations-repository.js";
 import { ResponseTrackingService } from "./modules/email/response-tracking-service.js";
 import { RecruiterMessageRepository } from "./modules/email/recruiter-message-repository.js";
 import { registerEmailRoutes } from "./modules/email/email-routes.js";
@@ -254,6 +257,7 @@ export async function buildApp(env: Env, db: Database) {
   await registerAttentionRoute(app, applications, responses);
 
   await registerUsageRoutes(app, usage);
+  await registerOperationsRoutes(app, new OperationsService(new OperationsRepository(db), usage, () => career.getFeedbackSummary()));
 
   app.setErrorHandler((error, _request, reply) => {
     if (error instanceof AppError) {

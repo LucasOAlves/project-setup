@@ -342,4 +342,12 @@ export {
   MESSAGE_DECISIONS,
   sentApplicationSchema,
   type SentApplication,
+  funnelGroupSchema,
+  type FunnelGroup,
+  operationsReportSchema,
+  type OperationsReport,
+  auditEventPublicSchema,
+  type AuditEventPublic,
+  auditEventQuerySchema,
+  type AuditEventQuery,
 } from "./applications.js";

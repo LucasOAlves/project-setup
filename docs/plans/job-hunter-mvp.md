@@ -119,7 +119,7 @@ real submission should be one you watch.
 
 ## Milestone 5 — monitor responses and optimize results
 
-Proposed on 2026-10-15, awaiting approval. Done when spec acceptance criteria 10 and 12 pass and
+Approved on 2026-10-15 (Gmail read-only) and built on PR #1. Done when spec acceptance criteria 10 and 12 pass and
 spec section 12's Milestone 5 is covered: what happens after an application is sent is tracked
 from the company's own messages, nothing about it is decided from an ambiguous message, the
 user hears about what needs them, and the funnel and model costs show where to adjust.

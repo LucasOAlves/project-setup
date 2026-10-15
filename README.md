@@ -88,6 +88,15 @@ a recruiter's text or contact details, and each event is sent once. Create a bot
 `TELEGRAM_CHAT_ID` (and `APP_PUBLIC_URL` for links). Without them notifications are off. In the
 app, the **Applications** step shows a count of what waits on you.
 
+### Operations
+
+The **Operations** step shows the funnel (discovered, shortlisted, applied, got a reply, interview,
+offer), conversion by source, by score band and by portal, the median time to a first reply, the
+AI cost by month and purpose against the budget, and suggestions for the matching weights from
+reply rates and your relevance feedback (shown only, never applied). Its audit history lists who
+acted (you, the worker or the system), what ran and the result, filtered by actor or event type
+(`GET /api/audit-events`).
+
 ### AI cost and budget
 
 Every model call and Brave search query is recorded in the `ai_usage` table with its purpose,

@@ -291,3 +291,52 @@ export const pastedMessageInputSchema = z.object({
   receivedAt: z.string().datetime().optional(),
 });
 export type PastedMessageInput = z.infer<typeof pastedMessageInputSchema>;
+
+// The Operations step (Milestone 5, ticket 8): the funnel, conversion, cost and weight checks.
+export const funnelGroupSchema = z.object({
+  key: z.string(),
+  discovered: z.number().int(),
+  applied: z.number().int(),
+  responded: z.number().int(),
+  interview: z.number().int(),
+  offer: z.number().int(),
+  // Responded over applied; null with no application.
+  responseRate: z.number().nullable(),
+});
+export type FunnelGroup = z.infer<typeof funnelGroupSchema>;
+
+export const operationsReportSchema = z.object({
+  funnel: z.array(z.object({ stage: z.string(), count: z.number().int() })),
+  bySource: z.array(funnelGroupSchema),
+  byScoreBand: z.array(funnelGroupSchema),
+  byPortal: z.array(funnelGroupSchema),
+  medianDaysToFirstReply: z.number().nullable(),
+  costs: z.array(z.object({ month: z.string(), purpose: z.string(), usd: z.number(), calls: z.number().int() })),
+  budget: z.object({ month: z.string(), spentUsd: z.number(), budgetUsd: z.number(), state: z.string() }),
+  // Shown to the user; the matching weights are never changed from here.
+  suggestions: z.array(z.string()),
+});
+export type OperationsReport = z.infer<typeof operationsReportSchema>;
+
+export const auditEventPublicSchema = z.object({
+  id: z.string(),
+  eventType: z.string(),
+  actor: z.string(),
+  entityType: z.string(),
+  entityId: z.string(),
+  correlationId: z.string(),
+  payload: z.record(z.string(), z.unknown()),
+  occurredAt: z.string(),
+});
+export type AuditEventPublic = z.infer<typeof auditEventPublicSchema>;
+
+export const auditEventQuerySchema = z.object({
+  eventType: z.string().trim().max(100).optional(),
+  actor: z.enum(["USER", "WORKER", "SYSTEM"]).optional(),
+  entityType: z.string().trim().max(100).optional(),
+  entityId: z.string().trim().max(200).optional(),
+  // Events before this time, for the next page.
+  before: z.string().datetime().optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+});
+export type AuditEventQuery = z.infer<typeof auditEventQuerySchema>;

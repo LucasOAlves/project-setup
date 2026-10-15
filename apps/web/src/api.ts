@@ -2,6 +2,8 @@ import type {
   ApplicationInbox,
   RecruiterMessagePublic,
   SentApplication,
+  OperationsReport,
+  AuditEventPublic,
   SourcePublic,
   SourceApplicationMode,
   AngleType,
@@ -1188,4 +1190,19 @@ export async function fetchAttention(): Promise<{ applications: number; suggesti
   const response = await fetch("/api/career/attention");
   if (!response.ok) throw await parseError(response);
   return (await response.json()) as { applications: number; suggestions: number; followUps: number; total: number };
+}
+
+// The Operations step (Milestone 5): funnel, conversion, cost and the audit history.
+export async function fetchOperationsReport(): Promise<OperationsReport> {
+  const response = await fetch("/api/operations");
+  if (!response.ok) throw await parseError(response);
+  return ((await response.json()) as { report: OperationsReport }).report;
+}
+
+export async function fetchAuditEvents(filters: { actor?: string; eventType?: string; before?: string }): Promise<AuditEventPublic[]> {
+  const params = new URLSearchParams({ limit: "50" });
+  for (const [key, value] of Object.entries(filters)) if (value) params.set(key, value);
+  const response = await fetch(`/api/audit-events?${params.toString()}`);
+  if (!response.ok) throw await parseError(response);
+  return ((await response.json()) as { events: AuditEventPublic[] }).events;
 }
